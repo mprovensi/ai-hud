@@ -41,13 +41,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Acabou de passar a esperar por você: o cartão pisca por alguns ciclos */
 /* Sessão inativa que completa a grade: borda tracejada e mais apagada */
 /* Topo colorido liso; laterais e base tracejadas com traços longos (o "dashed" do CSS não deixa
-   escolher o tamanho do traço, então são gradientes repetidos: 11px de traço, 5px de espaço) */
+   escolher o tamanho do traço, então são gradientes repetidos: 7px de traço, 4px de espaço) */
 .card.old-card .in {
   opacity: .7; border-left: 0; border-right: 0; border-bottom: 0; padding: 10px 13px 11px;
   background:
-    linear-gradient(to right, #55554f 70%, transparent 70%) left bottom / 16px 2px repeat-x,
-    linear-gradient(#55554f 70%, transparent 70%) left top / 2px 16px repeat-y,
-    linear-gradient(#55554f 70%, transparent 70%) right top / 2px 16px repeat-y,
+    linear-gradient(to right, #55554f 64%, transparent 64%) left bottom / 11px 2px repeat-x,
+    linear-gradient(#55554f 64%, transparent 64%) left top / 2px 11px repeat-y,
+    linear-gradient(#55554f 64%, transparent 64%) right top / 2px 11px repeat-y,
     #181817;
 }
 .card.old-card:active .in { opacity: 1; }

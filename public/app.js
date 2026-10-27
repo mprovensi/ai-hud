@@ -533,22 +533,7 @@
     }
   }
 
-  setSound(soundOn);
-
-  // Tela cheia pelo navegador (Chrome no Android); o Safari 9 do iPad não suporta, então o botão some
-  var root = document.documentElement;
-  var enterFs = root.requestFullscreen || root.webkitRequestFullscreen;
-  var exitFs = document.exitFullscreen || document.webkitExitFullscreen;
-  function inFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
-  // Instalado como app em tela cheia não precisa do botão
-  var standalone = window.matchMedia && (matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches);
-  if (enterFs && !standalone) {
-    $('fullscreen').style.display = '';
-    $('fullscreen').onclick = function () {
-      if (inFs()) exitFs.call(document); else enterFs.call(root);
-    };
-  }
-  // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
+  setSound(soundOn);  // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
   $('remote').onclick = function () {
     var on = !(snap && snap.remoteMode);
     if (on && !confirm('Ligar o modo remoto?\n\nPedidos de permissão do Claude vão esperar sua resposta aqui (até 10 min) em vez de aparecer no PC. Use quando estiver longe do computador.')) return;

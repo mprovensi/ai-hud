@@ -441,6 +441,10 @@ const server = http.createServer((req, res) => {
   if (!allowed(req.socket.remoteAddress)) return send(res, 403, 'text/plain', 'proibido');
   const url = new URL(req.url, 'http://x');
   const ip = req.socket.remoteAddress;
+  // Registro de acessos vindos de outros aparelhos (diagnóstico); só o caminho, nunca o token da query
+  if (!/^(::1|127\.|::ffff:127\.)/.test(ip) && !url.pathname.startsWith('/hook/')) {
+    console.log(`${new Date().toLocaleTimeString('pt-BR')} ${String(ip).replace(/^::ffff:/, '')} ${req.method} ${url.pathname}`);
+  }
   // Arquivos do PWA não têm segredo; o navegador os busca sem cookie
   if (BRANDS[url.pathname]) return send(res, 200, 'image/svg+xml', BRANDS[url.pathname], { 'Cache-Control': 'max-age=86400' });
   // O iOS também procura o ícone nesses endereços fixos, mesmo sem <link> na página

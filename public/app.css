@@ -39,8 +39,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .card:active .in { background: #232321; }
 .card.waiting-card .in { border-left-color: #3b4a7a; border-right-color: #3b4a7a; border-bottom-color: #3b4a7a; box-shadow: 0 1px 0 1px #3b4a7a; }
 /* Acabou de passar a esperar por você: o cartão pisca por alguns ciclos */
-/* Sessão inativa que completa a grade: mais apagada */
-.card.old-card .in { opacity: .6; }
+/* Sessão inativa que completa a grade: borda tracejada e mais apagada */
+.card.old-card .in { opacity: .7; border-style: dashed; border-color: #4a4a45; background: #181817; }
+.card.old-card.t0 .in { border-top-color: #e08a66; } .card.old-card.t1 .in { border-top-color: #5fb8a4; } .card.old-card.t2 .in { border-top-color: #7d9bf0; }
 .card.old-card:active .in { opacity: 1; }
 .card.ping .in { -webkit-animation: ping 1s ease-in-out 6; animation: ping 1s ease-in-out 6; }
 @-webkit-keyframes ping { 50% { background: #2b3556; } }

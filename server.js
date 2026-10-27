@@ -41,6 +41,9 @@ function failed(ip) {
 }
 const loginPage = (msg) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>AI HUD</title>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="AI HUD">
+<link rel="apple-touch-icon" sizes="76x76" href="/icon-76.png"><link rel="apple-touch-icon" sizes="152x152" href="/icon-152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png"><link rel="icon" type="image/png" href="/icon-192.png">
 <style>body{background:#121211;color:#ecece8;font:16px -apple-system,Roboto,sans-serif;text-align:center;padding:60px 16px}
 input{font-size:28px;width:230px;text-align:center;letter-spacing:6px;padding:8px;border-radius:8px;border:1px solid #3a3a36;background:#1c1c1a;color:#ecece8}
 button{font-size:17px;margin-top:16px;padding:10px 28px;border-radius:8px;border:0;background:#5fb8a4;color:#121211;font-weight:700}
@@ -419,6 +422,7 @@ const BRANDS = {
 const PUBLIC_ASSETS = {
   '/manifest.json': 'application/manifest+json', '/sw.js': 'text/javascript; charset=utf-8',
   '/icon-192.png': 'image/png', '/icon-512.png': 'image/png', '/icon-180.png': 'image/png',
+  '/icon-152.png': 'image/png', '/icon-120.png': 'image/png', '/icon-76.png': 'image/png',
   '/app.css': 'text/css; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8',
 };
 
@@ -439,6 +443,10 @@ const server = http.createServer((req, res) => {
   const ip = req.socket.remoteAddress;
   // Arquivos do PWA não têm segredo; o navegador os busca sem cookie
   if (BRANDS[url.pathname]) return send(res, 200, 'image/svg+xml', BRANDS[url.pathname], { 'Cache-Control': 'max-age=86400' });
+  // O iOS também procura o ícone nesses endereços fixos, mesmo sem <link> na página
+  if (url.pathname === '/apple-touch-icon.png' || url.pathname === '/apple-touch-icon-precomposed.png' || url.pathname === '/favicon.ico') {
+    return send(res, 200, 'image/png', fs.readFileSync(path.join(__dirname, 'public', 'icon-180.png')));
+  }
   const asset = PUBLIC_ASSETS[url.pathname];
   if (asset) return send(res, 200, asset, fs.readFileSync(path.join(__dirname, 'public', url.pathname)),
     url.pathname === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {});

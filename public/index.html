@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#121211">
+<meta name="apple-mobile-web-app-title" content="AI HUD">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<title>AI HUD</title>
+<!-- ES5 e flexbox sem gap: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) -->
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="app">
+  <div class="top row">
+    <h1>AI HUD</h1><span class="clock" id="clock"></span>
+    <span class="status muted" id="status">carregando…</span>
+    <button class="btn" id="openStats">Estatísticas</button>
+    <button class="btn" id="openRecent">Recentes</button>
+    <button class="btn" id="remote">🛰 Remoto</button>
+    <button class="btn" id="sound" aria-label="Som dos alertas">🔔</button>
+    <button class="btn" id="refresh">↻</button>
+  </div>
+  <div class="quotas">
+    <div class="panel" id="q-claude"></div>
+    <div class="panel" id="q-codex"></div>
+  </div>
+  <div class="gtitle" id="sessTitle">Sessões</div>
+  <div class="grid" id="sessList"></div>
+</div>
+<div id="backdrop"></div>
+<div id="overlay"><div id="overlayBody"></div></div>
+<script src="/app.js"></script>
+</body>
+</html>

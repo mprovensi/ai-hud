@@ -1,0 +1,9 @@
+# Segredos: token e PIN de acesso (gerados no primeiro start)
+config.json
+
+# Dados gerados em tempo de execução
+quota-history.json
+replies.json
+last-statusline.json
+server.log
+hud.html

@@ -17,7 +17,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Estrutura: no iPad tudo cabe em uma tela (100vh), sem rolagem */
 .app { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
 .top { margin-bottom: 10px; }
-.top h1 { font-size: 1.15em; font-weight: 700; }
+.top h1 { font-size: 1.15em; font-weight: 700; white-space: nowrap; }
+.top .status { white-space: nowrap; }
 .top .clock { font-size: 1.15em; margin-left: .5em; color: #8d8d87; }
 .top .status { margin-left: auto; font-size: .78em; }
 .btn { margin-left: 8px; background: #262624; border: 1px solid #3a3a36; border-radius: 8px; padding: .3em .7em; font-size: .82em; white-space: nowrap; }
@@ -222,5 +223,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .quotas .panel + .panel { margin-left: 0; }
   .card { width: 100%; }
   .top .clock { display: none; }
+  /* Celular: botões só com ícone, para caberem na largura */
+  .top .lbl { display: none; }
+  .top .btn { margin-left: 6px; padding: .35em .55em; font-size: .9em; }
+  .top .status { margin-right: 4px; }
+}
+@media (max-width: 420px) {
+  /* Celular estreito (~360px): do "ao vivo" fica só a bolinha */
+  .top .stxt { display: none; }
   .stat { width: 50%; }
 }

@@ -24,9 +24,10 @@
   <div class="top row">
     <h1>AI HUD</h1><span class="clock" id="clock"></span>
     <span class="status muted" id="status">carregando…</span>
-    <button class="btn" id="openStats">Estatísticas</button>
-    <button class="btn" id="openRecent">Recentes</button>
-    <button class="btn" id="remote">🛰 Remoto</button>
+    <!-- No celular só o ícone aparece (.lbl some em tela estreita) -->
+    <button class="btn" id="openStats" aria-label="Estatísticas">📊<span class="lbl"> Estatísticas</span></button>
+    <button class="btn" id="openRecent" aria-label="Recentes">🕘<span class="lbl"> Recentes</span></button>
+    <button class="btn" id="remote" aria-label="Modo remoto">🛰<span class="lbl"> Remoto</span></button>
     <button class="btn" id="sound" aria-label="Som dos alertas">🔔</button>
     <button class="btn" id="refresh">↻</button>
   </div>

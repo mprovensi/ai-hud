@@ -243,7 +243,7 @@
 
   function setRemoteBtn(on) {
     $('remote').className = 'btn' + (on ? ' on' : '');
-    $('remote').innerHTML = on ? '🛰 Remoto ligado' : '🛰 Remoto';
+    $('remote').innerHTML = '🛰<span class="lbl"> ' + (on ? 'Remoto ligado' : 'Remoto') + '</span>';
   }
 
   function setSound(on) {
@@ -520,7 +520,7 @@
     $('clock').innerHTML = hm(now);
     if (lastOk) {
       var ago = Math.round((now.getTime() - lastOk) / 1000);
-      $('status').innerHTML = ago > 40 ? '<span class="hi">● sem atualização há ' + ago + 's</span>' : '<span class="lo">●</span> ao vivo';
+      $('status').innerHTML = ago > 40 ? '<span class="hi">● sem atualização há ' + ago + 's</span>' : '<span class="lo">●</span><span class="stxt"> ao vivo</span>';
     }
   }
 

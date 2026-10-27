@@ -10,7 +10,7 @@ const { execFile } = require('child_process');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
 const QUOTA_EVERY_MS = 5 * 60 * 1000;
-const QUOTA_BUSY_MS = 2 * 60 * 1000;
+const QUOTA_BUSY_MS = 60 * 1000;
 const ACTIVE_MS = 2 * 60 * 1000;   // log mexido há menos disso: trabalhando
 const RECENT_MS = 30 * 60 * 1000;  // até isso: sessão aberta, ociosa
 
@@ -151,7 +151,7 @@ function refreshQuotas() {
   return Promise.all([refresh('claude', claudeQuota), refresh('codex', codexQuota)]);
 }
 refreshQuotas();
-// Com alguma sessão trabalhando, lê a cada 2 min (o gráfico da janela de 5h fica mais detalhado)
+// Com alguma sessão trabalhando, lê a cada 1 min (o gráfico da janela de 5h fica mais detalhado)
 setInterval(() => {
   const now = Date.now();
   let busy = false;

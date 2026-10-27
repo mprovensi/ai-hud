@@ -4,7 +4,7 @@
   "description": "Sessões e cotas do Claude, Codex e Antigravity",
   "start_url": "/",
   "scope": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "any",
   "background_color": "#121211",
   "theme_color": "#121211",

@@ -247,4 +247,5 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (max-width: 420px) {
   /* Celular estreito (~360px): do "ao vivo" fica só a bolinha */
   .top .stxt { display: none; }
+  .top .btn { margin-left: 4px; padding: .3em .45em; }
 }

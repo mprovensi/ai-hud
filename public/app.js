@@ -69,7 +69,7 @@
     if (x.state === 'working') return '<span class="badge working"><span class="pulse">●</span> ' + esc(x.lastTool || 'trabalhando') + '</span>';
     if (x.state === 'waiting') return '<span class="badge waiting">sua vez · ' + dur(now - x.end) + '</span>';
     if (x.state === 'idle') return '<span class="badge idle">parada ' + dur(now - x.end) + '</span>';
-    return '<span class="muted" style="font-size:.78em;margin-left:8px">' + when(x.end) + '</span>';
+    return '<span class="badge closed">' + when(x.end) + '</span>';
   }
 
   function sessRow(x, now) {
@@ -99,7 +99,7 @@
     meta.push(x.tool === 'Antigravity' ? x.prompts + ' pedidos' : k(x.tokens));
     meta.push(dur(now - x.start));
     var ping = pings[x.id] && now - pings[x.id] < 60e3 ? ' ping' : '';
-    return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
+    return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
       '<div class="row"><span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
       '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + esc(x.tool) + '</span>' +
       (x.queued ? '<span class="rflag queued">✉ na fila</span>' : x.listening ? '<span class="rflag">↩ responder</span>' : '') + '</div>' +
@@ -252,17 +252,24 @@
     $('sound').innerHTML = on ? '🔔' : '🔕';
   }
 
+  var GRID_MIN = 6; // 2 linhas de 3 cartões
+
   function render(s) {
     setRemoteBtn(s.remoteMode);
     quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
     quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
+    // Últimas sessões: todas as ativas pela última mensagem (enviada ou recebida); se sobrar
+    // espaço nas 2 primeiras linhas (6 cartões), completa com as últimas inativas
+    var active = s.active.slice().sort(function (a, b) { return b.end - a.end; });
+    var list = active.concat(s.recent.slice(0, Math.max(0, GRID_MIN - active.length)));
     var html = '', waiting = 0;
-    for (var i = 0; i < s.active.length; i++) {
-      html += sessCard(s.active[i], s.now);
-      if (s.active[i].state === 'waiting') waiting++;
+    for (var i = 0; i < list.length; i++) {
+      html += sessCard(list[i], s.now);
+      if (list[i].state === 'waiting') waiting++;
     }
-    $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão aberta agora.</div>';
-    $('sessTitle').innerHTML = 'Sessões ativas (' + s.active.length + ')' + (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '');
+    $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
+    $('sessTitle').innerHTML = 'Últimas sessões · ' + active.length + (active.length === 1 ? ' ativa' : ' ativas') +
+      (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '');
     if (view === 'recent') renderRecent();
     if (view === 'stats') renderStats();
   }

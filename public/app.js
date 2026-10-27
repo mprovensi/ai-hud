@@ -283,7 +283,9 @@
       '<button class="close" id="back" aria-label="Fechar">✕</button></div>';
   }
   function sessHead(x) {
-    return head('<span class="dot c' + toolIndex(x.tool) + '"></span>' + esc(x.project) + ' <small class="muted">' + esc(x.tool) + '</small>',
+    var idx = toolIndex(x.tool);
+    // Claude e Codex com o ícone da página inicial; Antigravity (sem ícone) continua com a bolinha
+    return head((idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>') + esc(x.project) + ' <small class="muted">' + esc(x.tool) + '</small>',
       x.title ? esc(x.title) : '');
   }
 

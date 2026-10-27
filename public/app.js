@@ -533,7 +533,19 @@
     }
   }
 
-  setSound(soundOn);  // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
+  setSound(soundOn);
+
+  // App instalado no Android que abriu sem tela cheia (o Chrome às vezes ignora o "fullscreen" do
+  // manifest): o primeiro toque pede tela cheia. Não vale no navegador nem no iPad (sem display-mode).
+  var installed = window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: minimal-ui)').matches);
+  var rootEl = document.documentElement, enterFs = rootEl.requestFullscreen || rootEl.webkitRequestFullscreen;
+  if (installed && enterFs) {
+    var goFull = function () {
+      document.removeEventListener('touchend', goFull, false);
+      try { var p = enterFs.call(rootEl); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+    };
+    document.addEventListener('touchend', goFull, false);
+  }  // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
   $('remote').onclick = function () {
     var on = !(snap && snap.remoteMode);
     if (on && !confirm('Ligar o modo remoto?\n\nPedidos de permissão do Claude vão esperar sua resposta aqui (até 10 min) em vez de aparecer no PC. Use quando estiver longe do computador.')) return;

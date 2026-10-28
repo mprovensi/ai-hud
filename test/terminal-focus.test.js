@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { createTerminalFocus, selectBridge, titleHints } = require('../terminal-focus');
+const { createTerminalFocus, selectBridge, titleHints } = require('../src/terminal-focus');
 
 const record = (overrides = {}) => ({ at: 10000, port: 12345, token: 'a'.repeat(48), terminals: [{ pid: 20, name: 'mesmo nome' }], folders: ['C:\\project'], ...overrides });
 

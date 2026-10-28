@@ -14,7 +14,7 @@ const files = ['a', 'b', 'c'].map((name) => path.join(directory, name + '.log'))
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let launchError;
 const native = (args) => new Promise((resolve, reject) => execFile('powershell',
-  ['-NoProfile', '-File', path.join(__dirname, '../terminal-focus.ps1'), ...args, '-Verbose'],
+  ['-NoProfile', '-File', path.join(__dirname, '../windows/terminal-focus.ps1'), ...args, '-Verbose'],
   { windowsHide: true, timeout: 15000 }, (error, out, stderr) => {
     try {
       const lines = out.trim().split(/\r?\n/);

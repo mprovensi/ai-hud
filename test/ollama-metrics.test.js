@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { generationMetrics } = require('../ollama-metrics');
+const { generationMetrics } = require('../src/ollama-metrics');
 
 test('tokens/s uses output generation time rather than total latency', () => {
   const metrics = generationMetrics({ prompt_eval_count: 20, eval_count: 120,

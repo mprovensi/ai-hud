@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Peers, compareSessions } = require('../peers');
+const { Peers, compareSessions } = require('../src/peers');
 
 function snapshot(active = []) {
   return { active, recent: [], quotas: {}, today: { Codex: { fresh: 0, cacheRead: 0 } },

@@ -1,6 +1,6 @@
 # Serviço do usuário (systemd) para rodar o AI HUD no Linux e reiniciar se cair.
 # Instalação (ajuste WorkingDirectory se o projeto estiver em outra pasta):
-#   mkdir -p ~/.config/systemd/user && cp ai-hud.service ~/.config/systemd/user/
+#   mkdir -p ~/.config/systemd/user && cp linux/ai-hud.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload && systemctl --user enable --now ai-hud
 #   loginctl enable-linger "$USER"     # opcional: roda mesmo sem sessão aberta
 # Log: journalctl --user -u ai-hud -f

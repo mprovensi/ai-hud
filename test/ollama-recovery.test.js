@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 
-const source = fs.readFileSync(path.join(__dirname, '../ollama-chats.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../src/ollama-chats.js'), 'utf8');
 
 function load(store, chats) {
   let disk = JSON.stringify(store), writes = 0;
@@ -20,7 +20,7 @@ function load(store, chats) {
           close() {}
         } };
       }
-      if (name === './ollama-metrics') return require('../ollama-metrics');
+      if (name === './ollama-metrics') return require('../src/ollama-metrics');
       if (name === 'child_process') return { execFile: () => {} };
       if (name === 'http') return { request: (url, options, respond) => {
         const req = new EventEmitter();

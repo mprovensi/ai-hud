@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const vm = require('node:vm');
-const { Peers } = require('../peers');
+const { Peers } = require('../src/peers');
 
 test('actual server routes reject null bodies and malformed tokens without side effects', async (t) => {
   const token = 'a'.repeat(24);
@@ -28,14 +28,16 @@ test('actual server routes reject null bodies and malformed tokens without side 
         },
         writeFileSync: (file) => { if (path.basename(file) === 'config.json') configWrites++; },
         readdirSync: () => [],
+        mkdirSync: () => {},
+        renameSync: () => { throw new Error('no legacy files in test'); },
       };
-      if (name === './lib') return { claudeSessions: () => [], codexData: () => ({ sessions }), antigravitySessions: () => [] };
-      if (name === './quotas') return { claudeQuota: async () => ({ windows: {} }), codexQuota: async () => ({ windows: {} }) };
-      if (name === './peers') return { Peers, compareSessions: require('../peers').compareSessions };
-      if (name === './terminal-focus') return { createTerminalFocus: () => async () => ({ ok: true, host: 'windows-terminal', message: 'test tab selected' }) };
-      if (name === './http-utils') return require('../http-utils');
-      if (name === './ollama') return { Ollama: class { constructor() { this.state = null; } } };
-      if (name === './ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [] };
+      if (name === './src/lib') return { claudeSessions: () => [], codexData: () => ({ sessions }), antigravitySessions: () => [] };
+      if (name === './src/quotas') return { claudeQuota: async () => ({ windows: {} }), codexQuota: async () => ({ windows: {} }) };
+      if (name === './src/peers') return { Peers, compareSessions: require('../src/peers').compareSessions };
+      if (name === './src/terminal-focus') return { createTerminalFocus: () => async () => ({ ok: true, host: 'windows-terminal', message: 'test tab selected' }) };
+      if (name === './src/http-utils') return require('../src/http-utils');
+      if (name === './src/ollama') return { Ollama: class { constructor() { this.state = null; } } };
+      if (name === './src/ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [] };
       return require(name);
     } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'server.js'), 'utf8'), sandbox);

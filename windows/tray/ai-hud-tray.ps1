@@ -1,15 +1,15 @@
 ﻿# AI HUD na bandeja do Windows: inicia o servidor, mostra status e log, reinicia/para.
-# Uso normal (sem janela de console): tray\start-tray.vbs
-# Teste sem interface: powershell -File tray\ai-hud-tray.ps1 -Test -Port 8796 -Root <cópia do projeto>
+# Uso normal (sem janela de console): windows\tray\start-tray.vbs
+# Teste sem interface: powershell -File windows\tray\ai-hud-tray.ps1 -Test -Port 8796 -Root <cópia do projeto>
 param(
-  [string]$Root = (Split-Path -Parent $PSScriptRoot),
+  [string]$Root = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
   [int]$Port = $(if ($env:AI_HUD_PORT) { [int]$env:AI_HUD_PORT } else { 8787 }),
   [switch]$Test
 )
 
 $ErrorActionPreference = 'Stop'
-$LogFile = Join-Path $Root 'server.log'
-$OldLog = Join-Path $Root 'server.old.log'
+$LogFile = Join-Path $Root 'data\server.log'
+$OldLog = Join-Path $Root 'data\server.old.log'
 
 # ---- Servidor ---------------------------------------------------------------
 
@@ -46,7 +46,7 @@ function Stop-Server {
 function Restart-Server { Stop-Server; Start-Server }
 
 function Get-Config {
-  try { return Get-Content -Raw -Encoding UTF8 (Join-Path $Root 'config.json') | ConvertFrom-Json } catch { return $null }
+  try { return Get-Content -Raw -Encoding UTF8 (Join-Path $Root 'data\config.json') | ConvertFrom-Json } catch { return $null }
 }
 
 # Estado completo para a janela: processo, resposta HTTP, endereços, PIN e PCs do hub

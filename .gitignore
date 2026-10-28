@@ -1,12 +1,4 @@
-# Segredos: token e PIN de acesso (gerados no primeiro start)
-config.json
-
-# Dados gerados em tempo de execução
-quota-history.json
-replies.json
-last-statusline.json
-server.log
-hud.html
-
-# Continuação das conversas do Ollama feitas pelo HUD
-ollama-replies.json
+# Dados gerados em tempo de execução: token e PIN (config.json), filas, históricos,
+# continuação das conversas do Ollama e logs
+data/*
+!data/.gitkeep

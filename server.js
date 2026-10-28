@@ -4,13 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { claudeSessions, codexData, antigravitySessions } = require('./lib');
-const { claudeQuota, codexQuota, CODEX } = require('./quotas');
-const { Peers, compareSessions } = require('./peers');
-const { createTerminalFocus } = require('./terminal-focus');
-const { authorized, readJson, handleRequest } = require('./http-utils');
-const { Ollama } = require('./ollama');
-const ollamaChats = require('./ollama-chats');
+const { claudeSessions, codexData, antigravitySessions } = require('./src/lib');
+const { claudeQuota, codexQuota, CODEX } = require('./src/quotas');
+const { Peers, compareSessions } = require('./src/peers');
+const { createTerminalFocus } = require('./src/terminal-focus');
+const { authorized, readJson, handleRequest } = require('./src/http-utils');
+const { Ollama } = require('./src/ollama');
+const ollamaChats = require('./src/ollama-chats');
 const { execFile } = require('child_process');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
@@ -19,8 +19,16 @@ const QUOTA_BUSY_MS = 60 * 1000;
 const ACTIVE_MS = 2 * 60 * 1000;   // log mexido há menos disso: trabalhando
 const RECENT_MS = 30 * 60 * 1000;  // até isso: sessão aberta, ociosa
 
+// Dados gerados em execução (token, filas, históricos) ficam em data/, fora do git.
+// Instalações antigas guardavam esses arquivos na raiz: move-os uma vez.
+const DATA = path.join(__dirname, 'data');
+try { fs.mkdirSync(DATA, { recursive: true }); } catch {}
+for (const name of ['config.json', 'quota-history.json', 'replies.json', 'last-statusline.json', 'ollama-replies.json']) {
+  try { fs.renameSync(path.join(__dirname, name), path.join(DATA, name)); } catch {}
+}
+
 // Token de acesso, gerado na primeira execução
-const configFile = path.join(__dirname, 'config.json');
+const configFile = path.join(DATA, 'config.json');
 let config = {};
 try { config = JSON.parse(fs.readFileSync(configFile, 'utf8')); } catch {}
 // O HUD envia respostas às sessões (executam comandos no PC): PIN de 8 dígitos
@@ -68,7 +76,7 @@ function allowed(addr) {
 // Ritmo (como CodexBar/ccburn): compara o uso com o tempo já passado da janela e projeta o reset.
 // A taxa vem das leituras da última hora; sem amostras suficientes, da média desde o início da janela.
 const WINDOW_MS = { five_hour: 5 * 3600e3, seven_day: 7 * 86400e3 };
-const historyFile = path.join(__dirname, 'quota-history.json');
+const historyFile = path.join(DATA, 'quota-history.json');
 let history = {};
 try { history = JSON.parse(fs.readFileSync(historyFile, 'utf8')); } catch {}
 
@@ -174,7 +182,7 @@ const base = (p) => (p ? p.split(/[\\/]/).filter(Boolean).pop() : '');
 // sessão, senão o modelo configurado ([1m] = 1M tokens), senão 200k
 function claudeWindow(s) {
   const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
-  const sl = read(path.join(__dirname, 'last-statusline.json'));
+  const sl = read(path.join(DATA, 'last-statusline.json'));
   if (sl.session_id === s.id && sl.context_window && sl.context_window.context_window_size) return sl.context_window.context_window_size;
   const model = String(read(path.join(os.homedir(), '.claude', 'settings.json')).model || '');
   return model.includes('[1m]') || s.context > 200e3 ? 1e6 : 200e3;
@@ -185,7 +193,7 @@ function claudeWindow(s) {
 // A chave é o id que o próprio CLI passa ao hook: Claude = nome do .jsonl, Codex = uuid no fim do rollout.
 const replyKey = (s) => (s.tool === 'Codex' ? s.id.slice(-36) : s.id);
 // A fila fica em disco: um reinício do servidor não perde respostas ainda não entregues
-const repliesFile = path.join(__dirname, 'replies.json');
+const repliesFile = path.join(DATA, 'replies.json');
 const replies = new Map();   // chave -> { text, at }
 try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(repliesFile, 'utf8')))) replies.set(k, v); } catch {}
 function saveReplies() {
@@ -280,7 +288,7 @@ function focusPlan(s) {
 }
 
 function focusWindow(plan) {
-  return new Promise((resolve) => execFile('powershell', ['-NoProfile', '-File', path.join(__dirname, 'focus.ps1'), '-Process', plan.process,
+  return new Promise((resolve) => execFile('powershell', ['-NoProfile', '-File', path.join(__dirname, 'windows', 'focus.ps1'), '-Process', plan.process,
     '-Include', plan.include, '-Exclude', plan.exclude, ...(plan.unique ? ['-Unique'] : [])], { windowsHide: true, timeout: 20e3 },
   (err, out) => resolve(String(out || '').trim().startsWith('ok'))));
 }

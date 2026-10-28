@@ -17,7 +17,7 @@ const entry = process.env.CLAUDE_CODE_ENTRYPOINT || '';
 if (/^sdk|^ai-hud/.test(entry)) process.exit(0);
 
 let token = '';
-try { token = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8')).token; } catch { process.exit(0); }
+try { token = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'config.json'), 'utf8')).token; } catch { process.exit(0); }
 
 function call(method, route, body) {
   return new Promise((resolve, reject) => {

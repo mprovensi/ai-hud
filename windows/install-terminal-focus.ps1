@@ -2,7 +2,7 @@
 param([switch]$PackageOnly, [string]$Output = '')
 $ErrorActionPreference = 'Stop'
 $OutputEncoding = [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
-$source = Join-Path $PSScriptRoot 'vscode-terminal'
+$source = Join-Path (Split-Path -Parent $PSScriptRoot) 'vscode-terminal'
 $package = Get-Content -LiteralPath (Join-Path $source 'package.json') -Raw | ConvertFrom-Json
 $stage = Join-Path ([IO.Path]::GetTempPath()) ('ai-hud-extension-' + [guid]::NewGuid().ToString('N'))
 $extension = Join-Path $stage 'extension'

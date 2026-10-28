@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
-const libFile = path.resolve(__dirname, '../lib.js');
+const libFile = path.resolve(__dirname, '../src/lib.js');
 const localRequire = createRequire(libFile);
 let DatabaseSync;
 try { ({ DatabaseSync } = require('node:sqlite')); } catch {}
@@ -170,7 +170,7 @@ test('Codex paginado: recupera SQLite sem JSONL e não duplica conversas existen
 });
 
 test('Codex: ausência de node:sqlite mantém fallback JSONL sem acessar bancos', () => {
-  const source = fs.readFileSync(path.resolve(__dirname, '../codex-history.js'), 'utf8');
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/codex-history.js'), 'utf8');
   const sandbox = { module: { exports: {} }, require: (name) => {
     if (name === 'node:sqlite') throw new Error('indisponível');
     if (name === 'fs') return { readdirSync: () => assert.fail('não deve acessar SQLite') };

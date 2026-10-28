@@ -1,5 +1,5 @@
 // Statusline do Claude Code: modelo · contexto · tokens/custo da sessão · limites Claude e Codex
-const { codexData } = require('./lib');
+const { codexData } = require('../src/lib');
 
 let raw = '';
 process.stdin.on('data', (c) => (raw += c));
@@ -7,7 +7,7 @@ process.stdin.on('end', () => {
   let d = {};
   try { d = JSON.parse(raw); } catch {}
   // Guarda a última entrada para o dashboard (limites do Claude não ficam em nenhum log)
-  try { require('fs').writeFileSync(require('path').join(__dirname, 'last-statusline.json'), JSON.stringify({ at: new Date().toISOString(), ...d }, null, 2)); } catch {}
+  try { require('fs').writeFileSync(require('path').join(__dirname, '..', 'data', 'last-statusline.json'), JSON.stringify({ at: new Date().toISOString(), ...d }, null, 2)); } catch {}
 
   const c = { dim: '\x1b[2m', red: '\x1b[31m', yel: '\x1b[33m', grn: '\x1b[32m', cyn: '\x1b[36m', rst: '\x1b[0m' };
   const pctColor = (p) => (p >= 80 ? c.red : p >= 50 ? c.yel : c.grn);

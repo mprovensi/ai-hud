@@ -27,7 +27,7 @@ const CODEX = findExe('codex', 'AI_HUD_CODEX', WIN
 // Inicia o CLI, manda as mensagens JSON-lines e resolve com a primeira resposta que `pick` aceitar
 function ask(exe, args, env, messages, pick, timeoutMs = 40000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(exe, args, { env: { ...process.env, ...env }, windowsHide: true, cwd: __dirname });
+    const child = spawn(exe, args, { env: { ...process.env, ...env }, windowsHide: true, cwd: path.join(__dirname, '..') });
     let buf = '', done = false;
     const finish = (err, val) => {
       if (done) return;

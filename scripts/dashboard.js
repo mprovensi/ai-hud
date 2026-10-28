@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { claudeSessions, codexData, antigravitySessions, day } = require('./lib');
+const { claudeSessions, codexData, antigravitySessions, day } = require('../src/lib');
 
 const DAYS = Number(process.argv[2]) || 14;
 const codex = codexData();
@@ -51,7 +51,7 @@ const limitsHtml = L && L.primary
 // Claude: limites só chegam via stdin da statusline, que grava a última leitura em last-statusline.json
 let claudeLimitsHtml = '<p class="note">Sem leitura ainda: abra uma sessão do <code>claude</code> no terminal e mande uma mensagem.</p>';
 try {
-  const sl = JSON.parse(fs.readFileSync(path.join(__dirname, 'last-statusline.json'), 'utf8'));
+  const sl = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'last-statusline.json'), 'utf8'));
   const rl = sl.rate_limits || {};
   const live = (w) => w && w.used_percentage != null && w.resets_at * 1000 > Date.now();
   const parts = [];
@@ -103,7 +103,7 @@ th{color:var(--mut);font-weight:600}.n{text-align:right;font-variant-numeric:tab
 <h2>Sessões recentes</h2><div class="panel tw"><table><tr><th>CLI</th><th>Última atividade</th><th>Projeto</th><th>Modelo</th><th class="n">Tokens</th><th class="n">Saída</th></tr>${rows}</table></div>
 </main></body></html>`;
 
-const out = path.join(__dirname, 'hud.html');
+const out = path.join(__dirname, '..', 'data', 'hud.html');
 fs.writeFileSync(out, html);
 console.log(out);
 if (!process.argv.includes('--no-open')) {

@@ -9,7 +9,7 @@ const http = require('http');
 const { generationMetrics } = require('./ollama-metrics');
 
 const DB = path.join(process.env.LOCALAPPDATA || '', 'Ollama', 'db.sqlite');
-const STORE = path.join(__dirname, 'ollama-replies.json');
+const STORE = path.join(__dirname, '..', 'data', 'ollama-replies.json');
 
 let sqlite = null;
 try { sqlite = require('node:sqlite'); } catch {} // Node 22.5+; sem ele, nada de sessões do Ollama

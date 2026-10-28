@@ -13,7 +13,9 @@ gravam e serve uma página leve (ES5, funciona até no Safari 9 do iPad mini 1).
 node server.js
 ```
 
-Na primeira execução é criado `config.json` com o token e o PIN de 8 dígitos (não versionado).
+Na primeira execução é criado `data/config.json` com o token e o PIN de 8 dígitos (não versionado).
+Tudo o que o HUD gera ao rodar (filas, históricos, logs) fica em `data/`. Instalações antigas,
+com esses arquivos na raiz, são migradas automaticamente na primeira execução.
 O servidor mostra o endereço na rede local; no aparelho, abra `http://<ip-do-pc>:8787` e digite o PIN.
 
 Abrir e fechar os detalhes de uma sessão com **sua vez** marca a resposta como **vista** neste aparelho.
@@ -21,8 +23,8 @@ Uma nova resposta volta a destacar o card e pedir sua atenção.
 A ordem dos cards é a mesma no navegador e no atalho: permissões pendentes primeiro,
 depois a última atividade. Marcar como visto limpa o alerta e mantém a posição do card.
 
-Para iniciar junto com o Windows, copie `start-hidden.vbs` para a pasta Inicializar
-(`Win+R` → `shell:startup`).
+Para iniciar junto com o Windows, copie `windows/tray/start-tray.vbs` (ícone na bandeja) ou
+`windows/start-hidden.vbs` (só o servidor) para a pasta Inicializar (`Win+R` → `shell:startup`).
 
 ## Linux
 
@@ -35,19 +37,19 @@ git clone https://mprovensi@github.com/mprovensi/ai-hud.git ~/ai-hud
 cd ~/ai-hud && node server.js            # teste; Ctrl+C para parar
 ```
 
-Para rodar sempre (e reiniciar se cair), use o serviço do systemd em `ai-hud.service`
+Para rodar sempre (e reiniciar se cair), use o serviço do systemd em `linux/ai-hud.service`
 (instruções no próprio arquivo). Se houver firewall: `sudo ufw allow 8787/tcp`.
-Nos hooks do Claude Code, use os caminhos do Linux, ex.: `node ~/ai-hud/hook-stop.js claude`.
+Nos hooks do Claude Code, use os caminhos do Linux, ex.: `node ~/ai-hud/claude/hook-stop.js claude`.
 
 ## Vários PCs (hub)
 
 Um PC pode juntar as sessões de outros. Instale o AI HUD também no PC secundário e,
-no `config.json` do PC **principal**, acrescente:
+no `data/config.json` do PC **principal**, acrescente:
 
 ```json
 "name": "MateusPC",
 "peers": [
-  { "name": "PC-Trabalho", "url": "http://<ip-do-secundario>:8787", "token": "<token do config.json do secundário>" }
+  { "name": "PC-Trabalho", "url": "http://<ip-do-secundario>:8787", "token": "<token do data/config.json do secundário>" }
 ]
 ```
 
@@ -60,34 +62,42 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | Arquivo | Função |
 | --- | --- |
 | `server.js` | Servidor HTTP: snapshot, detalhe da sessão, PIN, respostas, permissões, Abrir no PC |
-| `lib.js` | Lê os logs do Claude Code, Codex e Antigravity (tokens, sessões, pedidos, respostas) |
-| `codex-history.js` | Recupera conversas do histórico paginado do Codex nos bancos SQLite locais, somente para leitura |
-| `http-utils.js` | Autenticação, validação de JSON e tratamento de erros das requisições HTTP |
-| `quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
-| `peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
-| `ollama-chats.js` | Conversas do app do Ollama (Windows) como sessões: lê o db.sqlite do app (só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
-| `ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
-| `ollama-metrics.js` | Converte os tempos medidos pelo Ollama em duração da resposta e tokens por segundo |
-| `hook-stop.js` | Hook `Stop` do Claude Code: entrega respostas enviadas pelo HUD |
-| `hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
-| `focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude); só Windows |
-| `terminal-focus.js` / `terminal-focus.ps1` | Identificam o processo do CLI e selecionam a aba no VS Code ou Windows Terminal |
+| **`src/`** | **Módulos do servidor** |
+| `src/lib.js` | Lê os logs do Claude Code, Codex e Antigravity (tokens, sessões, pedidos, respostas) |
+| `src/codex-history.js` | Recupera conversas do histórico paginado do Codex nos bancos SQLite locais, somente para leitura |
+| `src/http-utils.js` | Autenticação, validação de JSON e tratamento de erros das requisições HTTP |
+| `src/quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
+| `src/peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
+| `src/ollama-chats.js` | Conversas do app do Ollama (Windows) como sessões: lê o db.sqlite do app (só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
+| `src/ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
+| `src/ollama-metrics.js` | Converte os tempos medidos pelo Ollama em duração da resposta e tokens por segundo |
+| `src/terminal-focus.js` | Identifica o processo do CLI e seleciona a aba no VS Code ou Windows Terminal |
+| **`claude/`** | **Integração com o Claude Code** |
+| `claude/hook-stop.js` | Hook `Stop`: entrega respostas enviadas pelo HUD |
+| `claude/hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
+| `claude/statusline.js` | Statusline com contexto, custo e cotas |
+| **`windows/`** | **Scripts só do Windows** |
+| `windows/focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude) |
+| `windows/terminal-focus.ps1` | Seleciona a aba do CLI no Windows Terminal (usado por `src/terminal-focus.js`) |
+| `windows/install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
+| `windows/tray/` | App de bandeja: inicia, reinicia e mostra o status e o log do servidor |
+| `windows/start-hidden.vbs` | Inicia só o servidor, sem janela |
+| `linux/ai-hud.service` | Serviço do systemd para rodar no Linux |
 | `vscode-terminal/` | Integração local do VS Code para selecionar terminais pelo processo, inclusive abas com nomes iguais |
-| `install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
-| `ai-hud.service` | Serviço do systemd para rodar no Linux |
-| `statusline.js` | Statusline do Claude Code com contexto, custo e cotas |
-| `dashboard.js` | Painel HTML estático (versão inicial) |
 | `public/` | Página: `index.html`, `app.css`, `app.js`, PWA (`manifest.json`, `sw.js`) e ícones |
+| `data/` | Gerado ao rodar, fora do git: `config.json` (token e PIN), filas, históricos e `server.log` |
+| `scripts/` | Teste nativo do Windows Terminal e `dashboard.js`, o painel HTML estático da versão inicial |
+| `test/` | Testes de regressão (`node --test`) |
 
 ## Integração com o Claude Code
 
 Em `~/.claude/settings.json`:
 
 ```json
-"statusLine": { "type": "command", "command": "node D:/Projetos/ai-hud/statusline.js" },
+"statusLine": { "type": "command", "command": "node D:/Projetos/ai-hud/claude/statusline.js" },
 "hooks": {
-  "Stop": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/hook-stop.js claude", "timeout": 1900 }] }],
-  "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/hook-permission.js", "timeout": 660 }] }]
+  "Stop": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/claude/hook-stop.js claude", "timeout": 1900 }] }],
+  "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/claude/hook-permission.js", "timeout": 660 }] }]
 }
 ```
 
@@ -110,7 +120,7 @@ No Windows, **Abrir no PC** seleciona o terminal da sessão antes de trazer a ja
 No **VS Code**, instale a integração local uma vez em cada PC que hospeda os CLIs:
 
 ```powershell
-powershell -NoProfile -File install-terminal-focus.ps1
+powershell -NoProfile -File windows/install-terminal-focus.ps1
 ```
 
 A integração identifica o processo de cada terminal; abas com nomes iguais continuam distintas.

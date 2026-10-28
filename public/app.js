@@ -6,6 +6,17 @@
   var lastOk = 0, snap = null, view = null;
 
   function $(id) { return document.getElementById(id); }
+  // Ícones de traço (estilo Lucide) em SVG inline: herdam a cor do botão e funcionam no Safari 9
+  var ICONS = {
+    stats: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    recent: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+    remote: '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M2 2l20 20"/>',
+    text: '<path d="M21 14h-5"/><path d="M16 16v-3.5a2.5 2.5 0 0 1 5 0V16"/><path d="M4.5 13h6"/><path d="M3 16l4.5-9 4.5 9"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'
+  };
+  function icon(name) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   // Horários pelo relógio e pelo fuso do PC, não do aparelho (tablet com hora ou fuso errado):
@@ -406,13 +417,13 @@
 
   function setRemoteBtn(on) {
     $('remote').className = 'btn' + (on ? ' on' : '');
-    $('remote').innerHTML = '🛰<span class="lbl"> ' + (on ? 'Remoto ligado' : 'Remoto') + '</span>';
+    $('remote').innerHTML = icon('remote') + '<span class="lbl"> ' + (on ? 'Remoto ligado' : 'Remoto') + '</span>';
   }
 
   function setSound(on) {
     soundOn = on;
     store('hud.sound', on ? '1' : '0');
-    $('sound').innerHTML = on ? '🔔' : '🔕';
+    $('sound').innerHTML = icon(on ? 'bell' : 'bellOff');
   }
 
   // ---- Ollama: cartão de status na linha das cotas (meia largura) -----------
@@ -1016,6 +1027,11 @@
   }
 
   setSound(soundOn);
+  $('openStats').innerHTML = icon('stats') + '<span class="lbl"> Estatísticas</span>';
+  $('openRecent').innerHTML = icon('recent') + '<span class="lbl"> Recentes</span>';
+  $('reading').innerHTML = icon('text');
+  $('refresh').innerHTML = icon('refresh');
+  setRemoteBtn(false);
 
   // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
   $('remote').onclick = function () {

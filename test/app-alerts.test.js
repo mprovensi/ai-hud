@@ -13,7 +13,7 @@ function client() {
   const messages = [];
   let beeps = 0;
   const context = { prevStates: null, prevCompleted: null, pings: {}, quotaAlerted: {},
-    beep: () => { beeps++; }, flash: (text) => messages.push(text) };
+    beep: () => { beeps++; }, flash: (text) => messages.push(text), isSeen: () => false };
   vm.runInNewContext(app.slice(start, end) + '\nthis.checkAlerts = checkAlerts;', context);
   return { context, messages, beeps: () => beeps };
 }

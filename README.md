@@ -16,6 +16,9 @@ node server.js
 Na primeira execução é criado `config.json` com o token e o PIN de 8 dígitos (não versionado).
 O servidor mostra o endereço na rede local; no aparelho, abra `http://<ip-do-pc>:8787` e digite o PIN.
 
+Abrir e fechar os detalhes de uma sessão com **sua vez** marca a resposta como **vista** neste aparelho.
+Uma nova resposta volta a destacar o card e pedir sua atenção.
+
 Para iniciar junto com o Windows, copie `start-hidden.vbs` para a pasta Inicializar
 (`Win+R` → `shell:startup`).
 

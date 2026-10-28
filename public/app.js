@@ -73,10 +73,34 @@
   }
 
   // ---- Sessões -------------------------------------------------------------
+  var seenReplies = {}, viewedSession = null;
+  try {
+    var savedSeen = JSON.parse(store('hud.seen') || '{}');
+    if (savedSeen && typeof savedSeen === 'object' && !Array.isArray(savedSeen)) seenReplies = savedSeen;
+  } catch (e) {}
+
+  function attentionKey(x) { return String(x.completedAt || x.end || 0) + ':' + String(x.prompts || 0); }
+  function isSeen(x) { return x.state === 'waiting' && !x.permission && seenReplies[x.id] === attentionKey(x); }
+
+  function rememberViewed(x) {
+    // Guarda somente a versão desenhada, sem marcar uma resposta nova ainda não exibida.
+    viewedSession = { id: x.id, state: x.state, completedAt: x.completedAt, end: x.end,
+      prompts: x.prompts, permission: !!x.permission };
+  }
+
+  function acknowledgeViewed() {
+    var x = viewedSession;
+    viewedSession = null;
+    if (!x || x.state !== 'waiting' || x.permission) return;
+    seenReplies[x.id] = attentionKey(x);
+    delete pings[x.id];
+    store('hud.seen', JSON.stringify(seenReplies));
+  }
+
   function badge(x, now) {
     if (x.state === 'permission') return '<span class="badge perm">🔐 permissão · ' + esc(x.permission.tool) + '</span>';
     if (x.state === 'working') return '<span class="badge working"><span class="pulse">●</span> ' + esc(x.lastTool || 'trabalhando') + '</span>';
-    if (x.state === 'waiting') return '<span class="badge waiting">sua vez · ' + dur(now - x.end) + '</span>';
+    if (x.state === 'waiting') return isSeen(x) ? '<span class="badge idle">visto</span>' : '<span class="badge waiting">sua vez · ' + dur(now - x.end) + '</span>';
     if (x.state === 'idle') return '<span class="badge idle">parada ' + dur(now - x.end) + '</span>';
     return '<span class="badge closed">' + when(x.end) + '</span>';
   }
@@ -110,7 +134,7 @@
     var ping = pings[x.id] && now - pings[x.id] < 3000 ? ' ping' : '';
     // Cada aviso anima uma vez; redesenhar o painel não reinicia o destaque.
     delete pings[x.id];
-    return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
+    return '<button class="card t' + i + (x.state === 'waiting' && !isSeen(x) ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
       // Ícone da IA antes do nome da sessão; na linha de baixo, o PC onde ela roda
       '<div class="row">' + toolIcon(i) + '<span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
       '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + (x.machine ? '🖥 ' + esc(x.machine) : esc(x.tool)) + '</span>' +
@@ -233,7 +257,7 @@
       // Um turno curto pode começar e terminar entre consultas, sem mostrar "working".
       // A primeira leitura só estabelece a referência, sem avisar sobre respostas antigas.
       var newReply = prevCompleted && completed[x.id] > (prevCompleted[x.id] || 0);
-      if (prevStates && x.state === 'waiting' && (prevStates[x.id] !== 'waiting' || newReply)) {
+      if (prevStates && x.state === 'waiting' && !isSeen(x) && (prevStates[x.id] !== 'waiting' || newReply)) {
         pings[x.id] = s.now;
         msgs.push(x.project + ' (' + x.tool + ') espera você');
       }
@@ -347,13 +371,14 @@
     ollamaPanel(s);
     // O servidor prioriza permissões e sessões esperando o usuário, inclusive no hub.
     // Se sobrar espaço nas duas primeiras linhas, completa com as últimas sessões inativas.
-    var active = s.active.slice();
+    var active = s.active.filter(function (x) { return !isSeen(x); })
+      .concat(s.active.filter(function (x) { return isSeen(x); }));
     var used = active.length;
     var fill = s.recent.slice(0, Math.max(0, GRID_MIN - used));
     var html = '', waiting = 0, i;
     for (i = 0; i < active.length; i++) {
       html += sessCard(active[i], s.now);
-      if (active[i].state === 'waiting') waiting++;
+      if (active[i].state === 'waiting' && !isSeen(active[i])) waiting++;
     }
     for (i = 0; i < fill.length; i++) html += sessCard(fill[i], s.now);
     $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
@@ -454,7 +479,7 @@
     var pct = d.contextWindow ? Math.round(d.context / d.contextWindow * 100) : 0;
     var st = d.permission ? '<span class="badge perm">🔐 aguardando permissão</span>'
       : d.state === 'working' ?'<span class="badge working"><span class="pulse">●</span> trabalhando' + (d.lastTool ? ' · ' + esc(d.lastTool) : '') + '</span>'
-      : d.state === 'waiting' ? '<span class="badge waiting">sua vez há ' + dur(now - d.end) + '</span>'
+      : d.state === 'waiting' ? (isSeen(d) ? '<span class="badge idle">visto</span>' : '<span class="badge waiting">sua vez há ' + dur(now - d.end) + '</span>')
       : d.state === 'idle' ? '<span class="badge idle">parada há ' + dur(now - d.end) + '</span>'
       : '<span class="badge closed">encerrada ' + when(d.end) + '</span>';
     html += sessHead(d);
@@ -506,6 +531,7 @@
     }
     html += '</div></div>';
     setOverlay(html);
+    rememberViewed(d);
     bindReply(d);
     if (d.permission) {
       var decide = function (decision) {
@@ -610,6 +636,7 @@
     setOverlay(sessHead(x) + '<div class="dstate">' + badge(x, snap.now) + '</div>' +
       (x.lastPrompt ? '<div class="panel"><h2>Seu último pedido</h2><div class="quote">' + esc(x.lastPrompt) + '</div></div>' : '') +
       '<p class="empty">carregando detalhes…</p>');
+    rememberViewed(x);
   }
 
   function loadDetail() {
@@ -636,6 +663,8 @@
   // A tela sobreposta fica no #hash: o botão Voltar do Android fecha
   function syncHash() {
     var h = location.hash;
+    var nextSession = /^#s=(.+)$/.exec(h);
+    if (viewedSession && (!nextSession || decodeURIComponent(nextSession[1]) !== viewedSession.id)) acknowledgeViewed();
     view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
     if (view) $('overlay').scrollTop = 0;
@@ -646,7 +675,7 @@
     if (view === 'stats') setTimeout(renderStats, 30);
     if (view === 'ollama') renderOllama();
   }
-  function closeOverlay() { if (location.hash) history.back(); else syncHash(); }
+  function closeOverlay() { acknowledgeViewed(); if (location.hash) history.back(); else syncHash(); }
 
   document.addEventListener('click', function (e) {
     var el = e.target;

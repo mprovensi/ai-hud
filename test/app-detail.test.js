@@ -51,7 +51,7 @@ test('dashboard preserves server session priority', () => {
   assert.ok(renderStart >= 0 && renderEnd > renderStart);
   const nodes = {};
   const context = { GRID_MIN: 6, view: null, setRemoteBtn: () => {}, quotaPanel: () => {}, ollamaPanel: () => {},
-    sessCard: (s) => s.id + ';', $: (id) => nodes[id] || (nodes[id] = {}), esc: (s) => s };
+    sessCard: (s) => s.id + ';', $: (id) => nodes[id] || (nodes[id] = {}), esc: (s) => s, isSeen: () => false };
   vm.runInNewContext(app.slice(renderStart, renderEnd) + '\nthis.render = render;', context);
   context.render({ active: [{ id: 'permission', state: 'permission', end: 1 }, { id: 'working', state: 'working', end: 2 }],
     recent: [], today: { 'Claude Code': { fresh: 0 }, Codex: { fresh: 0 } }, quotas: {} });

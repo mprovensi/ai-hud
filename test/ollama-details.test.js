@@ -17,7 +17,8 @@ function client(ollamas) {
     stat: (value, label) => '<div>' + value + ' ' + label + '</div>', esc: escape,
     k: (n) => String(n), dur: (ms) => Math.floor(ms / 60000) + 'min',
     when: (t) => new Date(t).toISOString(), hm: () => '12:00', gb: (bytes) => (bytes / 1e9).toFixed(1) + ' GB',
-    $: (id) => nodes[id] || null, setOverlay: (value) => { html = value; }, bindReply: () => {}, replyBox: () => '' };
+    $: (id) => nodes[id] || null, setOverlay: (value) => { html = value; }, bindReply: () => {}, replyBox: () => '',
+    isSeen: () => false, rememberViewed: () => {} };
   vm.runInNewContext(app.slice(start, end) + '\nthis.renderDetail = renderDetail; this.ollamaRuntime = ollamaRuntime;', context);
   return { context, render: (d) => { context.renderDetail(d); return html; } };
 }

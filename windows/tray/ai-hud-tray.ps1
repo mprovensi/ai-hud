@@ -186,6 +186,7 @@ $form.Controls.AddRange(@($lblState, $txtInfo, $txtLog))
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $miStatus = $menu.Items.Add('Status e log')
 $miOpen = $menu.Items.Add('Abrir HUD no navegador')
+$miPin = $menu.Items.Add('Mostrar PIN')
 [void]$menu.Items.Add('-')
 $miRestart = $menu.Items.Add('Reiniciar servidor')
 $miToggle = $menu.Items.Add('Parar servidor')
@@ -234,10 +235,23 @@ function Open-Hud {
   $cfg = Get-Config
   Start-Process "http://127.0.0.1:$Port/?t=$($cfg.token)"
 }
+# PIN pedido ao entrar no HUD por outro aparelho: mostra em grupos de 4 e copia para a área de transferência
+function Show-Pin {
+  $cfg = Get-Config
+  if (-not $cfg -or -not $cfg.pin) {
+    [void][System.Windows.Forms.MessageBox]::Show('Ainda não há PIN: inicie o servidor uma vez para gerá-lo.', 'AI HUD — PIN', 'OK', 'Warning')
+    return
+  }
+  $pin = [string]$cfg.pin
+  try { [System.Windows.Forms.Clipboard]::SetText($pin) } catch {}
+  $shown = ($pin -replace '(\d{4})(?=\d)', '$1 ')
+  [void][System.Windows.Forms.MessageBox]::Show("PIN do AI HUD:`r`n`r`n$shown`r`n`r`n(copiado para a área de transferência)", 'AI HUD — PIN', 'OK', 'Information')
+}
 
 $tray.add_MouseClick({ param($s, $e) if ($e.Button -eq 'Left') { Show-Status } })
 $miStatus.add_Click({ Show-Status })
 $miOpen.add_Click({ Open-Hud })
+$miPin.add_Click({ Show-Pin })
 $miRestart.add_Click({ Restart-Now })
 $miToggle.add_Click({ Toggle-Server })
 $btnRestart.add_Click({ Restart-Now })

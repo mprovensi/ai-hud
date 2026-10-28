@@ -129,6 +129,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   border: 1px solid #3a3a36; border-radius: 10px; padding: 8px 10px; resize: none; -webkit-appearance: none; }
 .send { margin-left: 8px; background: #5fb8a4; color: #121211; font-weight: 700; border-radius: 10px; padding: .55em 1em; -webkit-align-self: stretch; align-self: stretch; }
 .send:disabled { opacity: .5; }
+/* Ditado: ouvindo = vermelho suave pulsando */
+.mic { margin-left: 8px; width: 2.6em; text-align: center; border-radius: 10px; background: #262624; border: 1px solid #3a3a36;
+  -webkit-align-self: stretch; align-self: stretch; font-size: 1em; }
+.mic.on { background: #4d2f2f; border-color: #c98a85; -webkit-animation: pulse 1.6s infinite; animation: pulse 1.6s infinite; }
 
 /* Desconectado: cobre tudo (inclusive gavetas) até o servidor voltar */
 #offline { display: none; position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 30; background: rgba(18, 18, 17, .97);

@@ -287,6 +287,18 @@
         html += '<div class="omodel ell"><b>' + esc(m.name) + '</b></div>' +
           '<div class="osmall2 muted">' + m.gpuPct + '% GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</div>';
       }
+      // Uso: sessões do Ollama ativas neste PC (app ou terminal) e a última atividade
+      var act = 0, last = 0, all = s.active.concat(s.recent), k2;
+      for (k2 = 0; k2 < all.length; k2++) {
+        var x = all[k2];
+        if (x.tool !== 'Ollama' || (o.machine && x.machine && x.machine !== o.machine)) continue;
+        if (x.state !== 'closed') act++;
+        if (x.end > last) last = x.end;
+      }
+      var use = [];
+      if (act) use.push(act + (act === 1 ? ' sessão ativa' : ' sessões ativas'));
+      if (last) use.push('último uso ' + when(last).replace(/^às /, ''));
+      if (use.length) html += '<div class="osmall2 muted ouse">' + use.join(' · ') + '</div>';
       html += '</div>';
     }
     el.innerHTML = html;

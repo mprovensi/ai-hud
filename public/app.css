@@ -40,6 +40,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .omach { font-size: .78em; color: #8d8d87; }
 .omodel { margin-top: 6px; font-size: .9em; }
 .osmall2 { font-size: .74em; }
+.ouse { margin-top: 6px; }
 /* Ollama: cartão na grade (borda lilás, ícone 🦙) */
 .t3 .in { border-top-color: #b39ddb !important; }
 

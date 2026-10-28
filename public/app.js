@@ -281,7 +281,12 @@
       html += '<div class="ostat">' + (multi && o.machine ? '<div class="omach">🖥 ' + esc(o.machine) + '</div>' : '') +
         (o.online ? '<span class="lo">● online</span>' : '<span class="hi">● fora do ar</span>');
       if (o.online && !o.models.length) html += '<div class="muted omodel">ocioso</div>';
-      for (j = 0; o.online && j < o.models.length; j++) html += '<div class="omodel ell"><b>' + esc(o.models[j].name) + '</b></div>';
+      for (j = 0; o.online && j < o.models.length; j++) {
+        var m = o.models[j];
+        // % na GPU (velocidade) e até quando fica carregado
+        html += '<div class="omodel ell"><b>' + esc(m.name) + '</b></div>' +
+          '<div class="osmall2 muted">' + m.gpuPct + '% GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</div>';
+      }
       html += '</div>';
     }
     el.innerHTML = html;

@@ -31,7 +31,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .quotas .panel { -webkit-flex: 1; flex: 1; min-width: 0; }
 .quotas .panel + .panel { margin-left: 10px; }
 /* Ollama: meia largura na linha das cotas, clicável */
-.quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; }
+.quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; cursor: pointer; }
 .olla:active { background: #232321; }
 .olla .llama, .dtitle .llama { margin-right: .35em; }
 /* Ícone do Ollama é contorno preto: invertido e tingido de lilás para o fundo escuro */

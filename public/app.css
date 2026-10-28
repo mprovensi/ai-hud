@@ -17,14 +17,26 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Estrutura: no iPad tudo cabe em uma tela (100vh), sem rolagem */
 .app { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
 .top { margin-bottom: 10px; }
+.top { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.top-actions { margin-left: 8px; }
 .top h1 { font-size: 1.15em; font-weight: 700; white-space: nowrap; }
-.top .status { white-space: nowrap; }
+.top .status { min-width: 0; text-align: right; }
 /* Botões do topo só com ícone em todos os aparelhos (o texto fica no aria-label) */
 .top .lbl { display: none; }
 .top .btn { padding: .35em .6em; font-size: .9em; }
 .top .clock { font-size: 1.15em; margin-left: .5em; color: #8d8d87; }
 .top .status { margin-left: auto; font-size: .78em; }
 .btn { margin-left: 8px; background: #262624; border: 1px solid #3a3a36; border-radius: 8px; padding: .3em .7em; font-size: .82em; white-space: nowrap; }
+/* Alvos de toque físicos, inclusive no Safari 9; o texto continua ajustável. */
+button { min-width: 44px; min-height: 44px; }
+button:focus, [role="button"]:focus { outline: 2px solid #8ca5ff; outline-offset: 2px; }
+.connection-info { font-size: .8em; color: #aaa9a2; margin: 0 0 10px; word-wrap: break-word; }
+.reading-options, .update-notice { padding: 8px 10px; margin-bottom: 10px; background: #262624; border: 1px solid #3a3a36; border-radius: 10px; }
+.reading-options > span, .update-notice > span { display: inline-block; margin: 4px 6px 4px 0; }
+.reading-options button[aria-pressed="true"] { background: #35496b; border-color: #8ca5ff; }
+.update-notice { border-color: #8a6a2a; color: #f0cf8a; }
+body.read-large { font-size: 17px; }
+body.read-larger { font-size: 19px; }
 .panel { background: #1c1c1a; border: 1px solid #2c2c29; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
 .panel h2 { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
 /* Horário ao lado do título de um painel (ex.: Última resposta · às 09:12) */
@@ -136,6 +148,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .chip:active { background: #2b3556; }
 .rform textarea { -webkit-flex: 1; flex: 1; min-width: 0; font: inherit; font-size: .95em; color: #ecece8; background: #121211;
   border: 1px solid #3a3a36; border-radius: 10px; padding: 8px 10px; resize: none; -webkit-appearance: none; }
+.rform textarea { font-size: 16px; }
 .send { margin-left: 8px; background: #5fb8a4; color: #121211; font-weight: 700; border-radius: 10px; padding: .55em 1em; -webkit-align-self: stretch; align-self: stretch; }
 .send:disabled { opacity: .5; }
 /* Ditado: ouvindo = vermelho suave pulsando */
@@ -165,6 +178,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .dtop .dsub { margin: 2px 0 0; }
 .close { width: 2em; height: 2em; margin-left: 10px; border-radius: 50%; background: #262624; border: 1px solid #3a3a36;
   text-align: center; color: #b5b5ae; font-size: 1em; line-height: 1; }
+.close { -webkit-flex-shrink: 0; flex-shrink: 0; }
 .dstate { font-size: .85em; margin-bottom: 10px; }
 .dstate .badge { margin: 0 8px 0 0; }
 .pcaction { display: block; width: 100%; text-align: center; margin-bottom: 10px; padding: .6em; border-radius: 12px;
@@ -286,6 +300,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (min-width: 761px) {
   /* iPad mini: 1024x768 em 7,9" — tudo fisicamente pequeno; textos secundários com no mínimo ~17px */
   body { font-size: 22px; padding: 0; }
+  body.read-large { font-size: 25px; }
+  body.read-larger { font-size: 28px; }
+  .rform textarea { font-size: 1em; }
   .app { padding: 10px 14px 4px; }
   .top { margin-bottom: 6px; }
   .top .status, .btn { font-size: .8em; }
@@ -314,6 +331,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .axis { font-size: .75em; }
   .card { width: 33.333%; }
   .card .in { height: 194px; }
+  body.read-large .card .in, body.read-larger .card .in { height: auto; min-height: 194px; }
   .burnbox { height: 260px; }
   .burnbox text { font-size: 15px; }
   #overlay { width: 62%; min-width: 560px; padding: 16px 20px 28px; }
@@ -328,10 +346,20 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .top .clock { display: none; }
   .top .btn { margin-left: 6px; }
   .top .status { margin-right: 4px; }
+  .top-actions { -webkit-flex-basis: 100%; flex-basis: 100%; margin: 8px 0 0; -webkit-justify-content: space-between; justify-content: space-between; }
+  .top-actions .btn { margin-left: 0; }
+  .reading-options .btn { margin: 4px 2px; padding-left: .5em; padding-right: .5em; }
+  body.read-large .rform textarea, body.read-larger .rform textarea { font-size: 1em; }
   .stat { width: 50%; }
 }
 @media (max-width: 420px) {
   /* Celular estreito (~360px): do "ao vivo" fica só a bolinha */
   .top .stxt { display: none; }
   .top .btn { margin-left: 4px; padding: .3em .45em; }
+  .top-actions .btn { margin-left: 0; }
+}
+body.read-large .dtitle, body.read-larger .dtitle { white-space: normal; word-wrap: break-word; }
+@media (prefers-reduced-motion: reduce) {
+  #overlay { -webkit-transition: none; transition: none; }
+  .ping .in, .pulse, .mic.on { -webkit-animation: none; animation: none; }
 }

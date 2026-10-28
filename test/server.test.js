@@ -37,6 +37,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
       if (name === './src/peers') return { Peers, compareSessions: require('../src/peers').compareSessions };
       if (name === './src/terminal-focus') return { createTerminalFocus: () => async () => ({ ok: true, host: 'windows-terminal', message: 'test tab selected' }) };
       if (name === './src/http-utils') return require('../src/http-utils');
+      if (name === './src/web-assets') return require('../src/web-assets');
       if (name === './src/ollama') return { Ollama: class { constructor() { this.state = null; } } };
       if (name === './src/ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [] };
       return require(name);
@@ -67,6 +68,15 @@ test('actual server routes reject null bodies and malformed tokens without side 
   assert.equal(responseHeaders.location, '/?t=' + token);
   assert.equal(await call('/'), 200);
   assertManifestLink();
+  const version = responseHeaders['x-ai-hud-version'];
+  assert.match(version, /^[a-f0-9]{16}$/);
+  assert.ok(responseBody.includes('/app.js?v=' + version));
+  assert.ok(responseBody.includes('/app.css?v=' + version));
+  assert.equal(await call('/app.js?v=' + version, undefined, ''), 200);
+  assert.match(responseHeaders['cache-control'], /immutable/);
+  assert.ok(responseBody.includes("var APP_VERSION = '" + version + "'"));
+  assert.equal(await call('/app.js?v=obsolete', undefined, ''), 409);
+  assert.equal(responseHeaders['cache-control'], 'no-store');
   assert.equal(await call('/manifest.json', undefined, ''), 200);
   assert.equal(responseHeaders['content-type'], 'application/manifest+json');
   const manifest = JSON.parse(responseBody);
@@ -79,6 +89,8 @@ test('actual server routes reject null bodies and malformed tokens without side 
   }
   assert.equal(await call('/sw.js', undefined, ''), 200);
   assert.equal(responseHeaders['service-worker-allowed'], '/');
+  assert.ok(responseBody.includes('/app.js?v=' + version));
+  assert.ok(!responseBody.includes('__HUD_'));
   assert.equal(await call('/api/snapshot', undefined, 'é'.repeat(24)), 401);
   for (const route of ['/api/reply', '/api/remote', '/api/permission', '/api/focus',
     '/hook/permission', '/hook/permission-expire', '/hook/listen', '/hook/unlisten']) {
@@ -92,6 +104,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
     input: 0, output: 0, cacheRead: 0, cacheWrite: 0, prompts: 1, lastReply: 'oi' };
   sessions.push(session);
   assert.equal(await call('/api/snapshot'), 200);
+  assert.equal(JSON.parse(responseBody).appVersion, version);
   assert.equal(JSON.parse(responseBody).active[0].completedAt, now);
   assert.equal(await call('/api/session?id=' + session.id), 200);
   assert.equal(JSON.parse(responseBody).completedAt, now);

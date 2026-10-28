@@ -12,6 +12,65 @@ $LogFile = Join-Path $Root 'data\server.log'
 $OldLog = Join-Path $Root 'data\server.old.log'
 $script:TailscaleHelper = Join-Path $PSScriptRoot 'tailscale-serve.ps1'
 . $script:TailscaleHelper
+$script:DiagnosticHelper = Join-Path $PSScriptRoot 'diagnostics.ps1'
+. $script:DiagnosticHelper
+$script:localJob = $null
+$script:localJobPid = $null
+$script:localState = $null
+$script:localStatePid = $null
+$script:lastLocalOk = $null
+$script:lastHttpsOk = $null
+$script:diagnosticEvents = @()
+$script:diagnosticKeys = @{}
+$script:eventFile = Join-Path $Root 'data\tray-events.json'
+try { $script:diagnosticEvents = @(Get-Content -LiteralPath $script:eventFile -Raw -Encoding UTF8 | ConvertFrom-Json | Where-Object { $_ -and $_.Message } | Select-Object -First 20) } catch {}
+function Add-HudDiagnostic([string]$Source, [string]$Message, [switch]$Repeat) {
+  $message = Protect-HudDiagnosticText $Message (Get-Config)
+  if (-not $Repeat -and $script:diagnosticKeys[$Source] -eq $message) { return }
+  $script:diagnosticKeys[$Source] = $message
+  $script:diagnosticEvents = @((@([pscustomobject]@{ At = (Get-Date).ToString('o'); Source = $Source; Message = $message }) + @($script:diagnosticEvents)) | Select-Object -First 20)
+  try {
+    $safe = Protect-HudDiagnosticText (ConvertTo-Json -InputObject @($script:diagnosticEvents) -Depth 4) (Get-Config)
+    [System.IO.File]::WriteAllText($script:eventFile, $safe, [System.Text.Encoding]::UTF8)
+  } catch {} # Falhar ao gravar diagnóstico não derruba a bandeja.
+}
+
+function Update-HudLocal {
+  if ($script:localJob) {
+    if ($script:localJob.State -eq 'Running') { return }
+    try {
+      $results = @(Receive-Job -Job $script:localJob -ErrorAction Stop)
+      if (-not $results.Count) { throw 'A verificação local não retornou um resultado.' }
+      $script:localState = $results[-1]
+      $script:localStatePid = $script:localJobPid
+      if ($script:localState.Ok) {
+        $script:lastLocalOk = $script:localState.CheckedAt
+        if ($script:diagnosticKeys['HTTP local']) { Add-HudDiagnostic 'HTTP local' 'Conexão recuperada.' }
+      } else { Add-HudDiagnostic 'HTTP local' $script:localState.Error }
+    } catch {
+      $script:localState = [pscustomobject]@{ Ok = $false; Error = $_.Exception.Message; Machines = @(); Version = ''; CheckedAt = (Get-Date) }
+      $script:localStatePid = $script:localJobPid
+      Add-HudDiagnostic 'HTTP local' $_.Exception.Message
+    }
+    finally { Remove-Job -Job $script:localJob -Force; $script:localJob = $null }
+  }
+  if (-not $script:wantRunning) { return }
+  $script:localJobPid = Get-ServerPid
+  if (-not $script:localJobPid) { return }
+  $cfg = Get-Config
+  try {
+    $script:localJob = Start-Job -ArgumentList $script:DiagnosticHelper, $Port, $cfg.token -ScriptBlock {
+      param($helper, $hudPort, $token)
+      $ErrorActionPreference = 'Stop'
+      . $helper
+      Get-HudLocalDiagnostic $hudPort $token
+    }
+  } catch {
+    $script:localState = [pscustomobject]@{ Ok = $false; Error = $_.Exception.Message; Machines = @(); Version = ''; CheckedAt = (Get-Date) }
+    $script:localStatePid = $script:localJobPid
+    Add-HudDiagnostic 'HTTP local' $_.Exception.Message
+  }
+}
 $script:httpsState = New-HudTailscaleState 'Checking' 'Verificando Tailscale...'
 $script:httpsJob = $null
 $script:httpsNext = [datetime]::MinValue
@@ -24,8 +83,15 @@ function Update-HudHttps([switch]$Force) {
       $results = @(Receive-Job -Job $script:httpsJob -ErrorAction Stop)
       if (-not $results.Count -or -not $results[-1].State) { throw 'O Tailscale não retornou um estado válido.' }
       $script:httpsState = $results[-1]
+      if ($script:httpsState.HttpsOk -eq $true) { $script:lastHttpsOk = $script:httpsState.CheckedAt }
     } catch { $script:httpsState = New-HudTailscaleState 'Error' $_.Exception.Message }
     finally { Remove-Job -Job $script:httpsJob -Force; $script:httpsJob = $null }
+    if ($script:httpsState.State -ne 'Ready') { Add-HudDiagnostic 'Tailscale' $script:httpsState.Message }
+    elseif ($script:httpsState.HttpsOk -eq $false) { Add-HudDiagnostic 'HTTPS' $script:httpsState.HttpsMessage }
+    else {
+      if ($script:diagnosticKeys['Tailscale']) { Add-HudDiagnostic 'Tailscale' 'Conexão recuperada.' }
+      if ($script:diagnosticKeys['HTTPS']) { Add-HudDiagnostic 'HTTPS' 'Acesso recuperado.' }
+    }
     $script:httpsNext = (Get-Date).AddSeconds(60)
   }
   if (-not $script:wantRunning -or (-not $Force -and (Get-Date) -lt $script:httpsNext)) { return }
@@ -35,7 +101,7 @@ function Update-HudHttps([switch]$Force) {
       param($helper, $hudPort)
       $ErrorActionPreference = 'Stop'
       . $helper
-      Sync-HudTailscaleServe -Port $hudPort
+      Get-HudHttpsDiagnostic -Port $hudPort
     }
   } catch {
     $script:httpsState = New-HudTailscaleState 'Error' $_.Exception.Message
@@ -83,7 +149,7 @@ function Get-Config {
 
 # Estado completo para a janela: processo, resposta HTTP, endereços, PIN e PCs do hub
 function Get-Status {
-  $s = [ordered]@{ Running = $false; Pid = $null; Since = $null; Http = $false; Machines = @(); Pin = $null; Addresses = @() }
+  $s = [ordered]@{ Running = $false; Pid = $null; Since = $null; Http = $false; HttpPending = $false; HttpError = 'servidor parado'; Version = ''; Machines = @(); Pin = $null; Addresses = @() }
   $id = Get-ServerPid
   if ($id) {
     $s.Running = $true; $s.Pid = $id
@@ -92,12 +158,14 @@ function Get-Status {
   $cfg = Get-Config
   if ($cfg) { $s.Pin = $cfg.pin }
   if ($s.Running) {
-    try {
-      $url = "http://127.0.0.1:$Port/api/snapshot?t=$($cfg.token)"
-      $snap = Invoke-RestMethod -Uri $url -TimeoutSec 4
-      $s.Http = $true
-      $s.Machines = @($snap.machines | ForEach-Object { "$($_.name): $(if ($_.ok) { 'online' } else { 'fora do ar' })" })
-    } catch { $s.Http = $false }
+    if ($Test) { $script:localState = Get-HudLocalDiagnostic $Port $cfg.token; $script:localStatePid = $id }
+    $s.HttpPending = (-not $script:localState -or $script:localStatePid -ne $id)
+    if (-not $s.HttpPending) {
+      $s.Http = $script:localState.Ok
+      $s.HttpError = $script:localState.Error
+      $s.Machines = $script:localState.Machines
+      $s.Version = $script:localState.Version
+    }
   }
   $s.Addresses = @([System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
     Where-Object { $_.AddressFamily -eq 'InterNetwork' -and -not $_.IPAddressToString.StartsWith('127.') } |
@@ -175,9 +243,9 @@ $tray.Visible = $true
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'AI HUD — servidor'
 $form.Icon = $IconOn
-$form.Size = New-Object System.Drawing.Size 760, 560
+$form.Size = New-Object System.Drawing.Size 840, 660
 $form.StartPosition = 'CenterScreen'
-$form.MinimumSize = New-Object System.Drawing.Size 560, 400
+$form.MinimumSize = New-Object System.Drawing.Size 660, 540
 $form.ShowInTaskbar = $true
 
 $lblState = New-Object System.Windows.Forms.Label
@@ -190,7 +258,7 @@ $txtInfo.Multiline = $true; $txtInfo.ReadOnly = $true; $txtInfo.BorderStyle = 'N
 $txtInfo.BackColor = $form.BackColor
 $txtInfo.Font = New-Object System.Drawing.Font('Segoe UI', 9.5)
 $txtInfo.Location = New-Object System.Drawing.Point 14, 44
-$txtInfo.Size = New-Object System.Drawing.Size 720, 142
+$txtInfo.Size = New-Object System.Drawing.Size 800, 174
 $txtInfo.ScrollBars = 'Vertical'
 $txtInfo.Anchor = 'Top, Left, Right'
 
@@ -198,26 +266,50 @@ $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Multiline = $true; $txtLog.ReadOnly = $true; $txtLog.ScrollBars = 'Vertical'; $txtLog.WordWrap = $false
 $txtLog.Font = New-Object System.Drawing.Font('Consolas', 9)
 $txtLog.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 22); $txtLog.ForeColor = [System.Drawing.Color]::FromArgb(220, 220, 214)
-$txtLog.Location = New-Object System.Drawing.Point 12, 192
-$txtLog.Size = New-Object System.Drawing.Size 720, 270
-$txtLog.Anchor = 'Top, Bottom, Left, Right'
+$txtLog.Dock = 'Fill'
+
+$tabs = New-Object System.Windows.Forms.TabControl
+$tabs.Location = New-Object System.Drawing.Point 12, 224
+$tabs.Size = New-Object System.Drawing.Size 800, 320
+$tabs.Anchor = 'Top, Left, Right'
+$logTab = New-Object System.Windows.Forms.TabPage
+$logTab.Text = 'Log do servidor'
+$logTab.Controls.Add($txtLog)
+$diagnosticTab = New-Object System.Windows.Forms.TabPage
+$diagnosticTab.Text = 'Diagnóstico e ocorrências'
+$txtDiagnostic = New-Object System.Windows.Forms.TextBox
+$txtDiagnostic.Multiline = $true; $txtDiagnostic.ReadOnly = $true
+$txtDiagnostic.ScrollBars = 'Vertical'; $txtDiagnostic.WordWrap = $true
+$txtDiagnostic.Font = New-Object System.Drawing.Font('Consolas', 9)
+$txtDiagnostic.Dock = 'Fill'
+$diagnosticTab.Controls.Add($txtDiagnostic)
+$tabs.TabPages.AddRange(@($logTab, $diagnosticTab))
+
+$actions = New-Object System.Windows.Forms.FlowLayoutPanel
+$actions.Dock = 'Bottom'; $actions.AutoSize = $true; $actions.WrapContents = $true
+$actions.Padding = New-Object System.Windows.Forms.Padding 8
+$form.Controls.Add($actions)
 
 function New-Button($text, $x) {
   $b = New-Object System.Windows.Forms.Button
-  $b.Text = $text; $b.Size = New-Object System.Drawing.Size 130, 32
-  $b.Location = New-Object System.Drawing.Point $x, 474
-  $b.Anchor = 'Bottom, Left'
-  $form.Controls.Add($b); return $b
+  $b.Text = $text; $b.Size = New-Object System.Drawing.Size 142, 36
+  $actions.Controls.Add($b); return $b
 }
 $btnRestart = New-Button 'Reiniciar' 12
 $btnToggle = New-Button 'Parar' 150
 $btnOpen = New-Button 'Abrir HUD' 288
 $btnFolder = New-Button 'Abrir pasta' 426
-$form.Controls.AddRange(@($lblState, $txtInfo, $txtLog))
+$btnDiagnostic = New-Button 'Copiar diagnóstico' 564
+$form.Controls.AddRange(@($lblState, $txtInfo, $tabs))
+$form.add_Layout({
+    $height = [math]::Max(80, $actions.Top - $tabs.Top - 8)
+    if ($tabs.Height -ne $height) { $tabs.Height = $height }
+  })
 
 # Menu do botão direito
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $miStatus = $menu.Items.Add('Status e log')
+$miDiagnostic = $menu.Items.Add('Copiar diagnóstico')
 $miOpen = $menu.Items.Add('Abrir HUD no navegador')
 $miPin = $menu.Items.Add('Mostrar PIN')
 [void]$menu.Items.Add('-')
@@ -239,7 +331,9 @@ $script:crashes = @()         # horários de quedas, para não reiniciar em laç
 function Update-View {
   $st = Get-Status
   $tray.Icon = $(if ($st.Running) { $IconOn } else { $IconOff })
-  $text = if ($st.Running) { "AI HUD — rodando há $(Format-Duration $st.Since)" } else { 'AI HUD — parado' }
+  $text = if (-not $st.Running) { 'AI HUD — parado' } elseif ($st.HttpPending) { 'AI HUD — verificando HTTP' }
+    elseif (-not $st.Http) { 'AI HUD — falha no HTTP local' } elseif ($script:httpsState.HttpsOk -eq $false) { 'AI HUD — falha no HTTPS' }
+    else { "AI HUD — rodando há $(Format-Duration $st.Since)" }
   $tray.Text = $text.Substring(0, [math]::Min(63, $text.Length))
   $miToggle.Text = $(if ($st.Running) { 'Parar servidor' } else { 'Iniciar servidor' })
   $miHttpsOpen.Enabled = $miHttpsCopy.Enabled = ($st.Running -and $script:httpsState.State -eq 'Ready')
@@ -247,20 +341,24 @@ function Update-View {
   $miHttpsAuthorize.Enabled = [bool]$script:httpsState.ActionUrl
   if (-not $form.Visible) { return }
   if ($st.Running) {
-    $lblState.Text = '● Rodando' + $(if (-not $st.Http) { ' (sem resposta HTTP)' } else { '' })
+    $lblState.Text = '● Rodando' + $(if ($st.HttpPending) { ' (verificando HTTP)' } elseif (-not $st.Http) { ' (falha no HTTP local)' } else { '' })
     $lblState.ForeColor = $(if ($st.Http) { [System.Drawing.Color]::FromArgb(47, 125, 109) } else { [System.Drawing.Color]::DarkOrange })
   } else {
     $lblState.Text = '● Parado'; $lblState.ForeColor = [System.Drawing.Color]::Firebrick
   }
   $btnToggle.Text = $(if ($st.Running) { 'Parar' } else { 'Iniciar' })
   $lines = @()
-  if ($st.Running) { $lines += "PID $($st.Pid) · porta $Port · rodando há $(Format-Duration $st.Since) (desde $($st.Since.ToString('dd/MM HH:mm')))" }
+  if ($st.Running) { $lines += "PID $($st.Pid) · porta $Port · rodando há $(Format-Duration $st.Since)" }
+  $lines += 'HTTP local: ' + $(if ($st.HttpPending) { 'verificando...' } elseif ($st.Http) { 'respondendo' } else { $st.HttpError })
+  $lines += 'Última atualização do servidor: ' + (Format-HudDiagnosticTime $script:lastLocalOk)
   if ($st.Addresses.Count) { $lines += 'Endereços: ' + ($st.Addresses -join '  ') }
   if ($script:httpsState.Url) { $lines += 'HTTPS (Android / PWA): ' + $script:httpsState.Url }
   $lines += 'Tailscale: ' + $script:httpsState.Message
+  if ($null -ne $script:httpsState.HttpsOk) { $lines += 'Acesso HTTPS: ' + $script:httpsState.HttpsMessage }
   if ($st.Pin) { $lines += "PIN: $($st.Pin)" }
   if ($st.Machines.Count) { $lines += 'PCs no hub: ' + ($st.Machines -join ' · ') }
   $txtInfo.Text = $lines -join "`r`n"
+  $txtDiagnostic.Text = Get-DiagnosticReport $st
   $atEnd = $txtLog.SelectionStart -ge $txtLog.TextLength - 2
   $log = Get-LogTail 300
   if ($txtLog.Text -ne $log) {
@@ -270,12 +368,22 @@ function Update-View {
 }
 
 function Show-Status { $form.Show(); $form.WindowState = 'Normal'; $form.Activate(); Update-View }
+function Get-DiagnosticReport($Status) {
+  if (-not $Status) { $Status = Get-Status }
+  $report = Format-HudDiagnostic $Status $script:httpsState $script:lastLocalOk $script:lastHttpsOk @($script:diagnosticEvents) $Port
+  return Protect-HudDiagnosticText $report (Get-Config)
+}
+function Copy-Diagnostic {
+  [System.Windows.Forms.Clipboard]::SetText((Get-DiagnosticReport))
+  $tray.ShowBalloonTip(2000, 'AI HUD', 'Diagnóstico copiado, sem PIN nem token.', 'Info')
+}
 function Toggle-Server {
   if (Get-ServerPid) { $script:wantRunning = $false; Stop-Server } else { $script:wantRunning = $true; Start-Server }
+  Update-HudLocal
   Update-HudHttps -Force
   Update-View
 }
-function Restart-Now { $script:wantRunning = $true; Restart-Server; Update-HudHttps -Force; Update-View; $tray.ShowBalloonTip(2000, 'AI HUD', 'Servidor reiniciado.', 'Info') }
+function Restart-Now { $script:wantRunning = $true; Restart-Server; Update-HudLocal; Update-HudHttps -Force; Update-View; $tray.ShowBalloonTip(2000, 'AI HUD', 'Servidor reiniciado.', 'Info') }
 function Open-Hud {
   $cfg = Get-Config
   Start-Process "http://127.0.0.1:$Port/?t=$($cfg.token)"
@@ -306,6 +414,7 @@ function Show-Pin {
 
 $tray.add_MouseClick({ param($s, $e) if ($e.Button -eq 'Left') { Show-Status } })
 $miStatus.add_Click({ Show-Status })
+$miDiagnostic.add_Click({ Copy-Diagnostic })
 $miOpen.add_Click({ Open-Hud })
 $miPin.add_Click({ Show-Pin })
 $miHttpsOpen.add_Click({ Open-HudHttps })
@@ -322,11 +431,13 @@ $btnRestart.add_Click({ Restart-Now })
 $btnToggle.add_Click({ Toggle-Server })
 $btnOpen.add_Click({ Open-Hud })
 $btnFolder.add_Click({ Start-Process explorer.exe $Root })
+$btnDiagnostic.add_Click({ Copy-Diagnostic })
 # Fechar a janela só esconde; o app continua na bandeja
 $form.add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; $form.Hide() } })
 $miExit.add_Click({
     $script:wantRunning = $false; Stop-Server
     if ($script:httpsJob) { Stop-Job -Job $script:httpsJob; Remove-Job -Job $script:httpsJob -Force }
+    if ($script:localJob) { Stop-Job -Job $script:localJob; Remove-Job -Job $script:localJob -Force }
     $tray.Visible = $false; $tray.Dispose(); $mutex.ReleaseMutex()
     [System.Windows.Forms.Application]::Exit()
   })
@@ -339,18 +450,22 @@ $timer.add_Tick({
       $now = Get-Date
       $script:crashes = @($script:crashes | Where-Object { ($now - $_).TotalMinutes -lt 2 }) + $now
       if ($script:crashes.Count -le 3) {
+        Add-HudDiagnostic 'Servidor' 'O processo parou inesperadamente; reiniciando automaticamente.' -Repeat
         Start-Server
         $tray.ShowBalloonTip(3000, 'AI HUD', 'O servidor tinha parado e foi reiniciado.', 'Warning')
       } elseif ($script:crashes.Count -eq 4) {
+        Add-HudDiagnostic 'Servidor' 'Reinício automático suspenso após várias quedas em dois minutos.'
         $tray.ShowBalloonTip(5000, 'AI HUD', 'O servidor caiu várias vezes. Veja o log.', 'Error')
       }
     }
+    Update-HudLocal
     Update-HudHttps
     Update-View
   })
 
 # Ao abrir: usa o servidor que já estiver rodando, senão inicia
 Start-Server
+Update-HudLocal
 Update-HudHttps
 Update-View
 $timer.Start()

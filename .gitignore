@@ -2,3 +2,6 @@
 # continuação das conversas do Ollama e logs
 data/*
 !data/.gitkeep
+# Logs de instalações antigas que ainda estão na raiz.
+/server.log
+/server.old.log

@@ -56,8 +56,12 @@ class Peers {
     let known = {};
     try { known = JSON.parse(fs.readFileSync(ollamaFile, 'utf8')) || {}; } catch {}
     this.list = (list || []).filter((p) => p && p.url && p.token)
-      .map((p, i) => ({ name: p.name || `PC ${i + 2}`, url: p.url, token: p.token, i, snap: null, at: 0, error: null,
-        ollamas: Array.isArray(known[p.name]) ? known[p.name] : [] }));
+      .map((p, i) => {
+        const name = p.name || `PC ${i + 2}`;
+        const saved = Array.isArray(known[name]) ? known[name] : [];
+        return { name, url: p.url, token: p.token, ollama: p.ollama, i, snap: null, at: 0, error: null,
+          ollamas: p.ollama === false ? [] : saved.length ? saved : p.ollama === true ? [{ machine: name, version: null, installed: null }] : [] };
+      });
     if (this.list.length) {
       this.pollAll();
       setInterval(() => this.pollAll(), POLL_MS);
@@ -77,19 +81,37 @@ class Peers {
 
   // Ollamas que o secundário mandou (com o nome do PC); grava só quando a lista de máquinas muda
   peerOllamas(p) {
-    const theirs = (p.snap && p.snap.ollamas) || [];
-    return theirs.length === 1 ? [{ ...theirs[0], machine: p.name }] : theirs;
+    if (p.ollama === false) return [];
+    const theirs = p.snap && (Array.isArray(p.snap.ollamas) ? p.snap.ollamas : p.snap.ollama ? [p.snap.ollama] : []) || [];
+    return theirs.filter((o) => o && typeof o === 'object').map((o) => ({ ...o,
+      machine: theirs.length === 1 ? p.name : o.machine || p.name, models: Array.isArray(o.models) ? o.models : [] }));
   }
 
   rememberOllamas(p) {
-    const list = this.peerOllamas(p).map((o) => ({ machine: o.machine, version: o.version || null, installed: o.installed ?? null }));
-    const key = (l) => l.map((o) => o.machine).join('\n');
-    const changed = key(list) !== key(p.ollamas || []);
+    // Lista vazia durante a inicialização não prova que o Ollama foi desinstalado.
+    // Mantém as máquinas conhecidas e os últimos metadados; ollama:false as remove explicitamente.
+    const known = new Map((p.ollamas || []).map((o) => [o.machine, o]));
+    for (const o of this.peerOllamas(p)) {
+      const previous = known.get(o.machine) || {};
+      known.set(o.machine, { machine: o.machine, version: o.version || previous.version || null,
+        installed: o.installed ?? previous.installed ?? null });
+    }
+    const list = p.ollama === false ? [] : [...known.values()];
+    const changed = JSON.stringify(list) !== JSON.stringify(p.ollamas || []);
     p.ollamas = list;
     if (!changed || !this.ollamaFile) return;
     const all = {};
     for (const q of this.list) if (q.ollamas && q.ollamas.length) all[q.name] = q.ollamas;
     try { fs.writeFileSync(this.ollamaFile, JSON.stringify(all, null, 2)); } catch {}
+  }
+
+  ollamasForPeer(p, connected) {
+    if (p.ollama === false) return [];
+    const current = connected ? this.peerOllamas(p) : [];
+    const reported = new Set(current.map((o) => o.machine));
+    return current.concat((p.ollamas || []).filter((o) => !reported.has(o.machine)).map((o) => ({
+      ...o, online: false, unreachable: !connected, unavailable: connected, models: [], gpu: null,
+    })));
   }
 
   // "m0:<id>" → { peer, rid }; sessão local → null
@@ -116,8 +138,7 @@ class Peers {
     delete out.ollama;
     for (const p of this.list) {
       // PC sem resposta: o Ollama dele aparece fora do ar, marcado como sem conexão com o PC
-      out.ollamas = out.ollamas.concat(live.includes(p) ? this.peerOllamas(p)
-        : (p.ollamas || []).map((o) => ({ ...o, online: false, unreachable: true, models: [], gpu: null })));
+      out.ollamas = out.ollamas.concat(this.ollamasForPeer(p, live.includes(p)));
     }
     if (!live.length) return out;
 

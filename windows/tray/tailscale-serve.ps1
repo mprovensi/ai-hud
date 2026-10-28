@@ -43,7 +43,8 @@ function Invoke-HudTailscale([string]$Executable, [string[]]$Arguments, [int]$Ti
 }
 
 function New-HudTailscaleState([string]$State, [string]$Message, [string]$Url = '', [string]$ActionUrl = '') {
-  return [pscustomobject]@{ State = $State; Message = $Message; Url = $Url; ActionUrl = $ActionUrl }
+  return [pscustomobject]@{ State = $State; Message = $Message; Url = $Url; ActionUrl = $ActionUrl;
+    BackendState = $(if ($State -in @('Ready', 'Conflict', 'Authorization')) { 'Running' } else { '' }) }
 }
 
 function Get-HudServeRoute($Config, [string]$DnsName, [int]$Port) {
@@ -67,6 +68,7 @@ function Get-HudServeRoute($Config, [string]$DnsName, [int]$Port) {
 }
 
 function Sync-HudTailscaleServe([int]$Port) {
+  $status = $null
   try {
     $exe = Find-HudTailscale
     if (-not $exe) { return New-HudTailscaleState 'Missing' 'Tailscale não instalado. O HUD continua disponível na rede local.' }
@@ -75,7 +77,9 @@ function Sync-HudTailscaleServe([int]$Port) {
     $status = $result.Output | ConvertFrom-Json
     if (-not $status.BackendState) { throw 'O serviço Tailscale não respondeu. Abra o Tailscale e tente novamente.' }
     if ($status.BackendState -ne 'Running') {
-      return New-HudTailscaleState 'Offline' 'Abra o Tailscale, faça login e conecte para ativar o HTTPS.' '' ([string]$status.AuthURL)
+      $state = New-HudTailscaleState 'Offline' 'Abra o Tailscale, faça login e conecte para ativar o HTTPS.' '' ([string]$status.AuthURL)
+      $state.BackendState = [string]$status.BackendState
+      return $state
     }
     $dns = ([string]$status.Self.DNSName).TrimEnd('.')
     if (-not $dns) { throw 'O Tailscale ainda não informou o nome HTTPS deste PC.' }
@@ -108,5 +112,28 @@ function Sync-HudTailscaleServe([int]$Port) {
       return New-HudTailscaleState 'Ready' 'HTTPS ativo no Tailscale.' $url
     }
     throw 'O Tailscale Serve ainda não confirmou o HTTPS do HUD. Tente atualizar novamente.'
-  } catch { return New-HudTailscaleState 'Error' $_.Exception.Message }
+  } catch {
+    $state = New-HudTailscaleState 'Error' $_.Exception.Message
+    $state.BackendState = [string]$status.BackendState
+    return $state
+  }
+}
+
+function Get-HudHttpsDiagnostic([int]$Port) {
+  $state = Sync-HudTailscaleServe $Port
+  $state | Add-Member -NotePropertyMembers @{ CheckedAt = (Get-Date); HttpsOk = $null; HttpsMessage = 'Ainda não verificado.' }
+  if ($state.State -eq 'Ready') {
+    try {
+      $response = Invoke-WebRequest -Uri $state.Url -UseBasicParsing -TimeoutSec 8
+      $text = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
+      if ($response.StatusCode -ne 200 -or -not $text.Contains('AI HUD')) { throw 'O endereço HTTPS não retornou a página do AI HUD.' }
+      $state.HttpsOk = $true
+      $state.HttpsMessage = 'Respondendo com certificado confiável (HTTP 200).'
+    } catch {
+      $state.HttpsOk = $false
+      $state.HttpsMessage = 'Falha ao acessar o HTTPS: ' + $_.Exception.Message
+    }
+  }
+  $state.CheckedAt = Get-Date
+  return $state
 }

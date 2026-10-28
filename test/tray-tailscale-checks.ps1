@@ -97,3 +97,103 @@ Add-Response 'invalid json'
 Assert-Hud ((Sync-HudTailscaleServe 8787).State -eq 'Error' -and $script:calls.Count -eq 2) 'Status inválido deve impedir mudanças na configuração.'
 
 "Tailscale tray checks passed ($script:checks assertions)."
+
+. (Join-Path $PSScriptRoot '..\windows\tray\diagnostics.ps1')
+$secretConfig = [pscustomobject]@{ token = 'a-secret-token'; pin = '12345678' }
+$protected = Protect-HudDiagnosticText 'token=a-secret-token PIN:12345678 https://hud/?t=other-secret' $secretConfig
+Assert-Hud (-not $protected.Contains('a-secret-token') -and -not $protected.Contains('12345678') -and -not $protected.Contains('other-secret')) 'O diagnóstico não pode conter token nem PIN.'
+
+function Invoke-RestMethod($Uri, $WebSession, $TimeoutSec) {
+  Assert-Hud (-not ([string]$Uri).Contains('?')) 'A consulta local não deve incluir token na URL.'
+  Assert-Hud ($WebSession.Cookies.GetCookies($Uri)['hud'].Value -eq 'a-secret-token') 'A consulta local deve usar o cookie de autenticação.'
+  return [pscustomobject]@{ now = 1000; active = @(); appVersion = 'version'; machines = @([pscustomobject]@{ name = 'PC'; ok = $true }) }
+}
+$local = Get-HudLocalDiagnostic 8787 $secretConfig.token
+Assert-Hud ($local.Ok -and $local.Version -eq 'version' -and $local.Machines[0] -eq 'PC: online') 'A consulta local deve confirmar o HTTP e a versão.'
+
+function Invoke-RestMethod { throw 'falha HTTP local' }
+$local = Get-HudLocalDiagnostic 8787 $secretConfig.token
+Assert-Hud (-not $local.Ok -and $local.Error -eq 'falha HTTP local') 'Uma falha local deve permanecer no diagnóstico.'
+
+function Sync-HudTailscaleServe { return New-HudTailscaleState 'Ready' 'HTTPS configurado' 'https://pc.test.ts.net/' }
+function Invoke-WebRequest { throw 'certificado não confiável' }
+$https = Get-HudHttpsDiagnostic 8787
+Assert-Hud ($https.State -eq 'Ready' -and $https.HttpsOk -eq $false -and $https.HttpsMessage.Contains('certificado')) 'Uma rota configurada não significa que o acesso HTTPS está funcionando.'
+
+function Invoke-WebRequest { return [pscustomobject]@{ StatusCode = 200; Content = 'AI HUD' } }
+$https = Get-HudHttpsDiagnostic 8787
+Assert-Hud ($https.HttpsOk -eq $true -and $https.CheckedAt) 'O diagnóstico deve verificar a resposta real do HTTPS.'
+$server = [pscustomobject]@{ Running = $true; Pid = 123; HttpPending = $false; Http = $false; HttpError = 'falha HTTP local'; Version = 'version'; Addresses = @(); Machines = @() }
+$events = @([pscustomobject]@{ At = 'data inválida'; Source = 'Teste'; Message = 'PIN:12345678 token=a-secret-token' })
+$report = Protect-HudDiagnosticText (Format-HudDiagnostic $server $https (Get-Date) (Get-Date) $events 8787) $secretConfig
+Assert-Hud ($report.Contains('falha HTTP local') -and $report.Contains('HTTP 200') -and -not $report.Contains('a-secret-token') -and -not $report.Contains('12345678')) 'O relatório deve separar HTTP/HTTPS e ocultar segredos, tolerando eventos inválidos.'
+"Tailscale diagnostic checks passed ($script:checks assertions)."
+
+# Usa apenas funções do app, sem iniciar bandeja, servidor nem Tailscale.
+$trayFile = Join-Path $PSScriptRoot '..\windows\tray\ai-hud-tray.ps1'
+$tokens = $null; $parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($trayFile, [ref]$tokens, [ref]$parseErrors)
+Assert-Hud ($parseErrors.Count -eq 0) 'A bandeja deve ser válida no Windows PowerShell 5.1.'
+foreach ($name in @('Add-HudDiagnostic', 'Format-Duration')) {
+  $definition = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
+  Invoke-Expression $definition.Extent.Text
+}
+function Get-Config { return $secretConfig }
+$script:diagnosticEvents = @(); $script:diagnosticKeys = @{}
+$script:eventFile = Join-Path ([System.IO.Path]::GetTempPath()) ('hud-events-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+  Add-HudDiagnostic 'Teste' 'PIN:12345678 token=a-secret-token'
+  Add-HudDiagnostic 'Teste' 'PIN:12345678 token=a-secret-token'
+  Assert-Hud ($script:diagnosticEvents.Count -eq 1) 'Consultas repetidas não devem repetir a mesma ocorrência.'
+  for ($i = 0; $i -lt 25; $i++) { Add-HudDiagnostic 'Teste' "falha $i" }
+  Assert-Hud ($script:diagnosticEvents.Count -eq 20 -and $script:diagnosticEvents[0].Message -eq 'falha 24') 'O histórico deve ser limitado às 20 ocorrências mais recentes.'
+  $saved = Get-Content -Raw -Encoding UTF8 -LiteralPath $script:eventFile
+  Assert-Hud (-not $saved.Contains('a-secret-token') -and -not $saved.Contains('12345678')) 'O histórico persistido não pode salvar credenciais.'
+} finally {
+  if ([System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($script:eventFile)) -ne [System.IO.Path]::GetTempPath().TrimEnd('\')) { throw 'Arquivo de teste fora da pasta temporária.' }
+  Remove-Item -LiteralPath $script:eventFile -Force -ErrorAction SilentlyContinue
+}
+
+# Renderização opcional em memória: não mostra janela nem ícone, usa só dados de teste.
+if ($env:AI_HUD_RENDER_TRAY) {
+  $Root = Split-Path -Parent $PSScriptRoot
+  $Port = 8787
+  $source = Get-Content -LiteralPath $trayFile -Raw -Encoding UTF8
+  $ui = $source.Substring($source.IndexOf('Add-Type -AssemblyName System.Windows.Forms'))
+  $ui = $ui.Substring(0, $ui.IndexOf('# Ao abrir:'))
+  $ui = $ui.Replace('Local\AIHUDTray', ('Local\AIHUDTrayTest-' + [guid]::NewGuid().ToString('N')))
+  $ui = $ui.Replace('$tray.Visible = $true', '$tray.Visible = $false')
+  $ui = $ui.Replace('if (-not $form.Visible) { return }', '')
+  function Get-Status {
+    return [pscustomobject]@{ Running = $true; Pid = 123; Since = (Get-Date).AddHours(-2); HttpPending = $false;
+      Http = $true; HttpError = ''; Version = 'teste123'; Pin = '12345678'; Addresses = @('http://192.168.1.2:8787'); Machines = @('PC: online') }
+  }
+  function Get-LogTail { return "Servidor iniciado.`r`nAguardando consultas do HUD..." }
+  $script:httpsState = New-HudTailscaleState 'Ready' 'HTTPS ativo no Tailscale.' 'https://pc.test.ts.net/'
+  $script:httpsState | Add-Member -NotePropertyMembers @{ HttpsOk = $true; HttpsMessage = 'Respondendo com certificado confiável (HTTP 200).'; CheckedAt = (Get-Date) }
+  $script:lastLocalOk = Get-Date; $script:lastHttpsOk = Get-Date
+  Invoke-Expression $ui
+  function Initialize-RenderHandle($control) {
+    $null = $control.Handle
+    foreach ($child in $control.Controls) { Initialize-RenderHandle $child }
+  }
+  try {
+    Update-View
+    $tabs.SelectedIndex = 1
+    foreach ($size in @(@(840, 660), @(660, 540))) {
+      $form.Size = New-Object System.Drawing.Size $size[0], $size[1]
+      $form.PerformLayout()
+      Initialize-RenderHandle $form
+      Assert-Hud ($tabs.Bottom -lt $actions.Top) 'O diagnóstico não pode sobrepor os botões ao redimensionar.'
+      foreach ($control in $actions.Controls) {
+        Assert-Hud ($control.Right -le $actions.ClientSize.Width -and $control.Bottom -le $actions.ClientSize.Height) 'Todos os botões devem caber no painel.'
+      }
+      $bitmap = New-Object System.Drawing.Bitmap $form.Width, $form.Height
+      try {
+        $form.DrawToBitmap($bitmap, (New-Object System.Drawing.Rectangle 0, 0, $form.Width, $form.Height))
+        $bitmap.Save((Join-Path $env:AI_HUD_RENDER_TRAY "tray-$($size[0]).png"))
+      } finally { $bitmap.Dispose() }
+    }
+  } finally { $timer.Dispose(); $form.Dispose(); $tray.Dispose(); $mutex.ReleaseMutex(); $mutex.Dispose() }
+}
+"Tray event checks passed ($script:checks assertions)."

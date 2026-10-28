@@ -26,6 +26,34 @@ depois a última atividade. Marcar como visto limpa o alerta e mantém a posiç�
 Para iniciar junto com o Windows, copie `windows/tray/start-tray.vbs` (ícone na bandeja, sem janela)
 para a pasta Inicializar (`Win+R` → `shell:startup`).
 
+## Atualizações, conexão e leitura
+
+O iPad mini 1 (iOS 9.3.5 / Safari 9) continua sendo a referência mínima. A interface usa ES5,
+flexbox com prefixos e consultas HTTP periódicas. Não depende de service worker, Push ou APIs modernas.
+
+O servidor gera uma versão por conteúdo e entrega HTML, JavaScript, CSS e cache do PWA com a mesma
+identificação. Não é necessário alterar `?v=N` manualmente. **Reinicie o servidor depois de alterar
+os arquivos em `public/`**: cada execução mantém uma cópia consistente da interface em memória.
+Se um app aberto detectar outra versão no servidor, mostra **Atualizar app**; a atualização é manual
+e pede confirmação quando há uma resposta em edição. No iPad, os URLs versionados funcionam mesmo
+sem service worker. Nos aparelhos com PWA, a casca da interface pode abrir offline, mas dados,
+respostas e permissões continuam exigindo conexão.
+
+O indicador **ao vivo** só aparece após uma consulta válida. Falhas de rede e do servidor ficam
+visíveis até a recuperação, acompanhadas do horário dos últimos dados. Uma sessão inválida mostra
+**Entrar novamente**, sem ficar repetindo consultas. Isso não altera a regra de alertar desconexão
+em tela inteira apenas depois de duas falhas de rede consecutivas.
+
+Use **Aa → Normal / Grande / Maior** para ajustar a leitura. A escolha fica salva neste aparelho.
+Os botões têm área mínima de toque de 44 px, o zoom está liberado e os painéis de cotas também
+podem ser abertos pelo teclado. Os tamanhos maiores deixam os cards crescerem para acomodar o texto.
+
+Na bandeja, **Status e log → Diagnóstico e ocorrências** separa o processo do servidor, a resposta
+HTTP local, a conexão Tailscale e o teste real do HTTPS com certificado confiável. As verificações
+de rede rodam em segundo plano. **Copiar diagnóstico** gera um relatório sem PIN nem token.
+As últimas 20 ocorrências ficam em `data/tray-events.json`, com credenciais ocultas, e sobrevivem
+ao reinício da bandeja. O log bruto do servidor continua em uma aba separada.
+
 ## Instalar como app no Android (PWA)
 
 O acesso HTTP acima serve para usar o painel no navegador. Para instalar como app no Chrome
@@ -105,8 +133,12 @@ Reinicie o servidor principal. O principal consulta o secundário a cada 10 s e 
 tudo junto (com o nome da máquina em cada sessão); responder, permissões, Abrir no PC e
 detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o principal.
 
-O cartão do Ollama mostra cada PC com Ollama, inclusive fora do ar ou sem conexão. Se o
-Ollama fica só em outro PC, `"ollama": false` no `data/config.json` esconde o deste.
+O cartão do Ollama permanece visível, inclusive quando o PC está desconectado. PCs já identificados
+continuam na lista após reiniciar o HUD ou receber temporariamente uma resposta sem dados de Ollama.
+Use `"ollama": true` no objeto de um peer para fixá-lo desde a primeira abertura, mesmo sem histórico;
+`"ollama": false` nesse objeto o omite explicitamente. Versão e quantidade de modelos ficam como
+últimos dados conhecidos; modelos carregados e GPU não são apresentados como atuais sem conexão.
+Se o Ollama fica só em outro PC, `"ollama": false` na raiz de `data/config.json` omite o Ollama local.
 
 ## Arquivos
 

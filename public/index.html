@@ -2,7 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="hud-version" content="__HUD_VERSION__">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="mobile-web-app-capable" content="yes">
@@ -17,26 +18,39 @@
 <link rel="icon" type="image/png" href="/icon-192.png">
 <title>AI HUD</title>
 <!-- ES5 e flexbox sem gap: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) -->
-<link rel="stylesheet" href="/app.css?v=33">
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <div class="app">
   <div class="top row">
     <h1>AI HUD</h1><span class="clock" id="clock"></span>
     <span class="status muted" id="status">carregando…</span>
-    <!-- No celular só o ícone aparece (.lbl some em tela estreita) -->
+    <div class="top-actions row" role="group" aria-label="Ações do HUD">
     <button class="btn" id="openStats" aria-label="Estatísticas">📊<span class="lbl"> Estatísticas</span></button>
     <button class="btn" id="openRecent" aria-label="Recentes">🕘<span class="lbl"> Recentes</span></button>
     <button class="btn" id="remote" aria-label="Modo remoto">🛰<span class="lbl"> Remoto</span></button>
     <button class="btn" id="sound" aria-label="Som dos alertas">🔔</button>
-    <button class="btn" id="refresh">↻</button>
+    <button class="btn" id="reading" aria-label="Ajustar tamanho da leitura" title="Tamanho da leitura" aria-expanded="false">Aa</button>
+    <button class="btn" id="refresh" aria-label="Atualizar cotas" title="Atualizar cotas">↻</button>
+    </div>
   </div>
+  <div id="readingOptions" class="reading-options" style="display:none" role="group" aria-label="Tamanho da leitura">
+    <span>Leitura</span>
+    <button class="btn" id="textNormal" aria-pressed="true">Normal</button>
+    <button class="btn" id="textLarge" aria-pressed="false">Grande</button>
+    <button class="btn" id="textLarger" aria-pressed="false">Maior</button>
+  </div>
+  <div id="updateNotice" class="update-notice" style="display:none" role="status">
+    <span>Nova versão do AI HUD disponível.</span>
+    <button class="btn" id="applyUpdate">Atualizar app</button>
+  </div>
+  <p id="connectionInfo" class="connection-info" aria-live="polite">Aguardando a primeira atualização…</p>
   <div class="quotas">
-    <div class="panel" id="q-claude" role="button"></div>
-    <div class="panel" id="q-codex" role="button"></div>
-    <!-- Status do Ollama (meia largura); some se nenhum PC tiver Ollama -->
+    <div class="panel" id="q-claude" role="button" tabindex="0" aria-label="Uso do Claude"></div>
+    <div class="panel" id="q-codex" role="button" tabindex="0" aria-label="Uso do Codex"></div>
+    <!-- Status do Ollama (meia largura), visível também enquanto o PC está sem conexão. -->
     <!-- div (não button): o navegador centraliza na vertical o conteúdo de botões -->
-    <div class="panel olla" id="q-ollama" role="button" style="display:none"></div>
+    <div class="panel olla" id="q-ollama" role="button" tabindex="0" aria-label="Estado do Ollama"><div class="qhead"><span class="name">Ollama</span></div><div class="empty">Aguardando informações…</div></div>
   </div>
   <div class="gtitle" id="sessTitle">Sessões</div>
   <div class="grid" id="sessList"></div>
@@ -44,15 +58,16 @@
 <!-- Servidor fora do ar: cobre a página e tenta reconectar a cada 5 s -->
 <div id="offline"><div class="obox">
   <div class="oicon">📡</div>
-  <h2>Servidor desconectado</h2>
-  <p class="muted">O PC pode estar desligado, fora da rede ou com a VPN bloqueando o acesso.</p>
+  <h2 id="offlineTitle">Sem conexão com o servidor</h2>
+  <p class="muted" id="offlineMessage">Confira a rede, a conexão do Tailscale e se o AI HUD está rodando no PC.</p>
   <p class="oretry" id="oretry">Tentando reconectar…</p>
   <p class="muted osmall" id="olast"></p>
   <button class="btn" id="oretryNow">Tentar agora</button>
+  <button class="btn" id="loginAgain" style="display:none">Entrar novamente</button>
 </div></div>
 <div id="backdrop"></div>
 <div id="overlay"><div id="overlayBody"></div></div>
-<!-- ?v=N: mude a cada versão para o Safari do iPad não usar o arquivo antigo -->
-<script src="/app.js?v=40"></script>
+<!-- O servidor acrescenta a versão por conteúdo também para o Safari 9, sem service worker. -->
+<script src="/app.js"></script>
 </body>
 </html>

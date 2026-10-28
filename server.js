@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { createWebAssets } = require('./src/web-assets');
+const webAssets = createWebAssets(path.join(__dirname, 'public'));
 const { claudeSessions, codexData, antigravitySessions } = require('./src/lib');
 const { claudeQuota, codexQuota, CODEX } = require('./src/quotas');
 const { Peers, compareSessions } = require('./src/peers');
@@ -440,7 +442,7 @@ function snapshot() {
 const machineName = config.name || os.hostname();
 const peers = new Peers(config.peers, path.join(DATA, 'peer-ollamas.json'));
 // Ollama deste PC (aparece no HUD se estiver instalado ou responder); config.ollamaUrl muda o
-// endereço e config.ollama = false esconde o cartão (quando o Ollama fica só em outro PC)
+// endereço e config.ollama = false omite o Ollama local (quando ele fica só em outro PC)
 const ollama = new Ollama(config.ollamaUrl);
 const hubSnapshot = () => peers.merge(snapshot(), machineName);
 
@@ -452,7 +454,6 @@ function relay(res, promise) {
 }
 
 // --- HTTP ----------------------------------------------------------------
-const page = path.join(__dirname, 'public', 'index.html');
 
 // Ícones oficiais que as extensões do VS Code já trazem, pintados nas cores do HUD (só para esta rede)
 function extensionIcon(prefix, file, color) {
@@ -491,7 +492,7 @@ const PUBLIC_ASSETS = {
 };
 
 function send(res, status, type, body, headers = {}) {
-  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', ...headers });
+  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-AI-HUD-Version': webAssets.version, ...headers });
   res.end(body);
 }
 
@@ -513,8 +514,15 @@ const server = http.createServer(handleRequest((req, res) => {
     return send(res, 200, 'image/png', fs.readFileSync(path.join(__dirname, 'public', 'icon-180.png')));
   }
   const asset = PUBLIC_ASSETS[url.pathname];
-  if (asset) return send(res, 200, asset, fs.readFileSync(path.join(__dirname, 'public', url.pathname)),
-    url.pathname === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {});
+  if (asset) {
+    const versioned = url.pathname === '/app.js' || url.pathname === '/app.css';
+    if (versioned && url.searchParams.has('v') && url.searchParams.get('v') !== webAssets.version) {
+      return send(res, 409, 'text/plain; charset=utf-8', 'Versão antiga. Atualize a página do AI HUD.');
+    }
+    const headers = url.pathname === '/sw.js' ? { 'Service-Worker-Allowed': '/' }
+      : versioned && url.searchParams.get('v') === webAssets.version ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};
+    return send(res, 200, asset, webAssets.assets[url.pathname] || fs.readFileSync(path.join(__dirname, 'public', url.pathname)), headers);
+  }
   if (url.pathname === '/login' && req.method === 'POST') {
     let body = '';
     req.on('data', (c) => { if (body.length < 200) body += c; });
@@ -535,8 +543,8 @@ const server = http.createServer(handleRequest((req, res) => {
   }
   const cookie = { 'Set-Cookie': `hud=${config.token}; Max-Age=31536000; Path=/; HttpOnly; SameSite=Lax` };
 
-  if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(page), cookie);
-  if (url.pathname === '/api/snapshot') return send(res, 200, 'application/json', JSON.stringify(hubSnapshot()));
+  if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', webAssets.html, cookie);
+  if (url.pathname === '/api/snapshot') return send(res, 200, 'application/json', JSON.stringify({ ...hubSnapshot(), appVersion: webAssets.version }));
   // Resposta rápida do HUD. Codex: fila nativa (`codex queue`), que a extensão do VS Code atende sozinha.
   // Claude: fila do HUD, entregue pelo hook-stop.js da sessão (substitui a anterior; "" cancela).
   if (url.pathname === '/api/reply' && req.method === 'POST') {
@@ -653,7 +661,7 @@ const server = http.createServer(handleRequest((req, res) => {
   if (url.pathname === '/api/refresh' && req.method === 'POST') {
     if (Date.now() - lastRefresh < 30e3) return send(res, 429, 'text/plain', 'aguarde');
     peers.broadcast('POST', '/api/refresh');
-    return refreshQuotas().then(() => send(res, 200, 'application/json', JSON.stringify(hubSnapshot())));
+    return refreshQuotas().then(() => send(res, 200, 'application/json', JSON.stringify({ ...hubSnapshot(), appVersion: webAssets.version })));
   }
   send(res, 404, 'text/plain', 'não encontrado');
 }));

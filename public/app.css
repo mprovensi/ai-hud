@@ -34,6 +34,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; }
 .olla:active { background: #232321; }
 .olla .llama, .dtitle .llama { margin-right: .35em; }
+/* Ícone do Ollama é contorno preto: invertido e tingido de lilás para o fundo escuro */
+.ollama-ico { -webkit-filter: invert(1) sepia(1) saturate(2.2) hue-rotate(215deg) brightness(.95); filter: invert(1) sepia(1) saturate(2.2) hue-rotate(215deg) brightness(.95); }
 .ostat + .ostat { border-top: 1px solid #2c2c29; margin-top: 6px; padding-top: 6px; }
 .omach { font-size: .78em; color: #8d8d87; }
 .omodel { margin-top: 6px; font-size: .9em; }

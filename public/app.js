@@ -46,8 +46,13 @@
   }
 
   // Ícones das extensões do VS Code, servidos pelo HUD já na cor de referência de cada IA
+  // Ícone do app do Ollama (servido pelo HUD, pintado de lilás por filtro); se o PC principal não tiver
+  // o app instalado, a imagem falha e é escondida
+  function ollamaIcon() {
+    return '<img class="brand ollama-ico" src="/brand-ollama.png" alt="" onerror="this.style.display=&quot;none&quot;">';
+  }
   function toolIcon(idx) {
-    if (idx === 3) return '<span class="llama">🦙</span>';
+    if (idx === 3) return ollamaIcon();
     return idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>';
   }
   function brandIcon(idx) {
@@ -269,22 +274,14 @@
     el.style.display = list.length ? '' : 'none';
     if (!list.length) return;
     var multi = s.machines && s.machines.length > 1;
-    html += '<div class="qhead row"><span class="llama">🦙</span><span class="name">Ollama</span><span class="grow"></span><span class="chev">›</span></div>';
+    html += '<div class="qhead row">' + ollamaIcon() + '<span class="name">Ollama</span><span class="grow"></span><span class="chev">›</span></div>';
+    // Só o essencial: está no ar? qual modelo está carregado? (o resto fica na gaveta)
     for (i = 0; i < list.length; i++) {
       var o = list[i];
       html += '<div class="ostat">' + (multi && o.machine ? '<div class="omach">🖥 ' + esc(o.machine) + '</div>' : '') +
-        (o.online ? '<span class="lo">● online</span> <span class="muted">v' + esc(o.version) + '</span>' : '<span class="hi">● fora do ar</span>');
-      if (o.online && !o.models.length) html += '<div class="muted osmall2">nenhum modelo carregado</div>';
-      for (j = 0; o.online && j < o.models.length; j++) {
-        var m = o.models[j];
-        html += '<div class="omodel ell"><b>' + esc(m.name) + '</b></div>' +
-          '<div class="track"><div class="fill" style="width:' + m.gpuPct + '%;background:#b39ddb"></div></div>' +
-          '<div class="osmall2 muted">' + gb(m.size) + ' · ' + m.gpuPct + '% GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</div>';
-      }
-      var extra = [];
-      if (o.installed != null) extra.push(o.installed + ' instalados');
-      if (o.gpu) extra.push('GPU ' + o.gpu.util + '% · ' + o.gpu.temp + '°C');
-      if (extra.length) html += '<div class="osmall2 muted">' + extra.join(' · ') + '</div>';
+        (o.online ? '<span class="lo">● online</span>' : '<span class="hi">● fora do ar</span>');
+      if (o.online && !o.models.length) html += '<div class="muted omodel">ocioso</div>';
+      for (j = 0; o.online && j < o.models.length; j++) html += '<div class="omodel ell"><b>' + esc(o.models[j].name) + '</b></div>';
       html += '</div>';
     }
     el.innerHTML = html;
@@ -293,7 +290,7 @@
   // Gaveta #ollama: detalhes de cada PC com Ollama
   function renderOllama() {
     if (!snap) return;
-    var list = snap.ollamas || [], html = head('<span class="llama">🦙</span>Ollama'), i, j;
+    var list = snap.ollamas || [], html = head(ollamaIcon() + 'Ollama'), i, j;
     if (!list.length) html += '<p class="empty">Nenhum PC com Ollama.</p>';
     for (i = 0; i < list.length; i++) {
       var o = list[i], g = o.gpu;

@@ -443,6 +443,21 @@ function extensionIcon(prefix, file, color) {
     return svg.replace(/fill="(?!none)[^"]*"/g, `fill="${color}"`);
   } catch { return null; }
 }
+// Ícone do Ollama: o PNG de 256px dentro do app.ico do app instalado (Windows); null se não houver
+function ollamaIcon() {
+  try {
+    const ico = fs.readFileSync(path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'app.ico'));
+    let best = null;
+    for (let i = 0; i < ico.readUInt16LE(4); i++) {
+      const e = 6 + i * 16, w = ico[e] || 256, size = ico.readUInt32LE(e + 8), off = ico.readUInt32LE(e + 12);
+      const png = ico.slice(off, off + size);
+      if (png.slice(0, 4).toString('hex') === '89504e47' && (!best || w > best.w)) best = { w, png };
+    }
+    return best && best.png;
+  } catch { return null; }
+}
+const OLLAMA_ICON = ollamaIcon();
+
 const BRANDS = {
   '/brand-claude.svg': extensionIcon('anthropic.claude-code-', 'claude-logo.svg', '#e08a66'),
   '/brand-codex.svg': extensionIcon('openai.chatgpt-', 'blossom-white.svg', '#5fb8a4'),
@@ -474,6 +489,9 @@ const server = http.createServer((req, res) => {
     console.log(`${new Date().toLocaleTimeString('pt-BR')} ${String(ip).replace(/^::ffff:/, '')} ${req.method} ${url.pathname}`);
   }
   // Arquivos do PWA não têm segredo; o navegador os busca sem cookie
+  if (url.pathname === '/brand-ollama.png') {
+    return OLLAMA_ICON ? send(res, 200, 'image/png', OLLAMA_ICON, { 'Cache-Control': 'max-age=86400' }) : send(res, 404, 'text/plain', '');
+  }
   if (BRANDS[url.pathname]) return send(res, 200, 'image/svg+xml', BRANDS[url.pathname], { 'Cache-Control': 'max-age=86400' });
   // O iOS também procura o ícone nesses endereços fixos, mesmo sem <link> na página
   if (url.pathname === '/apple-touch-icon.png' || url.pathname === '/apple-touch-icon-precomposed.png' || url.pathname === '/favicon.ico') {

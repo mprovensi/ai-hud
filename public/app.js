@@ -107,7 +107,9 @@
     }
     meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens));
     meta.push(dur(now - x.start));
-    var ping = pings[x.id] && now - pings[x.id] < 60e3 ? ' ping' : '';
+    var ping = pings[x.id] && now - pings[x.id] < 3000 ? ' ping' : '';
+    // Cada aviso anima uma vez; redesenhar o painel não reinicia o destaque.
+    delete pings[x.id];
     return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
       // Ícone da IA antes do nome da sessão; na linha de baixo, o PC onde ela roda
       '<div class="row">' + toolIcon(i) + '<span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +

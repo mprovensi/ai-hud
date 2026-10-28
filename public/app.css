@@ -68,7 +68,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     #181817;
 }
 .card.old-card:active .in { opacity: 1; }
-.card.ping .in { -webkit-animation: ping 1s ease-in-out 6; animation: ping 1s ease-in-out 6; }
+.card.ping .in { -webkit-animation: ping 1s ease-in-out 3; animation: ping 1s ease-in-out 3; }
 @-webkit-keyframes ping { 50% { background: #2b3556; } }
 @keyframes ping { 50% { background: #2b3556; } }
 .t0 .in { border-top-color: #e08a66; } .t1 .in { border-top-color: #5fb8a4; } .t2 .in { border-top-color: #7d9bf0; }

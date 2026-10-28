@@ -7,12 +7,22 @@
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
-  function hm(t) { var d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  // Horários pelo relógio e pelo fuso do PC, não do aparelho (tablet com hora ou fuso errado):
+  // skew = hora do PC − hora do aparelho; tzMs = fuso do PC. Ambos chegam em cada snapshot.
+  var skew = 0, tzMs = null;
+  function serverNow() { return new Date().getTime() + skew; }
+  function wall(t) {
+    if (tzMs == null) { var d = new Date(t); return { h: d.getHours(), mi: d.getMinutes(), day: d.getDate(), mon: d.getMonth(), wd: d.getDay(), key: d.toDateString() }; }
+    var u = new Date(t + tzMs);
+    return { h: u.getUTCHours(), mi: u.getUTCMinutes(), day: u.getUTCDate(), mon: u.getUTCMonth(), wd: u.getUTCDay(),
+      key: u.getUTCFullYear() + '-' + u.getUTCMonth() + '-' + u.getUTCDate() };
+  }
+  var WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  function hm(t) { var w = wall(t); return pad(w.h) + ':' + pad(w.mi); }
   function when(t) {
-    var d = new Date(t), n = new Date();
-    if (d.toDateString() === n.toDateString()) return 'às ' + hm(t);
-    n.setDate(n.getDate() - 1);
-    return (d.toDateString() === n.toDateString() ? 'ontem ' : pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ') + hm(t);
+    var w = wall(t), now = serverNow();
+    if (w.key === wall(now).key) return 'às ' + hm(t);
+    return (w.key === wall(now - 864e5).key ? 'ontem ' : pad(w.day) + '/' + pad(w.mon + 1) + ' ') + hm(t);
   }
   function k(n) { n = n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : '' + n; }
   function dur(ms) {
@@ -45,7 +55,16 @@
       '<div class="track grow"><div class="fill" style="width:' + used + '%;background:' + levelColor(used) + '"></div>' +
       (mark != null ? '<div class="mark" style="left:' + Math.min(99, mark) + '%"></div>' : '') + '</div>' +
       '<span class="pct">' + Math.round(w.used) + '%</span></div>' +
-      '<div class="foot row"><span class="muted grow">↻ ' + dur(w.resetsAt - now) + '</span>' + paceText(w, now) + '</div></div>';
+      '<div class="foot row"><span class="muted grow" title="reinicia em ' + dur(w.resetsAt - now) + '">↻ ' + resetAt(w.resetsAt) + '</span>' +
+      paceText(w, now) + '</div></div>';
+  }
+
+  // Horário do reset: só a hora se for hoje, "amanhã 09:00" ou o dia da semana ("sex 15:59")
+  function resetAt(t) {
+    var w = wall(t), now = serverNow();
+    if (w.key === wall(now).key) return hm(t);
+    if (w.key === wall(now + 864e5).key) return 'amanhã ' + hm(t);
+    return WEEKDAYS[w.wd] + ' ' + hm(t);
   }
 
   // Ícones das extensões do VS Code, servidos pelo HUD já na cor de referência de cada IA
@@ -64,7 +83,7 @@
 
   function quotaPanel(id, name, idx, q, now, used) {
     var html = '<div class="qhead row"' + (q && q.plan ? ' title="Plano ' + esc(q.plan) + '"' : '') + '>' + brandIcon(idx) + '<span class="name">' + name + '</span>' +
-      '<span class="grow"></span><span class="tokens" title="Tokens usados hoje">' + k(used) + ' <small>hoje</small></span></div>';
+      '<span class="grow"></span><span class="tokens" title="Tokens usados hoje">' + k(used) + ' <small>hoje</small></span><span class="chev">›</span></div>';
     if (!q) html += '<div class="empty">lendo…</div>';
     else {
       var w = q.windows || {};
@@ -163,10 +182,11 @@
 
   // ---- Burn-up da janela de 5h ----------------------------------------------
   // Linha cheia: % usado ao longo da janela. Tracejada: ritmo atual até o reset (ou até 100%).
-  function burnChart(s) {
+  // only: 'claude' ou 'codex' desenha só essa IA (gaveta de uso); sem ele, as duas
+  function burnChart(s, only) {
     var box = $('burn');
     if (!box) return;
-    var W = box.clientWidth, H = box.clientHeight, names = ['claude', 'codex'], i, j;
+    var W = box.clientWidth, H = box.clientHeight, names = only ? [only] : ['claude', 'codex'], i, j;
     var b = s.burn || {}, x0 = Infinity, x1 = -Infinity;
     for (i = 0; i < names.length; i++) if (b[names[i]]) { x0 = Math.min(x0, b[names[i]].start); x1 = Math.max(x1, b[names[i]].end); }
     if (x0 === Infinity || !W || !H) { box.innerHTML = '<div class="empty">sem dados da janela</div>'; $('burnAxis').innerHTML = ''; return; }
@@ -185,32 +205,99 @@
       if (!d) continue;
       var pts = '';
       for (j = 0; j < d.points.length; j++) pts += X(d.points[j][0]) + ',' + Y(d.points[j][1]) + ' ';
-      svg += '<polyline points="' + pts + '" fill="none" stroke="' + COLORS[i] + '" stroke-width="3" stroke-linejoin="round"/>';
+      svg += '<polyline points="' + pts + '" fill="none" stroke="' + COLORS[names[i] === 'codex' ? 1 : 0] + '" stroke-width="3" stroke-linejoin="round"/>';
       var tEnd = d.runsOutIn != null ? now + d.runsOutIn : d.end, pEnd = d.runsOutIn != null ? 100 : d.projected;
       if (pEnd != null) {
-        svg += '<line x1="' + X(now) + '" y1="' + Y(d.used) + '" x2="' + X(tEnd) + '" y2="' + Y(pEnd) + '" stroke="' + COLORS[i] + '" stroke-width="2" stroke-dasharray="6 5" opacity=".8"/>';
+        svg += '<line x1="' + X(now) + '" y1="' + Y(d.used) + '" x2="' + X(tEnd) + '" y2="' + Y(pEnd) + '" stroke="' + COLORS[names[i] === 'codex' ? 1 : 0] + '" stroke-width="2" stroke-dasharray="6 5" opacity=".8"/>';
         if (d.runsOutIn != null) svg += '<circle cx="' + X(tEnd) + '" cy="' + Y(100) + '" r="5" fill="#e87070"/>';
       }
-      svg += '<circle cx="' + X(Math.min(now, d.end)) + '" cy="' + Y(d.used) + '" r="4" fill="' + COLORS[i] + '"/>';
+      svg += '<circle cx="' + X(Math.min(now, d.end)) + '" cy="' + Y(d.used) + '" r="4" fill="' + COLORS[names[i] === 'codex' ? 1 : 0] + '"/>';
     }
     box.innerHTML = svg + '</svg>';
     $('burnAxis').innerHTML = '<span>' + hm(x0) + '</span><span>agora ' + hm(now) + '</span><span>' + hm(x1) + '</span>';
   }
 
   // ---- Estatísticas (gaveta #estatisticas) ---------------------------------
-  // Barras empilhadas Claude/Codex; `label` põe o total em cima de cada barra
-  function bars(rows, label) {
+  // Barras empilhadas Claude/Codex; `label` põe o total em cima de cada barra; `tool` mostra só essa IA
+  function bars(rows, label, tool) {
     var max = 1, html = '', j;
-    for (j = 0; j < rows.length; j++) max = Math.max(max, rows[j]['Claude Code'] + rows[j].Codex);
+    function a_(r) { return tool === 'Codex' ? 0 : r['Claude Code']; }
+    function b_(r) { return tool === 'Claude Code' ? 0 : r.Codex; }
+    for (j = 0; j < rows.length; j++) max = Math.max(max, a_(rows[j]) + b_(rows[j]));
     var scale = label ? 82 : 100; // espaço para o rótulo
     for (j = 0; j < rows.length; j++) {
-      var a = rows[j]['Claude Code'], b = rows[j].Codex;
+      var a = a_(rows[j]), b = b_(rows[j]);
       html += '<div class="bar">' +
         (a ? '<div style="height:' + (a / max * scale) + '%;background:' + COLORS[0] + '"></div>' : '') +
         (b ? '<div style="height:' + (b / max * scale) + '%;background:' + COLORS[1] + '"></div>' : '') +
         (label && a + b ? '<div class="val">' + k(a + b) + '</div>' : '') + '</div>';
     }
     return { html: html, max: max };
+  }
+
+  // ---- Uso de uma IA (gaveta #uso=claude / #uso=codex, aberta pelo cartão de uso) ----------
+  var USAGE = { claude: { name: 'Claude', tool: 'Claude Code', idx: 0 }, codex: { name: 'Codex', tool: 'Codex', idx: 1 } };
+  var usageName = null;
+
+  function usageRow(label, value) { return '<div class="dl"><span>' + esc(label) + '</span><span>' + value + '</span></div>'; }
+
+  // Uma janela de cota: %, barra com a marca do ritmo uniforme, uma frase com o que importa e os detalhes
+  function usageWindow(title, w, now) {
+    if (!w) return '';
+    var p = w.pace || {}, used = Math.max(0, Math.min(100, w.used)), sum;
+    if (w.used >= 100) sum = '<span class="hi">Cota esgotada.</span> Volta ' + when(w.resetsAt) + '.';
+    else if (p.runsOutIn != null) sum = '<span class="hi">No ritmo atual, acaba ' + when(now + p.runsOutIn) + '</span>, ' +
+      dur(w.resetsAt - now - p.runsOutIn) + ' antes do reset.';
+    else if (p.projected != null) sum = 'No ritmo atual, chega a <b>~' + p.projected + '%</b> no reset.';
+    else sum = '<span class="muted">Ainda sem dados para projetar o ritmo.</span>';
+    var html = '<div class="panel"><div class="row"><h2 class="grow" style="margin:0">' + title + '</h2><span class="big">' + Math.round(w.used) + '%</span></div>' +
+      '<div class="track utrack"><div class="fill" style="width:' + used + '%;background:' + levelColor(used) + '"></div>' +
+      (p.expected != null ? '<div class="mark" style="left:' + Math.min(99, p.expected) + '%"></div>' : '') + '</div>' +
+      '<div class="usum">' + sum + '</div>';
+    html += usageRow('Reinicia', 'em ' + dur(w.resetsAt - now) + ' · ' + when(w.resetsAt));
+    html += usageRow('Disponível', Math.max(0, 100 - Math.round(w.used)) + '%');
+    if (p.expected != null) {
+      var diff = Math.round(w.used - p.expected);
+      html += usageRow('Ritmo uniforme até agora', p.expected + '% ' + (diff > 0 ? '<span class="warn">(' + diff + ' pts acima)</span>'
+        : diff < 0 ? '<span class="lo">(' + (-diff) + ' pts abaixo)</span>' : '(no ritmo)'));
+    }
+    if (p.basis && p.projected != null) html += usageRow('Projeção calculada com', p.basis === 'recent' ? 'o uso da última hora' : 'a média desde o início da janela');
+    return html + '</div>';
+  }
+
+  function renderUsage() {
+    if (!snap || !USAGE[usageName]) return;
+    var s = snap, u = USAGE[usageName], q = s.quotas[usageName], now = s.now, i;
+    var html = head(brandIcon(u.idx) + u.name + (q && q.plan ? ' <small class="muted">' + esc(String(q.plan).toUpperCase()) + '</small>' : ''),
+      q && q.at ? 'cota lida ' + when(q.at) : '');
+    if (q && q.error) html += '<div class="panel"><div class="qerr" style="margin:0">⚠ ' + esc(q.error) + '</div></div>';
+    var w = q && q.windows || {};
+    if (!q) html += '<p class="empty">lendo…</p>';
+    else if (!w.five_hour && !w.seven_day) html += '<p class="empty">Sem cota de plano.</p>';
+    html += usageWindow('Janela de 5 horas', w.five_hour, now) + usageWindow('Semana', w.seven_day, now);
+    if (q && q.resetCredits) html += '<div class="panel">' + usageRow('Resets de cota disponíveis', q.resetCredits) + '</div>';
+    // Janela de 5h ao longo do tempo, só desta IA
+    if (s.burn && s.burn[usageName]) {
+      html += '<div class="panel"><h2>Janela de 5h · uso e projeção</h2><div class="burnbox" id="burn"></div><div class="axis" id="burnAxis"></div>' +
+        '<div class="legend"><span>━ real</span><span>╌ ritmo atual</span><span>│ agora</span><span style="color:#e87070">● cota acaba</span></div></div>';
+    }
+    var t = s.today[u.tool] || { fresh: 0, cacheRead: 0 }, n = s.sessionsToday[u.tool] || 0;
+    var h = bars(s.hours, false, u.tool);
+    html += '<div class="panel"><h2>Hoje</h2><div class="today"><div class="tday"><div class="big">' + k(t.fresh) + '</div><small>tokens novos</small></div>' +
+      '<div class="tday"><div class="big">' + k(t.cacheRead) + '</div><small>lidos do cache</small></div>' +
+      '<div class="tday"><div class="big">' + n + '</div><small>' + (n === 1 ? 'sessão' : 'sessões') + '</small></div></div>' +
+      '<div class="chart">' + h.html + '</div><div class="axis"><span>24h atrás</span><span>pico ' + k(h.max) + '/h</span><span>agora</span></div></div>';
+    var d = bars(s.days, true, u.tool), labels = '';
+    for (i = 0; i < s.days.length; i++) labels += '<span style="-webkit-flex:1;flex:1;text-align:center">' + (i === s.days.length - 1 ? 'hoje' : WEEKDAYS[wall(s.days[i].t).wd]) + '</span>';
+    html += '<div class="panel"><h2>Últimos 7 dias · tokens novos</h2><div class="chart days">' + d.html + '</div><div class="axis">' + labels + '</div></div>';
+    // Sessões desta IA abertas agora (toque abre a sessão)
+    var mine = [];
+    for (i = 0; i < s.active.length; i++) if (s.active[i].tool === u.tool) mine.push(s.active[i]);
+    html += '<div class="panel"><h2>Sessões ativas · ' + mine.length + '</h2>';
+    for (i = 0; i < mine.length; i++) html += sessRow(mine[i], now);
+    if (!mine.length) html += '<div class="empty">Nenhuma sessão ativa agora.</div>';
+    setOverlay(html + '</div>');
+    burnChart(s, usageName);
   }
 
   function renderStats() {
@@ -227,8 +314,8 @@
     }
     var h = bars(s.hours, false);
     html += '</div><div class="chart">' + h.html + '</div><div class="axis"><span>24h atrás</span><span>pico ' + k(h.max) + '/h</span><span>agora</span></div></div>';
-    var d = bars(s.days, true), wd = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'], labels = '';
-    for (i = 0; i < s.days.length; i++) labels += '<span style="-webkit-flex:1;flex:1;text-align:center">' + (i === s.days.length - 1 ? 'hoje' : wd[new Date(s.days[i].t).getDay()]) + '</span>';
+    var d = bars(s.days, true), labels = '';
+    for (i = 0; i < s.days.length; i++) labels += '<span style="-webkit-flex:1;flex:1;text-align:center">' + (i === s.days.length - 1 ? 'hoje' : WEEKDAYS[wall(s.days[i].t).wd]) + '</span>';
     html += '<div class="panel"><h2>Últimos 7 dias · tokens novos</h2><div class="chart days">' + d.html + '</div><div class="axis">' + labels + '</div></div>';
     setOverlay(html);
     burnChart(s);
@@ -408,6 +495,7 @@
       (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '');
     if (view === 'recent') renderRecent();
     if (view === 'stats') renderStats();
+    if (view === 'usage') renderUsage();
     if (view === 'ollama') renderOllama();
   }
 
@@ -455,7 +543,7 @@
       if (generation.totalMs > 0) html += stat((generation.totalMs / 1000).toFixed(1) + 's', 'tempo total da resposta');
     }
     html += '</div>';
-    if (d.lastReply) html += '<h2>Última resposta</h2><div class="quote lastreply" style="margin-bottom:12px">' + esc(d.lastReply) + '</div>';
+    if (d.lastReply) html += '<h2>Última resposta' + replyTime(d) + '</h2><div class="quote lastreply" style="margin-bottom:12px">' + esc(d.lastReply) + '</div>';
     else if (terminal) html += '<p class="muted" style="margin-bottom:12px">O terminal não grava a última resposta para consulta no HUD.</p>';
     if (!generation) html += '<p class="muted" style="margin-bottom:12px">Tokens/s são registrados nas novas respostas geradas pelo HUD.</p>';
     var row = function (label, value) { return '<div class="dl"><span>' + esc(label) + '</span><span>' + esc(value) + '</span></div>'; };
@@ -494,6 +582,9 @@
     return html;
   }
 
+  // Horário da última resposta no título do painel ("às 09:12", "ontem 18:40")
+  function replyTime(d) { return d.lastReplyAt ? ' <span class="htime">· ' + when(d.lastReplyAt) + '</span>' : ''; }
+
   function renderDetail(d) {
     var now = d.now, html = '';
     var pct = d.contextWindow ? Math.round(d.context / d.contextWindow * 100) : 0;
@@ -525,7 +616,7 @@
       }
       html += '<div class="panel"><h2>' + (d.where === 'ollama-run' ? 'Últimos comandos no terminal' : 'Últimas mensagens') + '</h2>' +
         '<div class="convo lastreply" id="lastReply">' + conv + '</div></div>';
-    } else if (d.lastReply) html += '<div class="panel"><h2>Última resposta</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
+    } else if (d.lastReply) html += '<div class="panel"><h2>Última resposta' + replyTime(d) + '</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
     // ollama run no terminal: não há como escrever na conversa
     if (d.tool !== 'Antigravity' && d.where !== 'ollama-run') html += replyBox(d);
     if (d.where === 'ollama-run') html += '<div class="panel"><div class="muted" style="font-size:.85em">Conversa no terminal (ollama run): o Ollama não grava essas conversas, então não dá para ler as respostas nem responder por aqui. Use Abrir no PC.</div></div>';
@@ -749,7 +840,9 @@
     var h = location.hash;
     var nextSession = /^#s=(.+)$/.exec(h);
     if (viewedSession && (!nextSession || decodeURIComponent(nextSession[1]) !== viewedSession.id)) acknowledgeViewed();
-    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : null;
+    var usage = /^#uso=(claude|codex)$/.exec(h);
+    usageName = usage ? usage[1] : null;
+    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : usage ? 'usage' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
     if (view) $('overlay').scrollTop = 0;
     else if (snap) render(snap); // o fundo não é redesenhado com a gaveta aberta
@@ -757,6 +850,7 @@
     if (view === 'recent') renderRecent();
     // A gaveta precisa estar visível para o gráfico medir a própria largura
     if (view === 'stats') setTimeout(renderStats, 30);
+    if (view === 'usage') setTimeout(renderUsage, 30);
     if (view === 'ollama') renderOllama();
   }
   function closeOverlay() { acknowledgeViewed(); if (location.hash) history.back(); else syncHash(); }
@@ -772,6 +866,8 @@
   $('openRecent').onclick = function () { location.hash = 'recentes'; };
   $('openStats').onclick = function () { location.hash = 'estatisticas'; };
   $('q-ollama').onclick = function () { location.hash = 'ollama'; };
+  $('q-claude').onclick = function () { location.hash = 'uso=claude'; };
+  $('q-codex').onclick = function () { location.hash = 'uso=codex'; };
   $('backdrop').onclick = closeOverlay;
 
   // ---- Rede ----------------------------------------------------------------
@@ -805,6 +901,8 @@
     failures = 0;
     setOffline(false);
     lastOk = new Date().getTime();
+    if (s && s.now) skew = s.now - lastOk;
+    if (s && typeof s.tz === 'number') tzMs = s.tz * 60000;
     text = (text || '').replace(/^\{"now":\d+/, ''); // "now" muda sempre; o resto diz se algo mudou
     if (text && text === lastText) return;
     lastText = text;
@@ -813,6 +911,7 @@
     checkAlerts(s);
     if (first || !view) return render(s); // a primeira vez desenha o fundo mesmo com gaveta aberta
     if (view === 'stats') renderStats();
+    if (view === 'usage') renderUsage();
     if (view === 'ollama') renderOllama();
     if (view === 'recent') renderRecent();
   }
@@ -825,7 +924,7 @@
     if (on === offline) return;
     offline = on;
     $('offline').className = on ? 'show' : '';
-    if (on) $('olast').innerHTML = lastOk ? 'Últimos dados recebidos às ' + hm(lastOk) + '.' : '';
+    if (on) $('olast').innerHTML = lastOk ? 'Últimos dados recebidos às ' + hm(lastOk + skew) + '.' : '';
   }
 
   function poll() {
@@ -839,8 +938,8 @@
 
   // Relógio, status e agenda das consultas, a cada segundo
   function tick() {
-    var now = new Date(), t = now.getTime();
-    $('clock').innerHTML = hm(now);
+    var t = new Date().getTime();
+    $('clock').innerHTML = hm(t + skew);
     if (lastOk) {
       var ago = Math.round((t - lastOk) / 1000);
       $('status').innerHTML = ago > 40 ? '<span class="hi">● sem atualização há ' + ago + 's</span>' : '<span class="lo">●</span><span class="stxt"> ao vivo</span>';
@@ -886,7 +985,7 @@
     document.addEventListener('touchend', goFull, false);
   }
 
-  window.addEventListener('resize', function () { if (snap) burnChart(snap); });
+  window.addEventListener('resize', function () { if (snap) burnChart(snap, view === 'usage' ? usageName : null); });
   $('oretryNow').onclick = function () { poll(); tick(); };
   syncHash(); poll(); tick();
   setInterval(tick, 1000);

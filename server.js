@@ -55,6 +55,8 @@ function failed(ip) {
 const loginPage = (msg) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>AI HUD</title>
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="AI HUD">
+<meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#121211">
+<link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" sizes="76x76" href="/icon-76.png"><link rel="apple-touch-icon" sizes="152x152" href="/icon-152.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png"><link rel="icon" type="image/png" href="/icon-192.png">
 <style>body{background:#121211;color:#ecece8;font:16px -apple-system,Roboto,sans-serif;text-align:center;padding:60px 16px}
@@ -365,6 +367,8 @@ function sessionDetail(id) {
     input: s.input, output: s.output, cacheRead: s.cacheRead, cacheWrite: s.cacheWrite,
     context: s.context, contextWindow: s.contextWindow, prompts: s.prompts, toolCalls: s.toolCalls,
     lastTool: s.lastTool, tools, lastPrompt: s.lastPrompt, lastReply: s.lastReply,
+    // Hora da última resposta; sem ela (Codex só no SQLite), o fim do último turno
+    lastReplyAt: s.lastReply ? s.lastReplyAt || s.completedAt || 0 : 0,
     subagents: s.subagents || 0, subTokens: s.subTokens || 0, ...replyInfo(s, now), where: s.where || '',
     turns: s.events.slice(-10).reverse().map((e) => ({ t: Date.parse(e.ts), fresh: e.fresh, cacheRead: e.cacheRead })),
     // Ollama: últimas mensagens da conversa (app) ou comandos digitados (terminal) para a gaveta
@@ -411,6 +415,7 @@ function snapshot() {
     lastPrompt: (s.lastPrompt || '').replace(/\s+/g, ' ').slice(0, 160),
     // Começo da última resposta, em uma linha e sem marcação de Markdown, para o cartão
     lastReply: (s.lastReply || '').slice(0, 400).replace(/[#*`]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 160),
+    lastReplyAt: s.lastReply ? s.lastReplyAt || s.completedAt || 0 : 0,
     context: s.context, contextWindow: s.contextWindow, ...replyInfo(s, now),
   });
   const sessions = all.filter((s) => !s.subagent).map(view).sort((a, b) => b.end - a.end);
@@ -420,7 +425,8 @@ function snapshot() {
   for (const v of sessions) if (v.permission) v.state = 'permission';
 
   return {
-    now, remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday, ollama: config.ollama === false ? null : ollama.state,
+    // tz: fuso do PC em minutos; os aparelhos mostram os horários no fuso e no relógio do PC
+    now, tz: -new Date(now).getTimezoneOffset(), remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday, ollama: config.ollama === false ? null : ollama.state,
     burn: burn(now, all.filter((s) => s.tool === 'Codex')),
     // Permissões pendentes primeiro; os demais cards seguem a última atividade.
     active: sessions.filter((s) => s.state !== 'closed')

@@ -26,6 +26,54 @@ depois a última atividade. Marcar como visto limpa o alerta e mantém a posiç�
 Para iniciar junto com o Windows, copie `windows/tray/start-tray.vbs` (ícone na bandeja, sem janela)
 para a pasta Inicializar (`Win+R` → `shell:startup`).
 
+## Instalar como app no Android (PWA)
+
+O acesso HTTP acima serve para usar o painel no navegador. Para instalar como app no Chrome
+do Android, abra o HUD por **HTTPS com certificado válido e confiável no celular**. Endereços
+como `http://192.168.x.x:8787`, `http://100.x.x.x:8787` (IP do Tailscale) ou `http://pc.local:8787`
+não atendem esse requisito: o ícone adicionado pode ser apenas um atalho que abre o Chrome.
+O manifest já pede `display: fullscreen`; JavaScript de tela cheia não transforma esse atalho em PWA.
+
+Se você usa Tailscale no PC e no celular, a **bandeja do AI HUD ativa o
+[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) automaticamente** ao iniciar
+o servidor. Faça login e conecte o Tailscale uma vez. A janela **Status e log** mostra o endereço
+**HTTPS (Android / PWA)**. No menu da bandeja, use **Copiar endereço HTTPS** para enviá-lo ao celular
+ou **Abrir HTTPS (Android / PWA)** para abrir no PC.
+
+O primeiro uso pode exigir habilitar HTTPS na rede Tailscale: use **Autorizar Tailscale / HTTPS**
+na bandeja, conclua no navegador e clique em **Atualizar HTTPS**. A bandeja também verifica o estado
+a cada minuto e recupera a rota se ela desaparecer. As consultas rodam em segundo plano.
+Se faltar instalação/login ou houver um problema, o estado aparece na janela e o HTTP local continua
+funcionando. Uma porta 443 ocupada por outro serviço, Serve em foreground ou Funnel é informada
+como conflito e preservada. A integração usa a porta configurada do HUD (`AI_HUD_PORT`, padrão 8787).
+Ao parar ou fechar o HUD, a configuração do Serve permanece registrada no Tailscale; a página fica
+indisponível até o servidor iniciar novamente.
+
+Se preferir rodar o servidor sem a bandeja, configure o Serve manualmente no PC:
+
+```
+tailscale serve --bg http://127.0.0.1:8787
+```
+
+Se solicitado, siga o link exibido pelo Tailscale para habilitar HTTPS na sua rede.
+No Android, conecte o Tailscale e abra no Chrome a URL **`https://…ts.net`** exibida pelo comando.
+Digite o PIN, remova o atalho HTTP antigo e use o menu do Chrome para **Instalar app**
+(em algumas versões, **Adicionar à tela inicial → Instalar**). Depois, abra pelo novo ícone.
+O Serve mantém o acesso na sua rede Tailscale. Se já houver outro serviço no Serve,
+confira `tailscale serve status` antes de mudar a configuração da raiz.
+
+Sem Tailscale, use um proxy HTTPS com certificado confiável no Android apontando para a porta 8787.
+Use o mesmo endereço HTTPS nas próximas aberturas e instalações. Apenas aceitar o aviso de um
+certificado inválido não resolve. A exceção HTTP de `localhost` se refere ao próprio celular,
+não ao PC na rede. Veja os [critérios de instalação do Chrome](https://web.dev/articles/install-criteria).
+
+Para diagnosticar pelo Chrome do PC, abra o mesmo endereço e veja **DevTools → Application → Manifest**.
+O manifest e os ícones precisam carregar sem autenticação; a tela de PIN também referencia o manifest.
+Em **Service Workers**, confirme o registro de `/sw.js`. No console, `window.isSecureContext`
+deve ser `true`. Dentro do app aberto pelo ícone, `matchMedia('(display-mode: fullscreen)').matches`
+deve ser `true` quando o navegador suportar esse modo; `standalone` também indica uma janela de app
+sem a barra de endereço. A confirmação final da instalação deve ser feita no Android.
+
 ## Linux
 
 Funciona igual (servidor, sessões, tokens, cotas, respostas, permissões, hub), exceto

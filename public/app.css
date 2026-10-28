@@ -27,12 +27,21 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .btn { margin-left: 8px; background: #262624; border: 1px solid #3a3a36; border-radius: 8px; padding: .3em .7em; font-size: .82em; white-space: nowrap; }
 .panel { background: #1c1c1a; border: 1px solid #2c2c29; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
 .panel h2 { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+/* Horário ao lado do título de um painel (ex.: Última resposta · às 09:12) */
+.htime { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .quotas { display: -webkit-flex; display: flex; }
 .quotas .panel { -webkit-flex: 1; flex: 1; min-width: 0; }
 .quotas .panel + .panel { margin-left: 10px; }
 /* Ollama: meia largura na linha das cotas, clicável */
 .quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; cursor: pointer; }
 .olla:active { background: #232321; }
+/* Cartões de uso do Claude e do Codex: toque abre a gaveta de uso */
+#q-claude, #q-codex { cursor: pointer; }
+#q-claude:active, #q-codex:active { background: #232321; }
+/* Gaveta de uso: barra maior e frase-resumo do ritmo */
+.utrack { height: 12px; margin: 8px 0 8px; }
+.usum { font-size: .9em; margin-bottom: 6px; }
+.usum .hi { color: #c98a85; }
 .olla .llama, .dtitle .llama { margin-right: .35em; }
 /* Ícone do Ollama é contorno preto: invertido e tingido de lilás para o fundo escuro */
 .ollama-ico { -webkit-filter: invert(1) sepia(1) saturate(2.2) hue-rotate(215deg) brightness(.95); filter: invert(1) sepia(1) saturate(2.2) hue-rotate(215deg) brightness(.95); }

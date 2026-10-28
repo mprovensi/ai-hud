@@ -49,6 +49,7 @@ test('Codex atual: lê mensagens response_item, ignora contexto e usa CODEX_HOME
   assert.equal(s.prompts, 1);
   assert.equal(s.firstPrompt, 'Analise o projeto');
   assert.equal(s.lastReply, 'Análise pronta');
+  assert.equal(s.lastReplyAt, Date.parse(TS));
   assert.equal(s.where, 'terminal'); // codex-tui é o CLI, mesmo com source "vscode"
   assert.equal(s.contextWindow, 128000);
 });

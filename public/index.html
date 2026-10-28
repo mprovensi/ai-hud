@@ -17,7 +17,7 @@
 <link rel="icon" type="image/png" href="/icon-192.png">
 <title>AI HUD</title>
 <!-- ES5 e flexbox sem gap: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) -->
-<link rel="stylesheet" href="/app.css?v=30">
+<link rel="stylesheet" href="/app.css?v=33">
 </head>
 <body>
 <div class="app">
@@ -32,8 +32,8 @@
     <button class="btn" id="refresh">↻</button>
   </div>
   <div class="quotas">
-    <div class="panel" id="q-claude"></div>
-    <div class="panel" id="q-codex"></div>
+    <div class="panel" id="q-claude" role="button"></div>
+    <div class="panel" id="q-codex" role="button"></div>
     <!-- Status do Ollama (meia largura); some se nenhum PC tiver Ollama -->
     <!-- div (não button): o navegador centraliza na vertical o conteúdo de botões -->
     <div class="panel olla" id="q-ollama" role="button" style="display:none"></div>
@@ -53,6 +53,6 @@
 <div id="backdrop"></div>
 <div id="overlay"><div id="overlayBody"></div></div>
 <!-- ?v=N: mude a cada versão para o Safari do iPad não usar o arquivo antigo -->
-<script src="/app.js?v=32"></script>
+<script src="/app.js?v=40"></script>
 </body>
 </html>

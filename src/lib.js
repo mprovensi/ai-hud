@@ -90,7 +90,7 @@ function parseClaude(f) {
     }
     if (r.type !== 'assistant' || !m || !m.usage) continue;
     for (const b of m.content || []) {
-      if (b.type === 'text' && b.text) s.lastReply = clip(b.text, 4000);
+      if (b.type === 'text' && b.text) { s.lastReply = clip(b.text, 4000); s.lastReplyAt = Date.parse(r.timestamp) || 0; }
       if (b.type === 'tool_use') toolCall(s, b.name);
     }
     if (m.stop_reason) s.lastStop = m.stop_reason;
@@ -190,7 +190,7 @@ function parseCodex(f) {
     }
     if (p.type === 'task_started') { s.lastStop = ''; currentTurn = p.turn_id || `turn:${++turnIndex}`; }
     if (p.type === 'user_message' && p.message) collectPrompt(p.message, 'event', p, r.timestamp);
-    if (p.type === 'agent_message' && p.message) { s.lastReply = clip(p.message, 4000); legacyReplyAt = r.timestamp; }
+    if (p.type === 'agent_message' && p.message) { s.lastReply = clip(p.message, 4000); legacyReplyAt = r.timestamp; s.lastReplyAt = codexTime(r.timestamp); }
     // Novos rollouts não duplicam as mensagens nos eventos user_message/agent_message.
     if (r.type === 'response_item' && p.type === 'message') {
       const text = codexText(p.content);
@@ -226,7 +226,7 @@ function parseCodex(f) {
   s.limits = limits;
   s.limitsTs = limitsTs;
   for (const m of userPrompts) prompt(s, m.text);
-  if (fallbackReply && fallbackReplyAt >= legacyReplyAt) s.lastReply = clip(fallbackReply, 4000);
+  if (fallbackReply && fallbackReplyAt >= legacyReplyAt) { s.lastReply = clip(fallbackReply, 4000); s.lastReplyAt = codexTime(fallbackReplyAt); }
   return s.start ? s : null;
 }
 

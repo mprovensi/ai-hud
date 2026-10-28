@@ -23,6 +23,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
       if (name === 'fs') return {
         readFileSync: (file) => {
           if (path.basename(file) === 'config.json') return JSON.stringify({ token, pin: '12345678' });
+          if (path.dirname(file) === path.join(root, 'public')) return fs.readFileSync(file);
           if (path.extname(file) === '.json') return '{}';
           throw new Error('test fixture has no such asset');
         },
@@ -43,19 +44,41 @@ test('actual server routes reject null bodies and malformed tokens without side 
   vm.runInNewContext(fs.readFileSync(path.join(root, 'server.js'), 'utf8'), sandbox);
   t.after(() => new Promise((resolve) => server.close(resolve)));
   await new Promise((resolve) => server.once('listening', resolve));
-  let responseBody;
+  let responseBody, responseHeaders;
   const call = (route, body, accessToken = token) => new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port: server.address().port,
       path: route + (route.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(accessToken), method: body === undefined ? 'GET' : 'POST', agent: false }, (res) => {
       let text = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { text += chunk; });
-      res.on('end', () => { responseBody = text; resolve(res.statusCode); });
+      res.on('end', () => { responseBody = text; responseHeaders = res.headers; resolve(res.statusCode); });
       res.on('error', reject);
     });
     req.on('error', reject);
     req.end(body);
   });
+  // O Android deve descobrir o mesmo PWA antes e depois de digitar o PIN.
+  const assertManifestLink = () => assert.match(responseBody, /<link rel="manifest" href="\/manifest.json">/);
+  assert.equal(await call('/', undefined, ''), 200);
+  assertManifestLink();
+  assert.equal(await call('/login', 'pin=00000000', ''), 401);
+  assertManifestLink();
+  assert.equal(await call('/login', 'pin=12345678', ''), 303);
+  assert.equal(responseHeaders.location, '/?t=' + token);
+  assert.equal(await call('/'), 200);
+  assertManifestLink();
+  assert.equal(await call('/manifest.json', undefined, ''), 200);
+  assert.equal(responseHeaders['content-type'], 'application/manifest+json');
+  const manifest = JSON.parse(responseBody);
+  assert.equal(manifest.display, 'fullscreen');
+  assert.equal(manifest.start_url, '/');
+  assert.equal(manifest.scope, '/');
+  for (const icon of manifest.icons) {
+    assert.equal(await call(icon.src, undefined, ''), 200);
+    assert.equal(responseHeaders['content-type'], icon.type);
+  }
+  assert.equal(await call('/sw.js', undefined, ''), 200);
+  assert.equal(responseHeaders['service-worker-allowed'], '/');
   assert.equal(await call('/api/snapshot', undefined, 'é'.repeat(24)), 401);
   for (const route of ['/api/reply', '/api/remote', '/api/permission', '/api/focus',
     '/hook/permission', '/hook/permission-expire', '/hook/listen', '/hook/unlisten']) {

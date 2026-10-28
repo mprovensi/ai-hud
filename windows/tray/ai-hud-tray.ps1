@@ -10,6 +10,38 @@ param(
 $ErrorActionPreference = 'Stop'
 $LogFile = Join-Path $Root 'data\server.log'
 $OldLog = Join-Path $Root 'data\server.old.log'
+$script:TailscaleHelper = Join-Path $PSScriptRoot 'tailscale-serve.ps1'
+. $script:TailscaleHelper
+$script:httpsState = New-HudTailscaleState 'Checking' 'Verificando Tailscale...'
+$script:httpsJob = $null
+$script:httpsNext = [datetime]::MinValue
+
+# O CLI pode aguardar rede ou autorização. Tudo roda em outro processo, sem travar a bandeja.
+function Update-HudHttps([switch]$Force) {
+  if ($script:httpsJob) {
+    if ($script:httpsJob.State -eq 'Running') { return }
+    try {
+      $results = @(Receive-Job -Job $script:httpsJob -ErrorAction Stop)
+      if (-not $results.Count -or -not $results[-1].State) { throw 'O Tailscale não retornou um estado válido.' }
+      $script:httpsState = $results[-1]
+    } catch { $script:httpsState = New-HudTailscaleState 'Error' $_.Exception.Message }
+    finally { Remove-Job -Job $script:httpsJob -Force; $script:httpsJob = $null }
+    $script:httpsNext = (Get-Date).AddSeconds(60)
+  }
+  if (-not $script:wantRunning -or (-not $Force -and (Get-Date) -lt $script:httpsNext)) { return }
+  if (-not (Get-ServerPid)) { return }
+  try {
+    $script:httpsJob = Start-Job -ArgumentList $script:TailscaleHelper, $Port -ScriptBlock {
+      param($helper, $hudPort)
+      $ErrorActionPreference = 'Stop'
+      . $helper
+      Sync-HudTailscaleServe -Port $hudPort
+    }
+  } catch {
+    $script:httpsState = New-HudTailscaleState 'Error' $_.Exception.Message
+    $script:httpsNext = (Get-Date).AddSeconds(60)
+  }
+}
 
 # ---- Servidor ---------------------------------------------------------------
 
@@ -158,15 +190,16 @@ $txtInfo.Multiline = $true; $txtInfo.ReadOnly = $true; $txtInfo.BorderStyle = 'N
 $txtInfo.BackColor = $form.BackColor
 $txtInfo.Font = New-Object System.Drawing.Font('Segoe UI', 9.5)
 $txtInfo.Location = New-Object System.Drawing.Point 14, 44
-$txtInfo.Size = New-Object System.Drawing.Size 720, 92
+$txtInfo.Size = New-Object System.Drawing.Size 720, 142
+$txtInfo.ScrollBars = 'Vertical'
 $txtInfo.Anchor = 'Top, Left, Right'
 
 $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Multiline = $true; $txtLog.ReadOnly = $true; $txtLog.ScrollBars = 'Vertical'; $txtLog.WordWrap = $false
 $txtLog.Font = New-Object System.Drawing.Font('Consolas', 9)
 $txtLog.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 22); $txtLog.ForeColor = [System.Drawing.Color]::FromArgb(220, 220, 214)
-$txtLog.Location = New-Object System.Drawing.Point 12, 142
-$txtLog.Size = New-Object System.Drawing.Size 720, 320
+$txtLog.Location = New-Object System.Drawing.Point 12, 192
+$txtLog.Size = New-Object System.Drawing.Size 720, 270
 $txtLog.Anchor = 'Top, Bottom, Left, Right'
 
 function New-Button($text, $x) {
@@ -188,6 +221,12 @@ $miStatus = $menu.Items.Add('Status e log')
 $miOpen = $menu.Items.Add('Abrir HUD no navegador')
 $miPin = $menu.Items.Add('Mostrar PIN')
 [void]$menu.Items.Add('-')
+$miHttpsOpen = $menu.Items.Add('Abrir HTTPS (Android / PWA)')
+$miHttpsCopy = $menu.Items.Add('Copiar endereço HTTPS')
+$miHttpsRefresh = $menu.Items.Add('Atualizar HTTPS')
+$miTailscale = $menu.Items.Add('Abrir Tailscale')
+$miHttpsAuthorize = $menu.Items.Add('Autorizar Tailscale / HTTPS')
+[void]$menu.Items.Add('-')
 $miRestart = $menu.Items.Add('Reiniciar servidor')
 $miToggle = $menu.Items.Add('Parar servidor')
 [void]$menu.Items.Add('-')
@@ -203,6 +242,9 @@ function Update-View {
   $text = if ($st.Running) { "AI HUD — rodando há $(Format-Duration $st.Since)" } else { 'AI HUD — parado' }
   $tray.Text = $text.Substring(0, [math]::Min(63, $text.Length))
   $miToggle.Text = $(if ($st.Running) { 'Parar servidor' } else { 'Iniciar servidor' })
+  $miHttpsOpen.Enabled = $miHttpsCopy.Enabled = ($st.Running -and $script:httpsState.State -eq 'Ready')
+  $miHttpsRefresh.Enabled = ($st.Running -and -not $script:httpsJob)
+  $miHttpsAuthorize.Enabled = [bool]$script:httpsState.ActionUrl
   if (-not $form.Visible) { return }
   if ($st.Running) {
     $lblState.Text = '● Rodando' + $(if (-not $st.Http) { ' (sem resposta HTTP)' } else { '' })
@@ -214,6 +256,8 @@ function Update-View {
   $lines = @()
   if ($st.Running) { $lines += "PID $($st.Pid) · porta $Port · rodando há $(Format-Duration $st.Since) (desde $($st.Since.ToString('dd/MM HH:mm')))" }
   if ($st.Addresses.Count) { $lines += 'Endereços: ' + ($st.Addresses -join '  ') }
+  if ($script:httpsState.Url) { $lines += 'HTTPS (Android / PWA): ' + $script:httpsState.Url }
+  $lines += 'Tailscale: ' + $script:httpsState.Message
   if ($st.Pin) { $lines += "PIN: $($st.Pin)" }
   if ($st.Machines.Count) { $lines += 'PCs no hub: ' + ($st.Machines -join ' · ') }
   $txtInfo.Text = $lines -join "`r`n"
@@ -228,12 +272,24 @@ function Update-View {
 function Show-Status { $form.Show(); $form.WindowState = 'Normal'; $form.Activate(); Update-View }
 function Toggle-Server {
   if (Get-ServerPid) { $script:wantRunning = $false; Stop-Server } else { $script:wantRunning = $true; Start-Server }
+  Update-HudHttps -Force
   Update-View
 }
-function Restart-Now { $script:wantRunning = $true; Restart-Server; Update-View; $tray.ShowBalloonTip(2000, 'AI HUD', 'Servidor reiniciado.', 'Info') }
+function Restart-Now { $script:wantRunning = $true; Restart-Server; Update-HudHttps -Force; Update-View; $tray.ShowBalloonTip(2000, 'AI HUD', 'Servidor reiniciado.', 'Info') }
 function Open-Hud {
   $cfg = Get-Config
   Start-Process "http://127.0.0.1:$Port/?t=$($cfg.token)"
+}
+function Open-HudHttps {
+  if ($script:httpsState.State -eq 'Ready') { Start-Process $script:httpsState.Url }
+}
+function Open-HudTailscale {
+  $exe = Find-HudTailscale
+  if ($exe) {
+    $gui = Join-Path (Split-Path -Parent $exe) 'tailscale-ipn.exe'
+    if (Test-Path -LiteralPath $gui) { Start-Process -FilePath $gui; return }
+  }
+  [void][System.Windows.Forms.MessageBox]::Show('Instale ou abra o Tailscale pelo menu Iniciar do Windows e conecte sua conta.', 'AI HUD — Tailscale', 'OK', 'Information')
 }
 # PIN pedido ao entrar no HUD por outro aparelho: mostra em grupos de 4 e copia para a área de transferência
 function Show-Pin {
@@ -252,6 +308,14 @@ $tray.add_MouseClick({ param($s, $e) if ($e.Button -eq 'Left') { Show-Status } }
 $miStatus.add_Click({ Show-Status })
 $miOpen.add_Click({ Open-Hud })
 $miPin.add_Click({ Show-Pin })
+$miHttpsOpen.add_Click({ Open-HudHttps })
+$miHttpsCopy.add_Click({ if ($script:httpsState.State -eq 'Ready') { [System.Windows.Forms.Clipboard]::SetText($script:httpsState.Url) } })
+$miHttpsRefresh.add_Click({ Update-HudHttps -Force; Update-View })
+$miTailscale.add_Click({ Open-HudTailscale })
+$miHttpsAuthorize.add_Click({
+    $link = $script:httpsState.ActionUrl
+    if ($link -match '^https://(?:login|controlplane)\.tailscale\.com/') { Start-Process $link }
+  })
 $miRestart.add_Click({ Restart-Now })
 $miToggle.add_Click({ Toggle-Server })
 $btnRestart.add_Click({ Restart-Now })
@@ -262,6 +326,7 @@ $btnFolder.add_Click({ Start-Process explorer.exe $Root })
 $form.add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; $form.Hide() } })
 $miExit.add_Click({
     $script:wantRunning = $false; Stop-Server
+    if ($script:httpsJob) { Stop-Job -Job $script:httpsJob; Remove-Job -Job $script:httpsJob -Force }
     $tray.Visible = $false; $tray.Dispose(); $mutex.ReleaseMutex()
     [System.Windows.Forms.Application]::Exit()
   })
@@ -280,11 +345,13 @@ $timer.add_Tick({
         $tray.ShowBalloonTip(5000, 'AI HUD', 'O servidor caiu várias vezes. Veja o log.', 'Error')
       }
     }
+    Update-HudHttps
     Update-View
   })
 
 # Ao abrir: usa o servidor que já estiver rodando, senão inicia
 Start-Server
+Update-HudHttps
 Update-View
 $timer.Start()
 [System.Windows.Forms.Application]::Run()

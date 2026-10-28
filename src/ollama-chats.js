@@ -87,6 +87,7 @@ function toSession(c) {
     firstPrompt: users[0] ? clip(users[0].content, 120) : '',
     lastPrompt: users.length ? clip(users[users.length - 1].content, 400) : '',
     lastReply: replies.length ? clip(replies[replies.length - 1].content, 4000) : '',
+    lastReplyAt: replies.length ? replies[replies.length - 1].at || 0 : 0,
     prompts: users.length, models: new Set(model ? [model.model] : []), lastTool: generating ? 'gerando' : '',
     input: 0, output: extra.reduce((a, m) => a + (m.tokens || 0), 0), cacheRead: 0, cacheWrite: 0,
     context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,

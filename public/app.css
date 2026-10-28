@@ -220,17 +220,17 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (min-width: 761px) {
   /* iPad mini: 1024x768 em 7,9" — tudo fisicamente pequeno; textos secundários com no mínimo ~17px */
   body { font-size: 22px; padding: 0; }
-  .app { padding: 12px 14px 4px; }
-  .top { margin-bottom: 8px; }
+  .app { padding: 10px 14px 4px; }
+  .top { margin-bottom: 6px; }
   .top .status, .btn { font-size: .8em; }
-  .panel { padding: 10px 14px; margin-bottom: 8px; }
+  .panel { padding: 8px 14px; margin-bottom: 8px; }
   .panel h2 { font-size: .75em; margin-bottom: 6px; }
   .qhead { margin-bottom: 2px; }
   .qhead small { font-size: .75em; }
-  .gauge + .gauge { margin-top: 6px; }
+  .gauge + .gauge { margin-top: 4px; }
   .gauge .lbl { font-size: .85em; }
-  .gauge .pct { font-size: 1.45em; }
-  .track { height: 12px; margin: 3px 0; }
+  .gauge .pct { font-size: 1.3em; }
+  .track { height: 10px; margin: 2px 0; }
   .track .mark { height: 18px; }
   .gauge .foot { font-size: .82em; }
   .sess { padding: 8px 0 8px 12px; }
@@ -241,7 +241,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .badge { font-size: .8em; }
   .axis { font-size: .75em; }
   .card { width: 33.333%; }
-  .card .in { height: 212px; }
+  .card .in { height: 198px; }
   .burnbox { height: 260px; }
   .burnbox text { font-size: 15px; }
   #overlay { width: 62%; min-width: 560px; padding: 16px 20px 28px; }

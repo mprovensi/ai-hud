@@ -83,6 +83,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .rhead h2 { margin: 0; }
 .rtag { font-size: .72em; color: #8d8d87; white-space: nowrap; }
 .rtag.lo { color: #5fb8a4; }
+.rnote { font-size: .72em; color: #8d8d87; margin: -4px 0 8px; }
 .rqueued { font-size: .85em; color: #e0b45a; margin-bottom: 8px; word-wrap: break-word; }
 .link { color: #5fb8a4; text-decoration: underline; font-size: inherit; }
 .chips { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -4px 6px; }

@@ -7,3 +7,6 @@ replies.json
 last-statusline.json
 server.log
 hud.html
+
+# Continuação das conversas do Ollama feitas pelo HUD
+ollama-replies.json

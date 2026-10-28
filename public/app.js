@@ -1,6 +1,6 @@
 (function () {
-  var TOOLS = ['Claude Code', 'Codex', 'Antigravity'];
-  var COLORS = ['#e08a66', '#5fb8a4', '#7d9bf0'];
+  var TOOLS = ['Claude Code', 'Codex', 'Antigravity', 'Ollama'];
+  var COLORS = ['#e08a66', '#5fb8a4', '#7d9bf0', '#b39ddb'];
   var token = (/[?&]t=([a-f0-9]+)/.exec(location.search) || [])[1] || '';
   var lastOk = 0, snap = null, view = null;
 
@@ -46,6 +46,10 @@
   }
 
   // Ícones das extensões do VS Code, servidos pelo HUD já na cor de referência de cada IA
+  function toolIcon(idx) {
+    if (idx === 3) return '<span class="llama">🦙</span>';
+    return idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>';
+  }
   function brandIcon(idx) {
     return '<img class="brand" src="/brand-' + (idx ? 'codex' : 'claude') + '.svg" alt="">';
   }
@@ -79,7 +83,7 @@
       bar = '<div class="ctx"><div style="width:' + pct + '%;background:' + levelColor(pct) + '"></div></div>';
       meta.push('contexto ' + Math.round(pct) + '%');
     }
-    meta.push(x.tool === 'Antigravity' ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
+    meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
     meta.push(dur(now - x.start));
     return '<button class="sess b' + i + '" data-id="' + esc(x.id) + '">' +
       '<div class="row"><span class="proj ell">' + esc(x.project) + '</span><span class="tool">' + esc(x.tool) + '</span>' +
@@ -96,12 +100,12 @@
       bar = '<div class="ctx"><div style="width:' + pct + '%;background:' + levelColor(pct) + '"></div></div>';
       meta.push('ctx ' + Math.round(pct) + '%');
     }
-    meta.push(x.tool === 'Antigravity' ? x.prompts + ' pedidos' : k(x.tokens));
+    meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens));
     meta.push(dur(now - x.start));
     var ping = pings[x.id] && now - pings[x.id] < 60e3 ? ' ping' : '';
     return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
       // Ícone da IA antes do nome da sessão; na linha de baixo, o PC onde ela roda
-      '<div class="row">' + (i < 2 ? brandIcon(i) : '<span class="dot c2"></span>') + '<span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
+      '<div class="row">' + toolIcon(i) + '<span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
       '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + (x.machine ? '🖥 ' + esc(x.machine) : esc(x.tool)) + '</span>' +
       // Só o símbolo, para sobrar espaço para o nome do PC: ✉ resposta na fila, ↩ dá para responder ao vivo
       (x.queued ? '<span class="rflag queued" title="Resposta na fila">✉</span>' : x.listening ? '<span class="rflag" title="Pode responder ao vivo">↩</span>' : '') + '</div>' +
@@ -332,7 +336,7 @@
   function sessHead(x) {
     var idx = toolIndex(x.tool);
     // Claude e Codex com o ícone da página inicial; Antigravity (sem ícone) continua com a bolinha
-    return head((idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>') + esc(x.project) + ' <small class="muted">' + esc(x.tool) + machineTag(x) + '</small>',
+    return head(toolIcon(idx) + esc(x.project) + ' <small class="muted">' + esc(x.tool) + machineTag(x) + '</small>',
       x.title ? esc(x.title) : '');
   }
 
@@ -360,7 +364,7 @@
         '<div class="permcmd">' + esc(d.permission.summary) + '</div><div class="row">' +
         '<button class="pbtn allow" id="permAllow">Permitir</button><button class="pbtn deny" id="permDeny">Negar</button></div></div>';
     }
-    var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude' };
+    var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude', 'ollama-app': 'no app do Ollama' };
     if (places[d.where]) {
       html += '<button class="pcaction" id="focusPc">🖥 Abrir no PC <small>' + places[d.where] + '</small></button>';
     }
@@ -429,9 +433,10 @@
 
   function replyBox(d) {
     // Um status curto: chega na hora (hook ouvindo, ou Codex livre) ou espera a sessão parar
-    var live = d.tool === 'Codex' ? d.state !== 'working' : !!d.listening;
+    var live = d.tool === 'Codex' || d.tool === 'Ollama' ? d.state !== 'working' : !!d.listening;
     var html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
       (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">vai para a fila</span>') + '</div>';
+    if (d.tool === 'Ollama') html += '<div class="rnote">A resposta é gerada no Ollama e fica no HUD; não aparece no app do Ollama.</div>';
     if (d.queued) html += '<div class="rqueued">Na fila: “' + esc(d.queued) + '” <button class="link" id="cancelReply">cancelar</button></div>';
     html += '<div class="chips">';
     for (var i = 0; i < QUICK.length; i++) html += '<button class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
@@ -445,7 +450,7 @@
       if (err) { $('sendReply').disabled = false; return alert('Não enviado: ' + err.message); }
       $('replyText').value = '';
       $('replyText').blur();
-      if (r.sent) { $('sendReply').disabled = false; return flash('Enviado ao Codex.'); }
+      if (r.sent) { $('sendReply').disabled = false; return flash(d.tool === 'Ollama' ? 'Enviado: o Ollama está gerando a resposta.' : 'Enviado ao Codex.'); }
       d.queued = r.queued;
       d.listening = r.listening;
       renderDetail(d);

@@ -58,6 +58,7 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | `lib.js` | Lê os logs do Claude Code, Codex e Antigravity (tokens, sessões, pedidos, respostas) |
 | `quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
 | `peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
+| `ollama-chats.js` | Conversas do app do Ollama (Windows) como sessões: lê o db.sqlite do app (só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
 | `ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
 | `hook-stop.js` | Hook `Stop` do Claude Code: entrega respostas enviadas pelo HUD |
 | `hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |

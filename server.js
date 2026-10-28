@@ -8,6 +8,7 @@ const { claudeSessions, codexData, antigravitySessions } = require('./lib');
 const { claudeQuota, codexQuota, CODEX } = require('./quotas');
 const { Peers } = require('./peers');
 const { Ollama } = require('./ollama');
+const ollamaChats = require('./ollama-chats');
 const { execFile } = require('child_process');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
@@ -253,6 +254,8 @@ function claudeDesktopId(cliId) {
 
 function focusPlan(s) {
   const key = replyKey(s);
+  // App do Ollama: o link ollama:// só abre o app (não uma conversa); depois traz a janela para frente
+  if (s.where === 'ollama-app') return { uriFirst: true, uri: 'ollama://', process: 'ollama app', include: '', exclude: '', label: 'App do Ollama aberto: escolha a conversa nele.' };
   if (s.where === 'claude-desktop') {
     const local = claudeDesktopId(s.id);
     if (!local) return null;
@@ -326,7 +329,8 @@ function readJson(req) {
 const allSessions = () => {
   const claude = claudeSessions();
   for (const s of claude) if (!s.contextWindow) s.contextWindow = claudeWindow(s);
-  return [...claude, ...codexData().sessions, ...antigravitySessions()];
+  // Conversas do app do Ollama (só se este PC tiver o app e o Node tiver node:sqlite)
+  return [...claude, ...codexData().sessions, ...antigravitySessions(), ...ollamaChats.ollamaChatSessions()];
 };
 
 // Atividade pelo último registro do log: no Windows a data de modificação de um arquivo
@@ -346,7 +350,7 @@ function sessionDetail(id) {
   const now = Date.now();
   const tools = Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 6);
   return {
-    tool: s.tool, id: s.id, title: s.title || s.firstPrompt, project: base(s.cwd) || '—', cwd: s.cwd,
+    tool: s.tool, id: s.id, title: s.title || s.firstPrompt, project: s.project || base(s.cwd) || '—', cwd: s.cwd,
     models: [...s.models], start: Date.parse(s.start), end: Date.parse(s.end), state: state(s, now), now,
     input: s.input, output: s.output, cacheRead: s.cacheRead, cacheWrite: s.cacheWrite,
     context: s.context, contextWindow: s.contextWindow, prompts: s.prompts, toolCalls: s.toolCalls,
@@ -374,7 +378,7 @@ function snapshot() {
     const d = new Date(midnight); d.setDate(d.getDate() - 6 + i);
     return { t: d.getTime(), 'Claude Code': 0, Codex: 0 };
   });
-  const sessionsToday = { 'Claude Code': 0, Codex: 0, Antigravity: 0 };
+  const sessionsToday = { 'Claude Code': 0, Codex: 0, Antigravity: 0, Ollama: 0 };
   for (const s of all) {
     if (!s.subagent && Date.parse(s.end) >= midnight.getTime()) sessionsToday[s.tool]++;
     for (const e of s.events) {
@@ -387,7 +391,7 @@ function snapshot() {
   }
 
   const view = (s) => ({
-    tool: s.tool, id: s.id, project: base(s.cwd) || '—', title: s.title || s.firstPrompt,
+    tool: s.tool, id: s.id, project: s.project || base(s.cwd) || '—', title: s.title || s.firstPrompt,
     start: Date.parse(s.start), end: Date.parse(s.end), state: state(s, now), lastTool: s.lastTool,
     tokens: s.input + s.output + s.cacheWrite + (s.subTokens || 0), prompts: s.prompts,
     lastPrompt: (s.lastPrompt || '').replace(/\s+/g, ' ').slice(0, 160),
@@ -506,6 +510,13 @@ const server = http.createServer((req, res) => {
       if (remote) return relay(res, peers.forward(remote.peer, 'POST', '/api/reply', { key, text, tool, id: remote.rid }));
       if (!key || typeof key !== 'string') return send(res, 400, 'text/plain', 'sessão inválida');
       text = String(text || '').trim().slice(0, 4000);
+      if (tool === 'Ollama') {
+        // Continua a conversa do app pelo Ollama local; a resposta fica no HUD (não aparece no app)
+        const s = allSessions().find((x) => x.tool === 'Ollama' && x.id === key);
+        if (!s || !text) return send(res, 400, 'text/plain', 'sessão inválida');
+        return ollamaChats.replyToChat(s, text, ollama.url).then((r) => send(res, 200, 'application/json', JSON.stringify(r)),
+          (e) => send(res, 409, 'text/plain; charset=utf-8', e.message));
+      }
       if (tool === 'Codex') {
         if (!/^[0-9a-f-]{36}$/.test(key) || !text) return send(res, 400, 'text/plain', 'sessão inválida');
         // --message=… : um texto começando com "-" não vira opção

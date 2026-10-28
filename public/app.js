@@ -101,7 +101,7 @@
     var ping = pings[x.id] && now - pings[x.id] < 60e3 ? ' ping' : '';
     return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
       '<div class="row"><span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
-      '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + esc(x.tool) + '</span>' +
+      '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + esc(x.tool) + machineTag(x) + '</span>' +
       (x.queued ? '<span class="rflag queued">✉ na fila</span>' : x.listening ? '<span class="rflag">↩ responder</span>' : '') + '</div>' +
       (x.title ? '<div class="ttl ell">' + esc(x.title) + '</div>' : '') +
       (x.lastPrompt && x.lastPrompt.toLowerCase() !== String(x.title).toLowerCase() ?'<div class="ask">' + esc(x.lastPrompt) + '</div>' : '') +
@@ -268,8 +268,10 @@
       if (list[i].state === 'waiting') waiting++;
     }
     $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
+    var down = '';
+    for (i = 0; s.machines && i < s.machines.length; i++) if (!s.machines[i].ok) down += ' · <span class="hi">🖥 ' + esc(s.machines[i].name) + ' fora do ar</span>';
     $('sessTitle').innerHTML = 'Últimas sessões · ' + active.length + (active.length === 1 ? ' ativa' : ' ativas') +
-      (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '');
+      (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '') + down;
     if (view === 'recent') renderRecent();
     if (view === 'stats') renderStats();
   }
@@ -285,8 +287,13 @@
   function sessHead(x) {
     var idx = toolIndex(x.tool);
     // Claude e Codex com o ícone da página inicial; Antigravity (sem ícone) continua com a bolinha
-    return head((idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>') + esc(x.project) + ' <small class="muted">' + esc(x.tool) + '</small>',
+    return head((idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>') + esc(x.project) + ' <small class="muted">' + esc(x.tool) + machineTag(x) + '</small>',
       x.title ? esc(x.title) : '');
+  }
+
+  // Nome do PC da sessão: só aparece quando o hub junta mais de um PC
+  function machineTag(x) {
+    return snap && snap.machines && snap.machines.length > 1 && x.machine ? ' · 🖥 ' + esc(x.machine) : '';
   }
 
   // Gaveta da sessão, em ordem de uso: quem é → Abrir no PC → última resposta → Responder → mais detalhes (fechado)
@@ -352,7 +359,7 @@
           d.permission = null;
           if (d.state === 'permission') d.state = 'working';
           renderDetail(d);
-        }, { id: d.permission.id, decision: decision });
+        }, { id: d.permission.id, decision: decision, session: d.id });
       };
       $('permAllow').onclick = function () { decide('allow'); };
       $('permDeny').onclick = function () { decide('deny'); };
@@ -398,7 +405,7 @@
       d.listening = r.listening;
       renderDetail(d);
       if (r.queued) flash(r.listening ? 'Enviado: a sessão continua em instantes.' : 'Na fila: entra quando a sessão parar.');
-    }, { key: d.key, text: text, tool: d.tool });
+    }, { key: d.key, text: text, tool: d.tool, id: d.id }); // id: o hub repassa ao PC dono da sessão
   }
 
   function bindReply(d) {

@@ -6,6 +6,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { claudeSessions, codexData, antigravitySessions } = require('./lib');
 const { claudeQuota, codexQuota, CODEX } = require('./quotas');
+const { Peers } = require('./peers');
 const { execFile } = require('child_process');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
@@ -405,6 +406,19 @@ function snapshot() {
   };
 }
 
+// --- Hub: outros PCs (config.peers) ----------------------------------------
+// Este PC junta as sessões e tokens dos secundários e repassa a eles as ações das sessões deles.
+const machineName = config.name || os.hostname();
+const peers = new Peers(config.peers);
+const hubSnapshot = () => peers.merge(snapshot(), machineName);
+
+// Devolve ao aparelho a resposta do PC secundário (ou erro se ele não respondeu)
+function relay(res, promise) {
+  return promise.then(
+    (r) => send(res, r.status, r.status === 200 ? 'application/json' : 'text/plain; charset=utf-8', r.text),
+    () => send(res, 502, 'text/plain; charset=utf-8', 'o outro PC não respondeu'));
+}
+
 // --- HTTP ----------------------------------------------------------------
 const page = path.join(__dirname, 'public', 'index.html');
 
@@ -478,11 +492,13 @@ const server = http.createServer((req, res) => {
   const cookie = { 'Set-Cookie': `hud=${config.token}; Max-Age=31536000; Path=/; HttpOnly; SameSite=Lax` };
 
   if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(page), cookie);
-  if (url.pathname === '/api/snapshot') return send(res, 200, 'application/json', JSON.stringify(snapshot()));
+  if (url.pathname === '/api/snapshot') return send(res, 200, 'application/json', JSON.stringify(hubSnapshot()));
   // Resposta rápida do HUD. Codex: fila nativa (`codex queue`), que a extensão do VS Code atende sozinha.
   // Claude: fila do HUD, entregue pelo hook-stop.js da sessão (substitui a anterior; "" cancela).
   if (url.pathname === '/api/reply' && req.method === 'POST') {
-    return readJson(req).then(({ key, text, tool }) => {
+    return readJson(req).then(({ key, text, tool, id }) => {
+      const remote = peers.byId(id);
+      if (remote) return relay(res, peers.forward(remote.peer, 'POST', '/api/reply', { key, text, tool, id: remote.rid }));
       if (!key || typeof key !== 'string') return send(res, 400, 'text/plain', 'sessão inválida');
       text = String(text || '').trim().slice(0, 4000);
       if (tool === 'Codex') {
@@ -505,11 +521,14 @@ const server = http.createServer((req, res) => {
       fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
       // Desligou: pedidos em espera voltam para o PC na próxima consulta do hook
       if (!remoteMode) for (const p of permissions.values()) if (!p.decision) p.decision = 'release';
+      peers.broadcast('POST', '/api/remote', { on: remoteMode }); // o modo remoto vale para todos os PCs
       send(res, 200, 'application/json', JSON.stringify({ remoteMode }));
     });
   }
   if (url.pathname === '/api/permission' && req.method === 'POST') {
-    return readJson(req).then(({ id, decision }) => {
+    return readJson(req).then(({ id, decision, session }) => {
+      const remote = peers.byId(session);
+      if (remote) return relay(res, peers.forward(remote.peer, 'POST', '/api/permission', { id, decision, session: remote.rid }));
       const p = permissions.get(id);
       if (!p || p.decision) return send(res, 410, 'text/plain; charset=utf-8', 'Esse pedido já foi respondido ou expirou.');
       if (decision !== 'allow' && decision !== 'deny') return send(res, 400, 'text/plain', 'decisão inválida');
@@ -540,6 +559,8 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/focus' && req.method === 'POST') {
     return readJson(req).then(async ({ id }) => {
+      const remote = peers.byId(id);
+      if (remote) return relay(res, peers.forward(remote.peer, 'POST', '/api/focus', { id: remote.rid }));
       const s = allSessions().find((x) => x.id === id && !x.subagent);
       if (!s) return send(res, 404, 'text/plain', 'sessão não encontrada');
       send(res, 200, 'application/json', JSON.stringify(await focusSession(s)));
@@ -567,12 +588,21 @@ const server = http.createServer((req, res) => {
     return send(res, 200, 'application/json', JSON.stringify({ text: q.text }));
   }
   if (url.pathname === '/api/session') {
-    const d = sessionDetail(url.searchParams.get('id') || '');
-    return d ? send(res, 200, 'application/json', JSON.stringify(d)) : send(res, 404, 'text/plain', 'sessão não encontrada');
+    const id = url.searchParams.get('id') || '';
+    const remote = peers.byId(id);
+    if (remote) {
+      return peers.forward(remote.peer, 'GET', `/api/session?id=${encodeURIComponent(remote.rid)}`).then((r) => {
+        if (r.status !== 200 || !r.json) return send(res, r.status || 502, 'text/plain; charset=utf-8', r.text || 'sem resposta');
+        send(res, 200, 'application/json', JSON.stringify({ ...r.json, id, machine: remote.peer.name }));
+      }, () => send(res, 502, 'text/plain; charset=utf-8', `${remote.peer.name} não respondeu`));
+    }
+    const d = sessionDetail(id);
+    return d ? send(res, 200, 'application/json', JSON.stringify({ ...d, machine: machineName })) : send(res, 404, 'text/plain', 'sessão não encontrada');
   }
   if (url.pathname === '/api/refresh' && req.method === 'POST') {
     if (Date.now() - lastRefresh < 30e3) return send(res, 429, 'text/plain', 'aguarde');
-    return refreshQuotas().then(() => send(res, 200, 'application/json', JSON.stringify(snapshot())));
+    peers.broadcast('POST', '/api/refresh');
+    return refreshQuotas().then(() => send(res, 200, 'application/json', JSON.stringify(hubSnapshot())));
   }
   send(res, 404, 'text/plain', 'não encontrado');
 });

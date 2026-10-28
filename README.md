@@ -19,6 +19,22 @@ O servidor mostra o endereço na rede local; no aparelho, abra `http://<ip-do-pc
 Para iniciar junto com o Windows, copie `start-hidden.vbs` para a pasta Inicializar
 (`Win+R` → `shell:startup`).
 
+## Vários PCs (hub)
+
+Um PC pode juntar as sessões de outros. Instale o AI HUD também no PC secundário e,
+no `config.json` do PC **principal**, acrescente:
+
+```json
+"name": "MateusPC",
+"peers": [
+  { "name": "PC-Trabalho", "url": "http://<ip-do-secundario>:8787", "token": "<token do config.json do secundário>" }
+]
+```
+
+Reinicie o servidor principal. O principal consulta o secundário a cada 10 s e mostra
+tudo junto (com o nome da máquina em cada sessão); responder, permissões, Abrir no PC e
+detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o principal.
+
 ## Arquivos
 
 | Arquivo | Função |
@@ -26,6 +42,7 @@ Para iniciar junto com o Windows, copie `start-hidden.vbs` para a pasta Iniciali
 | `server.js` | Servidor HTTP: snapshot, detalhe da sessão, PIN, respostas, permissões, Abrir no PC |
 | `lib.js` | Lê os logs do Claude Code, Codex e Antigravity (tokens, sessões, pedidos, respostas) |
 | `quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
+| `peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
 | `hook-stop.js` | Hook `Stop` do Claude Code: entrega respostas enviadas pelo HUD |
 | `hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
 | `focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude) |

@@ -100,9 +100,11 @@
     meta.push(dur(now - x.start));
     var ping = pings[x.id] && now - pings[x.id] < 60e3 ? ' ping' : '';
     return '<button class="card t' + i + (x.state === 'waiting' ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
-      '<div class="row"><span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
-      '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + esc(x.tool) + machineTag(x) + '</span>' +
-      (x.queued ? '<span class="rflag queued">✉ na fila</span>' : x.listening ? '<span class="rflag">↩ responder</span>' : '') + '</div>' +
+      // Ícone da IA antes do nome da sessão; na linha de baixo, o PC onde ela roda
+      '<div class="row">' + (i < 2 ? brandIcon(i) : '<span class="dot c2"></span>') + '<span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
+      '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + (x.machine ? '🖥 ' + esc(x.machine) : esc(x.tool)) + '</span>' +
+      // Só o símbolo, para sobrar espaço para o nome do PC: ✉ resposta na fila, ↩ dá para responder ao vivo
+      (x.queued ? '<span class="rflag queued" title="Resposta na fila">✉</span>' : x.listening ? '<span class="rflag" title="Pode responder ao vivo">↩</span>' : '') + '</div>' +
       (x.title ? '<div class="ttl ell">' + esc(x.title) + '</div>' : '') +
       (x.lastPrompt && x.lastPrompt.toLowerCase() !== String(x.title).toLowerCase() ?'<div class="ask">' + esc(x.lastPrompt) + '</div>' : '') +
       '<div class="foot">' + bar + '<div class="meta">' + meta.join(' · ') + '</div></div></div></button>';

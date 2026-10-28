@@ -127,6 +127,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .qhead { margin-bottom: 4px; }
 .qhead .name { font-weight: 700; font-size: 1.1em; }
 .brand { width: 1.15em; height: 1.15em; margin-right: .4em; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.card .brand { width: .95em; height: .95em; margin-right: .35em; }
 /* No título da gaveta o texto é maior: ícone menor, alinhado ao nome */
 .dtitle .brand { width: .75em; height: .75em; margin-right: .35em; vertical-align: -.02em; }
 .qhead small { color: #8d8d87; font-size: .7em; text-transform: uppercase; margin-left: .5em; }

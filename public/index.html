@@ -37,6 +37,15 @@
   <div class="gtitle" id="sessTitle">Sessões</div>
   <div class="grid" id="sessList"></div>
 </div>
+<!-- Servidor fora do ar: cobre a página e tenta reconectar a cada 5 s -->
+<div id="offline"><div class="obox">
+  <div class="oicon">📡</div>
+  <h2>Servidor desconectado</h2>
+  <p class="muted">O PC pode estar desligado, fora da rede ou com a VPN bloqueando o acesso.</p>
+  <p class="oretry" id="oretry">Tentando reconectar…</p>
+  <p class="muted osmall" id="olast"></p>
+  <button class="btn" id="oretryNow">Tentar agora</button>
+</div></div>
 <div id="backdrop"></div>
 <div id="overlay"><div id="overlayBody"></div></div>
 <script src="/app.js"></script>

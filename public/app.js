@@ -493,14 +493,16 @@
   $('backdrop').onclick = closeOverlay;
 
   // ---- Rede ----------------------------------------------------------------
-  function request(method, url, done, body) {
+  function request(method, url, done, body, timeout) {
     var x = new XMLHttpRequest();
     x.open(method, url + (token ? (url.indexOf('?') < 0 ? '?' : '&') + 't=' + token : ''), true);
-    x.timeout = 60000;
+    x.timeout = timeout || 60000;
     x.onreadystatechange = function () {
       if (x.readyState !== 4) return;
-      if (x.status === 200) { try { done(null, JSON.parse(x.responseText), x.responseText); } catch (e) { done(e); } }
-      else done(new Error(x.status === 401 ? 'token inválido' : x.status === 404 ? 'sessão não encontrada' : x.status === 429 ? 'aguarde 30s' : x.status >= 400 && x.responseText ? x.responseText : 'sem conexão'));
+      if (x.status === 200) { try { done(null, JSON.parse(x.responseText), x.responseText); } catch (e) { done(e); } return; }
+      var err = new Error(x.status === 401 ? 'token inválido' : x.status === 404 ? 'sessão não encontrada' : x.status === 429 ? 'aguarde 30s' : x.status >= 400 && x.responseText ? x.responseText : 'sem conexão');
+      err.offline = x.status === 0; // sem resposta nenhuma: servidor fora ou rede bloqueada
+      done(err);
     };
     if (body) x.setRequestHeader('Content-Type', 'application/json');
     x.send(body ? JSON.stringify(body) : null);
@@ -509,7 +511,9 @@
   // O iPad mini 1 é lento para redesenhar: só quando os dados mudaram, e não com a gaveta aberta
   var lastText = '';
   function apply(err, s, text) {
+    if (err && err.offline) return setOffline(true);
     if (err) { $('status').innerHTML = '<span class="hi">● ' + esc(err.message) + '</span>'; return; }
+    setOffline(false);
     lastOk = new Date().getTime();
     text = (text || '').replace(/^\{"now":\d+/, ''); // "now" muda sempre; o resto diz se algo mudou
     if (text && text === lastText) return;
@@ -522,14 +526,39 @@
     if (view === 'recent') renderRecent();
   }
 
-  function poll() { request('GET', '/api/snapshot', apply); if (view === 'detail') loadDetail(); }
+  // ---- Desconectado: tela própria e nova tentativa a cada 5 s (conectado: a cada 10 s) ----
+  var offline = false, inFlight = false, lastAttempt = 0;
+  var POLL_MS = 10000, RETRY_MS = 5000;
 
+  function setOffline(on) {
+    if (on === offline) return;
+    offline = on;
+    $('offline').className = on ? 'show' : '';
+    if (on) $('olast').innerHTML = lastOk ? 'Últimos dados recebidos às ' + hm(lastOk) + '.' : '';
+  }
+
+  function poll() {
+    if (inFlight) return;
+    inFlight = true;
+    lastAttempt = new Date().getTime();
+    // Prazo curto: com o servidor fora, a tela de desconectado aparece em segundos
+    request('GET', '/api/snapshot', function (err, s, text) { inFlight = false; apply(err, s, text); }, null, 8000);
+    if (view === 'detail' && !offline) loadDetail();
+  }
+
+  // Relógio, status e agenda das consultas, a cada segundo
   function tick() {
-    var now = new Date();
+    var now = new Date(), t = now.getTime();
     $('clock').innerHTML = hm(now);
     if (lastOk) {
-      var ago = Math.round((now.getTime() - lastOk) / 1000);
+      var ago = Math.round((t - lastOk) / 1000);
       $('status').innerHTML = ago > 40 ? '<span class="hi">● sem atualização há ' + ago + 's</span>' : '<span class="lo">●</span><span class="stxt"> ao vivo</span>';
+    }
+    var wait = (offline ? RETRY_MS : POLL_MS) - (t - lastAttempt);
+    if (wait <= 0) poll();
+    if (offline) {
+      $('oretry').innerHTML = inFlight ? '<span class="pulse">●</span> Tentando reconectar…'
+        : 'Nova tentativa em ' + Math.max(1, Math.ceil(wait / 1000)) + 's';
     }
   }
 
@@ -564,8 +593,8 @@
   };
 
   window.addEventListener('resize', function () { if (snap) burnChart(snap); });
+  $('oretryNow').onclick = function () { poll(); tick(); };
   syncHash(); poll(); tick();
-  setInterval(poll, 10000);
   setInterval(tick, 1000);
   // Ao voltar do bloqueio de tela o iOS congela timers; atualiza na hora
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });

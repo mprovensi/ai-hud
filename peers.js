@@ -70,6 +70,13 @@ class Peers {
     const mine = (list) => (list || []).map((s) => ({ ...s, machine: localName }));
     out.active = mine(local.active);
     out.recent = mine(local.recent);
+    // Ollama: um item por máquina que tem Ollama (o secundário já manda a lista dele)
+    out.ollamas = local.ollama ? [{ ...local.ollama, machine: localName }] : [];
+    delete out.ollama;
+    for (const p of live) {
+      const theirs = p.snap.ollamas || [];
+      out.ollamas = out.ollamas.concat(theirs.length === 1 ? [{ ...theirs[0], machine: p.name }] : theirs);
+    }
     if (!live.length) return out;
 
     for (const p of live) {

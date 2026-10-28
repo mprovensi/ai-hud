@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { claudeSessions, codexData, antigravitySessions } = require('./lib');
 const { claudeQuota, codexQuota, CODEX } = require('./quotas');
 const { Peers } = require('./peers');
+const { Ollama } = require('./ollama');
 const { execFile } = require('child_process');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
@@ -399,7 +400,7 @@ function snapshot() {
   for (const v of sessions) if (v.permission) v.state = 'permission';
 
   return {
-    now, remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday,
+    now, remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday, ollama: ollama.state,
     burn: burn(now, all.filter((s) => s.tool === 'Codex')),
     // Quem espera por você primeiro, depois quem trabalha (como no agent-hud)
     active: sessions.filter((s) => s.state !== 'closed')
@@ -412,6 +413,8 @@ function snapshot() {
 // Este PC junta as sessões e tokens dos secundários e repassa a eles as ações das sessões deles.
 const machineName = config.name || os.hostname();
 const peers = new Peers(config.peers);
+// Ollama deste PC (só aparece no HUD se responder); config.ollamaUrl muda o endereço
+const ollama = new Ollama(config.ollamaUrl);
 const hubSnapshot = () => peers.merge(snapshot(), machineName);
 
 // Devolve ao aparelho a resposta do PC secundário (ou erro se ele não respondeu)

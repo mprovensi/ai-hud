@@ -30,6 +30,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .quotas { display: -webkit-flex; display: flex; }
 .quotas .panel { -webkit-flex: 1; flex: 1; min-width: 0; }
 .quotas .panel + .panel { margin-left: 10px; }
+/* Ollama: faixa de uma linha por PC */
+.ollama { padding: 6px 14px; font-size: .82em; }
+.ollama .oname { font-weight: 700; margin-right: 12px; white-space: nowrap; }
+.ollama .oname small { font-weight: 400; color: #8d8d87; }
+.ollama .omodels { min-width: 0; }
+.ollama .ogpu { margin-left: 12px; white-space: nowrap; color: #b5b5ae; }
+
 /* Grade de sessões: 3 colunas, quantas linhas precisar (flex-wrap; o Safari 9 não tem CSS Grid) */
 .gtitle { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin: 4px 2px 6px; }
 .grid { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -5px; }
@@ -253,6 +260,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .quotas { display: block; }
   .quotas .panel + .panel { margin-left: 0; }
   .card { width: 100%; }
+  .ollama { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+  .ollama .ogpu { margin-left: 0; width: 100%; }
   .top .clock { display: none; }
   .top .btn { margin-left: 6px; }
   .top .status { margin-right: 4px; }

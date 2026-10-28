@@ -254,12 +254,35 @@
     $('sound').innerHTML = on ? '🔔' : '🔕';
   }
 
+  // ---- Ollama: uma faixa por PC que tem Ollama -------------------------------
+  function gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
+
+  function ollamaPanels(s) {
+    var list = s.ollamas || [], html = '', i, j;
+    for (i = 0; i < list.length; i++) {
+      var o = list[i], parts = [];
+      if (!o.online) parts.push('<span class="hi">● fora do ar</span>');
+      else if (!o.models.length) parts.push('<span class="muted">nenhum modelo carregado' + (o.installed != null ? ' · ' + o.installed + ' instalados' : '') + '</span>');
+      for (j = 0; o.online && j < o.models.length; j++) {
+        var m = o.models[j];
+        parts.push('<b>' + esc(m.name) + '</b> <span class="muted">' + gb(m.size) + ' · ' + m.gpuPct + '% GPU' +
+          (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</span>');
+      }
+      var g = o.gpu, gpu = g ? 'GPU <b>' + g.util + '%</b> · VRAM ' + (g.memUsed / 1024).toFixed(1) + '/' + (g.memTotal / 1024).toFixed(0) + ' GB · ' + g.temp + '°C' : '';
+      html += '<div class="panel ollama row"><span class="oname">🦙 Ollama' + (o.machine && s.machines && s.machines.length > 1 ? ' <small>🖥 ' + esc(o.machine) + '</small>' : '') + '</span>' +
+        '<span class="omodels grow ell">' + (o.online ? '<span class="lo">●</span> ' : '') + parts.join(' &nbsp; ') + '</span>' +
+        (gpu ? '<span class="ogpu">' + gpu + '</span>' : '') + '</div>';
+    }
+    $('ollamaList').innerHTML = html;
+  }
+
   var GRID_MIN = 6; // 2 linhas de 3 cartões
 
   function render(s) {
     setRemoteBtn(s.remoteMode);
     quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
     quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
+    ollamaPanels(s);
     // Últimas sessões: todas as ativas pela última mensagem (enviada ou recebida); se sobrar
     // espaço nas 2 primeiras linhas (6 cartões), completa com as últimas inativas
     var active = s.active.slice().sort(function (a, b) { return b.end - a.end; });

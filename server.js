@@ -228,7 +228,9 @@ function replyInfo(s, now) {
 // Foca a janela da sessão (focus.ps1) e, no VS Code, abre a aba da sessão pelo link da extensão.
 // O link vai para a última janela ativa: só é enviado depois de focar a janela certa.
 const VSCODE_STORAGE = path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'storage.json');
-const winPath = (p) => String(p || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+// O Codex às vezes grava o cwd como caminho longo do Windows (\\?\D:\... ou \\?\UNC\servidor\...)
+const winPath = (p) => String(p || '').replace(/\//g, '\\').replace(/^\\\\\?\\UNC\\/i, '\\\\').replace(/^\\\\\?\\/, '')
+  .replace(/\\+$/, '').toLowerCase();
 const noPipe = (t) => String(t || '').replace(/\|/g, ' ');
 const focusTerminal = createTerminalFocus();
 
@@ -265,6 +267,8 @@ function focusPlan(s) {
   const key = replyKey(s);
   // App do Ollama: o link ollama:// só abre o app (não uma conversa); depois traz a janela para frente
   if (s.where === 'ollama-app') return { uriFirst: true, uri: 'ollama://', process: 'ollama app', include: '', exclude: '', label: 'App do Ollama aberto: escolha a conversa nele.' };
+  // App do Codex (ChatGPT.exe): o link abre a conversa pelo id da thread; depois traz a janela para frente
+  if (s.where === 'codex-desktop') return { uriFirst: true, uri: `codex://threads/${key}`, process: 'ChatGPT', include: '', exclude: '', label: 'Conversa aberta no app do Codex.' };
   if (s.where === 'claude-desktop') {
     const local = claudeDesktopId(s.id);
     if (!local) return null;
@@ -313,7 +317,7 @@ async function focusSession(s) {
   const plan = focusPlan(s);
   if (!plan) {
     return { ok: false, message: s.where === 'claude-desktop' ? 'Essa sessão não está mais no app do Claude.'
-      : 'Abrir no PC funciona para sessões no VS Code, no terminal ou no app do Claude.' };
+      : 'Abrir no PC funciona para sessões no VS Code, no terminal ou nos apps do Claude, do Codex e do Ollama.' };
   }
   // App do Claude: o link abre a conversa (e o app, se fechado); depois só garante a janela na frente
   if (plan.uriFirst) {

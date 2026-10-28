@@ -1,10 +1,12 @@
 ﻿[CmdletBinding()]
 param(
-  [ValidateSet('Inspect', 'Select')][string]$Mode = 'Inspect',
+  [ValidateSet('Inspect', 'Select', 'Window')][string]$Mode = 'Inspect',
   [int]$ClientProcessId = 0,
   [string]$SessionFile = '',
   [string]$ExpectedProcess = 'claude|codex|ollama',
   [string]$ExpectedStart = '',
+  [long]$SessionStartMs = 0,
+  [long]$WindowHandle = 0,
   [string]$TitleHintsJson = '[]',
   [string]$TitleHintsBase64 = '',
   [switch]$DryRun
@@ -32,6 +34,7 @@ public static class HudTerminalNative {
   [DllImport("rstrtmgr.dll")] static extern int RmEndSession(uint session);
   [DllImport("kernel32.dll")] static extern bool AttachConsole(uint processId);
   [DllImport("kernel32.dll")] static extern bool FreeConsole();
+  [DllImport("kernel32.dll")] static extern IntPtr GetConsoleWindow();
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern uint GetConsoleTitle(StringBuilder text, uint length);
   [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int number);
   [DllImport("kernel32.dll")] static extern bool SetStdHandle(int number, IntPtr handle);
@@ -61,6 +64,17 @@ public static class HudTerminalNative {
       return ids;
     } finally { RmEndSession(session); }
   }
+  public static long ConsoleWindow(uint processId) {
+    var input=GetStdHandle(-10); var output=GetStdHandle(-11); var error=GetStdHandle(-12);
+    try {
+      FreeConsole();
+      if (!AttachConsole(processId)) return 0;
+      var h = GetConsoleWindow();
+      return IsWindowVisible(h) ? h.ToInt64() : 0;
+    } finally {
+      FreeConsole(); SetStdHandle(-10,input); SetStdHandle(-11,output); SetStdHandle(-12,error);
+    }
+  }
   public static string ConsoleTitle(uint processId) {
     var input=GetStdHandle(-10); var output=GetStdHandle(-11); var error=GetStdHandle(-12);
     try {
@@ -77,7 +91,7 @@ public static class HudTerminalNative {
 
 try {
   if ($Mode -eq 'Inspect') {
-    $rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CreationDate)
+    $rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CreationDate, CommandLine, ExecutablePath)
     $client = $null
     if ($ClientProcessId -gt 0) {
       $client = $rows | Where-Object { $_.ProcessId -eq $ClientProcessId -and $_.Name -match "^($ExpectedProcess)(\.exe)?$" } | Select-Object -First 1
@@ -89,6 +103,22 @@ try {
       $owners = @([HudTerminalNative]::FileUsers($SessionFile))
       $ownerMatches = @($rows | Where-Object { $owners -contains $_.ProcessId -and $_.Name -match "^($ExpectedProcess)(\.exe)?$" })
       if ($ownerMatches.Count -eq 1) { $client = $ownerMatches[0] }
+      # Codex atual: quem grava o arquivo é o app-server compartilhado (sem janela); o CLI no terminal
+      # é outro codex.exe, cliente dele. Acha o CLI pelo horário de início da sessão (ou por ser o único).
+      if ($ExpectedProcess -eq 'codex' -and (-not $client -or "$($client.CommandLine)" -match '\bapp-server\b')) {
+        $client = $null
+        # Fora: o app-server, o Codex da extensão do VS Code e o do app (WindowsApps)
+        $tuis = @($rows | Where-Object { $_.Name -eq 'codex.exe' -and "$($_.CommandLine)" -notmatch '\bapp-server\b' -and
+          "$($_.ExecutablePath)" -notmatch '\\\.vscode[^\\]*\\extensions\\|\\WindowsApps\\|\\app-server-daemon\\' })
+        if ($SessionStartMs -gt 0) {
+          $start = [DateTimeOffset]::FromUnixTimeMilliseconds($SessionStartMs).UtcDateTime
+          # O CLI abre um pouco antes da sessão (até 2 min antes, nunca mais de 10 s depois)
+          $near = @($tuis | Where-Object { $d = ($start - $_.CreationDate.ToUniversalTime()).TotalSeconds; $d -ge -10 -and $d -le 120 } |
+            Sort-Object { [Math]::Abs(($start - $_.CreationDate.ToUniversalTime()).TotalSeconds) })
+          if ($near.Count) { $client = $near[0] }
+        }
+        if (-not $client -and $tuis.Count -eq 1) { $client = $tuis[0] }
+      }
     }
     $ancestors = @()
     $current = $client
@@ -101,14 +131,28 @@ try {
       if ($current -and $current.CreationDate -gt $child.CreationDate) { break }
     }
     $title = if ($client) { [HudTerminalNative]::ConsoleTitle([uint32]$client.ProcessId) } else { '' }
-    @{ ok = $true; clientPid = $(if ($client) { [int]$client.ProcessId } else { 0 }); ancestors = @($ancestors); consoleTitle = $title } | ConvertTo-Json -Compress -Depth 5
+    $consoleWindow = if ($client) { [HudTerminalNative]::ConsoleWindow([uint32]$client.ProcessId) } else { 0 }
+    @{ ok = $true; clientPid = $(if ($client) { [int]$client.ProcessId } else { 0 }); ancestors = @($ancestors); consoleTitle = $title; consoleWindow = $consoleWindow } | ConvertTo-Json -Compress -Depth 5
+    exit 0
+  }
+
+  if ($Mode -eq 'Window') {
+    $handle = [IntPtr]$WindowHandle
+    if ($WindowHandle -eq 0 -or -not [HudTerminalNative]::IsWindowVisible($handle)) { @{ ok = $false; message = 'A janela do terminal não está mais aberta.' } | ConvertTo-Json -Compress; exit 0 }
+    if ($DryRun) { @{ ok = $true; dryRun = $true } | ConvertTo-Json -Compress; exit 0 }
+    if ([HudTerminalNative]::IsIconic($handle)) { [void][HudTerminalNative]::ShowWindow($handle, 9) }
+    [HudTerminalNative]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+    [HudTerminalNative]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+    [void][HudTerminalNative]::SetForegroundWindow($handle)
+    @{ ok = $true } | ConvertTo-Json -Compress
     exit 0
   }
 
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
   if ($TitleHintsBase64) { $TitleHintsJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($TitleHintsBase64)) }
-  $hints = @($TitleHintsJson | ConvertFrom-Json | Where-Object { $_ -and $_.Trim().Length -ge 3 })
+  $parsedHints = ConvertFrom-Json $TitleHintsJson
+  $hints = @($parsedHints | ForEach-Object { $_ } | Where-Object { $_ -and "$_".Trim().Length -ge 3 })
   $hints = @($hints | Where-Object { $_ -notmatch '^(Windows PowerShell|PowerShell( 7)?( \(x64\))?|pwsh|cmd|Terminal|Codex|Claude( Code)?)$' })
   $terminalIds = @(Get-Process -Name WindowsTerminal, WindowsTerminalPreview -ErrorAction SilentlyContinue | ForEach-Object { [uint32]$_.Id })
   $windows = New-Object System.Collections.ArrayList

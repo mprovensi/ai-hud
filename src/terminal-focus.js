@@ -18,7 +18,8 @@ function selectBridge(records, ancestors, now = Date.now()) {
 function titleHints(session, info) {
   const base = (value) => String(value || '').split(/[\\/]/).filter(Boolean).pop() || '';
   return [...new Set([info.consoleTitle, session.title, ...(session.models || []), base(session.cwd)]
-    .filter((value) => typeof value === 'string' && value.trim().length >= 3).map((value) => value.replace(/\|/g, ' ').trim()))];
+    // As pistas vão em JSON: o "|" fica (o Codex CLI usa "assunto | pasta" como título da aba)
+    .filter((value) => typeof value === 'string' && value.trim().length >= 3).map((value) => value.trim()))];
 }
 
 function createTerminalFocus(options = {}) {
@@ -52,7 +53,8 @@ function createTerminalFocus(options = {}) {
       } catch {}
     }
     const expected = session.tool === 'Claude Code' ? 'claude' : session.tool === 'Codex' ? 'codex' : 'ollama';
-    const info = await native(['-Mode', 'Inspect', '-ClientProcessId', String(clientPid), '-SessionFile', session.file || '', '-ExpectedProcess', expected, '-ExpectedStart', String(expectedStart)]);
+    const info = await native(['-Mode', 'Inspect', '-ClientProcessId', String(clientPid), '-SessionFile', session.file || '', '-ExpectedProcess', expected, '-ExpectedStart', String(expectedStart),
+      '-SessionStartMs', String(Date.parse(session.start) || 0)]);
     if (!info.ok || !info.clientPid) return { ok: false, message: info.message || 'Não identifiquei um processo aberto para esta sessão de terminal.' };
     const records = [];
     const directory = path.join(home, '.ai-hud', 'terminal-bridges');
@@ -67,8 +69,13 @@ function createTerminalFocus(options = {}) {
       return { ok: false, message: 'Instale a integração AI HUD Terminal Focus no VS Code para selecionar esta aba.' };
     }
     const result = await native(['-Mode', 'Select', '-TitleHintsBase64', Buffer.from(JSON.stringify(titleHints(session, info))).toString('base64')]);
-    return result.ok ? { ok: true, host: 'windows-terminal', message: 'Aba correta selecionada no Windows Terminal.' }
-      : { ok: false, message: result.message || 'Não identifiquei uma aba única para esta sessão.' };
+    if (result.ok) return { ok: true, host: 'windows-terminal', message: 'Aba correta selecionada no Windows Terminal.' };
+    // Sem aba no Windows Terminal: janela de console própria (PowerShell/cmd no conhost ou outro terminal)
+    if (info.consoleWindow) {
+      const own = await native(['-Mode', 'Window', '-WindowHandle', String(info.consoleWindow)]);
+      if (own.ok) return { ok: true, host: 'console', message: 'Janela do terminal em primeiro plano.' };
+    }
+    return { ok: false, message: result.message || 'Não identifiquei uma aba única para esta sessão.' };
   };
 }
 

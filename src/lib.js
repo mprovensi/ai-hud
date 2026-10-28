@@ -126,9 +126,15 @@ function claudeSessions() {
 }
 
 // Codex: eventos token_count trazem total acumulado da sessão + rate_limits do plano
+// Onde a sessão roda: vale o originator (o Codex grava source "vscode" também no CLI e no app);
+// source só decide quando o originator não é conhecido
 function codexWhere(meta) {
-  if (meta.source === 'vscode' || meta.originator === 'codex_vscode') return 'vscode';
-  return meta.originator === 'codex-tui' || meta.source === 'cli' ? 'terminal' : meta.originator || '';
+  const o = String(meta.originator || '');
+  if (o === 'codex_vscode') return 'vscode';
+  if (o === 'codex-tui' || o === 'codex_exec' || o === 'codex_cli_rs') return 'terminal';
+  if (/^codex desktop$/i.test(o)) return 'codex-desktop';
+  if (meta.source === 'vscode') return 'vscode';
+  return meta.source === 'cli' ? 'terminal' : o;
 }
 
 function codexText(content) {
@@ -280,4 +286,4 @@ function antigravitySessions() {
   return [...byConv.values()];
 }
 
-module.exports = { claudeSessions, codexData, antigravitySessions, HOME };
+module.exports = { claudeSessions, codexData, antigravitySessions, codexWhere, HOME };

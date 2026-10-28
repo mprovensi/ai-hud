@@ -49,7 +49,7 @@ test('Codex atual: lê mensagens response_item, ignora contexto e usa CODEX_HOME
   assert.equal(s.prompts, 1);
   assert.equal(s.firstPrompt, 'Analise o projeto');
   assert.equal(s.lastReply, 'Análise pronta');
-  assert.equal(s.where, 'vscode');
+  assert.equal(s.where, 'terminal'); // codex-tui é o CLI, mesmo com source "vscode"
   assert.equal(s.contextWindow, 128000);
 });
 
@@ -164,7 +164,7 @@ test('Codex paginado: recupera SQLite sem JSONL e não duplica conversas existen
   assert.equal(migrated.lastReply, 'Resposta preservada');
   assert.equal(migrated.lastStop, 'end_turn');
   assert.equal(migrated.completedAt, 1793181660000);
-  assert.equal(migrated.where, 'vscode');
+  assert.equal(migrated.where, 'terminal');
   assert.equal(migrated.input, 0); // SQLite não informa a distribuição de tokens por turno.
   assert.equal(migrated.events.length, 0);
 });
@@ -178,4 +178,13 @@ test('Codex: ausência de node:sqlite mantém fallback JSONL sem acessar bancos'
   } };
   vm.runInNewContext(source, sandbox);
   assert.equal(sandbox.module.exports.readCodexHistory('/missing').length, 0);
+});
+
+test('Codex: onde a sessão roda vem do originator, não do source "vscode" que todas gravam', () => {
+  const { codexWhere } = require('../src/lib');
+  assert.equal(codexWhere({ originator: 'codex_vscode', source: 'vscode' }), 'vscode');
+  assert.equal(codexWhere({ originator: 'codex-tui', source: 'vscode' }), 'terminal');
+  assert.equal(codexWhere({ originator: 'Codex Desktop', source: 'vscode' }), 'codex-desktop');
+  assert.equal(codexWhere({ source: 'vscode' }), 'vscode');
+  assert.equal(codexWhere({ source: 'cli' }), 'terminal');
 });

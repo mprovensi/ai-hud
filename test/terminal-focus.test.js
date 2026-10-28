@@ -73,3 +73,20 @@ test('Windows Terminal selection errors remain explicit', async () => {
   assert.match(result.message, /mesmo título/);
   assert.equal(calls[1][1], 'Select');
 });
+
+test('title hints keep "|" from the console title (Codex CLI uses "subject | folder")', () => {
+  assert.deepEqual(titleHints({ cwd: 'C:\\Users\\mprov' }, { consoleTitle: 'Responder saudação | mprov' }), ['Responder saudação | mprov', 'mprov']);
+});
+
+test('without a Windows Terminal tab, focuses the CLI own console window (PowerShell/cmd)', async () => {
+  const calls = [];
+  const focus = createTerminalFocus({ home: path.join(os.tmpdir(), 'no-hud-bridge'), native: async (args) => {
+    calls.push(args);
+    if (args[1] === 'Inspect') return { ok: true, clientPid: 99, ancestors: [{ pid: 99, name: 'codex.exe' }, { pid: 20, name: 'powershell.exe' }], consoleTitle: 'Projeto', consoleWindow: 4242 };
+    return args[1] === 'Select' ? { ok: false, code: 'not_found', message: 'Não identifiquei a aba.' } : { ok: true };
+  } });
+  const result = await focus({ tool: 'Codex', pid: 99, cwd: 'C:\\work\\Projeto' });
+  assert.equal(result.ok, true);
+  assert.equal(result.host, 'console');
+  assert.deepEqual(calls[2], ['-Mode', 'Window', '-WindowHandle', '4242']);
+});

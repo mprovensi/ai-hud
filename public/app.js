@@ -510,7 +510,7 @@
         '<div class="permcmd">' + esc(d.permission.summary) + '</div><div class="row">' +
         '<button class="pbtn allow" id="permAllow">Permitir</button><button class="pbtn deny" id="permDeny">Negar</button></div></div>';
     }
-    var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude', 'ollama-app': 'no app do Ollama', 'ollama-run': 'no terminal' };
+    var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude', 'codex-desktop': 'no app do Codex', 'ollama-app': 'no app do Ollama', 'ollama-run': 'no terminal' };
     if (places[d.where]) {
       html += '<button class="pcaction" id="focusPc">🖥 Abrir no PC <small>' + places[d.where] + '</small></button>';
     }

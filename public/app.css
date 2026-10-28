@@ -30,6 +30,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Alvos de toque físicos, inclusive no Safari 9; o texto continua ajustável. */
 button { min-width: 44px; min-height: 44px; }
 button:focus, [role="button"]:focus { outline: 2px solid #8ca5ff; outline-offset: 2px; }
+/* Cards superiores: sem destaque ao clicar/tocar; foco de teclado quando suportado. */
+.quotas [role="button"] { -webkit-tap-highlight-color: transparent; }
+.quotas [role="button"]:focus { outline: none; }
+.quotas [role="button"]:focus-visible { outline: 2px solid #8ca5ff; outline-offset: 2px; }
+/* Cards de sessão: idem; o contorno de teclado vai no .in para acompanhar as bordas arredondadas */
+.card:focus { outline: none; }
+.card:focus-visible .in { box-shadow: 0 0 0 2px #8ca5ff; }
 .connection-info { font-size: .8em; color: #aaa9a2; margin: 0 0 10px; word-wrap: break-word; }
 .reading-options, .update-notice { padding: 8px 10px; margin-bottom: 10px; background: #262624; border: 1px solid #3a3a36; border-radius: 10px; }
 .reading-options > span, .update-notice > span { display: inline-block; margin: 4px 6px 4px 0; }
@@ -46,10 +53,8 @@ body.read-larger { font-size: 19px; }
 .quotas .panel + .panel { margin-left: 10px; }
 /* Ollama: meia largura na linha das cotas, clicável */
 .quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; cursor: pointer; }
-.olla:active { background: #232321; }
 /* Cartões de uso do Claude e do Codex: toque abre a gaveta de uso */
 #q-claude, #q-codex { cursor: pointer; }
-#q-claude:active, #q-codex:active { background: #232321; }
 /* Gaveta de uso: barra maior e frase-resumo do ritmo */
 .utrack { height: 12px; margin: 8px 0 8px; }
 .usum { font-size: .9em; margin-bottom: 6px; }
@@ -243,6 +248,9 @@ body.read-larger { font-size: 19px; }
 .pbtn.allow { background: #5fb8a4; color: #121211; }
 .pbtn.deny { background: #4d2f2f; color: #f0a0a0; border: 1px solid #7a3b3b; }
 .pbtn:disabled { opacity: .5; }
+.ico { width: 1.3em; height: 1.3em; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.top-actions .btn { line-height: 1; }
 .btn.on { background: #4d3f22; border-color: #8a6a2a; color: #f0cf8a; }
 .waiting { background: #2b3556; color: #b3c6ff; }
 .idle, .closed { background: #2c2c29; color: #b5b5ae; }
@@ -332,6 +340,11 @@ body.read-larger { font-size: 19px; }
   .card { width: 33.333%; }
   .card .in { height: 194px; }
   body.read-large .card .in, body.read-larger .card .in { height: auto; min-height: 194px; }
+  /* A tela do iPad mini 1 tem pouco contraste: o degradê da IA precisa ser mais forte e ir mais longe */
+  .t0 .in { background-image: linear-gradient(150deg, rgba(224, 138, 102, .24), rgba(224, 138, 102, .05) 70%, rgba(224, 138, 102, 0)); }
+  .t1 .in { background-image: linear-gradient(150deg, rgba(95, 184, 164, .22), rgba(95, 184, 164, .05) 70%, rgba(95, 184, 164, 0)); }
+  .t2 .in { background-image: linear-gradient(150deg, rgba(125, 155, 240, .22), rgba(125, 155, 240, .05) 70%, rgba(125, 155, 240, 0)); }
+  .t3 .in { background-image: linear-gradient(150deg, rgba(179, 157, 219, .24), rgba(179, 157, 219, .05) 70%, rgba(179, 157, 219, 0)); }
   .burnbox { height: 260px; }
   .burnbox text { font-size: 15px; }
   #overlay { width: 62%; min-width: 560px; padding: 16px 20px 28px; }
@@ -347,7 +360,8 @@ body.read-larger { font-size: 19px; }
   .top .btn { margin-left: 6px; }
   .top .status { margin-right: 4px; }
   .top-actions { -webkit-flex-basis: 100%; flex-basis: 100%; margin: 8px 0 0; -webkit-justify-content: space-between; justify-content: space-between; }
-  .top-actions .btn { margin-left: 0; }
+  /* Botões têm 44px de alvo de toque: o ícone acompanha (com .9em ficava minúsculo no meio) */
+  .top-actions .btn { margin-left: 0; min-width: 48px; padding: .15em .5em; font-size: 1.1em; }
   .reading-options .btn { margin: 4px 2px; padding-left: .5em; padding-right: .5em; }
   body.read-large .rform textarea, body.read-larger .rform textarea { font-size: 1em; }
   .stat { width: 50%; }

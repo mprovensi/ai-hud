@@ -254,26 +254,42 @@
     $('sound').innerHTML = on ? '🔔' : '🔕';
   }
 
-  // ---- Ollama: uma faixa por PC que tem Ollama -------------------------------
+  // ---- Ollama: cartões na grade, junto com as sessões ----------------------
   function gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
 
-  function ollamaPanels(s) {
-    var list = s.ollamas || [], html = '', i, j;
+  // Um cartão por modelo carregado; sem modelo, um cartão "Ollama" apagado; fora do ar, aviso.
+  // Devolve { live: [...], idle: [...] }: os carregados entram junto das sessões ativas.
+  function ollamaCards(s) {
+    var out = { live: [], idle: [] }, list = s.ollamas || [], i, j;
     for (i = 0; i < list.length; i++) {
-      var o = list[i], parts = [];
-      if (!o.online) parts.push('<span class="hi">● fora do ar</span>');
-      else if (!o.models.length) parts.push('<span class="muted">nenhum modelo carregado' + (o.installed != null ? ' · ' + o.installed + ' instalados' : '') + '</span>');
-      for (j = 0; o.online && j < o.models.length; j++) {
-        var m = o.models[j];
-        parts.push('<b>' + esc(m.name) + '</b> <span class="muted">' + gb(m.size) + ' · ' + m.gpuPct + '% GPU' +
-          (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</span>');
+      var o = list[i], g = o.gpu;
+      var gpu = g ? ' · GPU ' + g.util + '% · ' + g.temp + '°C' : '';
+      var card = function (cls, name, badge, ttl, ask, pct, meta) {
+        return '<div class="card t3 ' + cls + '"><div class="in">' +
+          '<div class="row"><span class="llama">🦙</span><span class="proj ell grow">' + esc(name) + '</span></div>' +
+          '<div class="sub row">' + badge + '<span class="tool ell grow">🖥 ' + esc(o.machine || '') + '</span></div>' +
+          (ttl ? '<div class="ttl ell">' + ttl + '</div>' : '') + (ask ? '<div class="ask">' + ask + '</div>' : '') +
+          '<div class="foot">' + (pct != null ? '<div class="ctx"><div style="width:' + pct + '%;background:#b39ddb"></div></div>' : '') +
+          '<div class="meta">' + meta + '</div></div></div></div>';
+      };
+      if (!o.online) {
+        out.idle.push(card('old-card', 'Ollama', '<span class="badge closed">fora do ar</span>', 'O servidor do Ollama não responde', '', null, 'versão ' + esc(o.version || '?')));
+        continue;
       }
-      var g = o.gpu, gpu = g ? 'GPU <b>' + g.util + '%</b> · VRAM ' + (g.memUsed / 1024).toFixed(1) + '/' + (g.memTotal / 1024).toFixed(0) + ' GB · ' + g.temp + '°C' : '';
-      html += '<div class="panel ollama row"><span class="oname">🦙 Ollama' + (o.machine && s.machines && s.machines.length > 1 ? ' <small>🖥 ' + esc(o.machine) + '</small>' : '') + '</span>' +
-        '<span class="omodels grow ell">' + (o.online ? '<span class="lo">●</span> ' : '') + parts.join(' &nbsp; ') + '</span>' +
-        (gpu ? '<span class="ogpu">' + gpu + '</span>' : '') + '</div>';
+      if (!o.models.length) {
+        out.idle.push(card('old-card', 'Ollama', '<span class="badge idle">ocioso</span>', 'Nenhum modelo carregado',
+          o.installed != null ? o.installed + ' modelos instalados' : '', null, 'versão ' + esc(o.version) + gpu));
+        continue;
+      }
+      for (j = 0; j < o.models.length; j++) {
+        var m = o.models[j];
+        out.live.push(card('', m.name, '<span class="badge llm">● carregado</span>',
+          esc([m.params, m.quant].filter(Boolean).join(' · ') || 'modelo local'),
+          m.expiresAt ? 'Fica na memória até ' + hm(m.expiresAt) : '',
+          m.gpuPct, gb(m.size) + ' · ' + m.gpuPct + '% na GPU' + gpu));
+      }
     }
-    if ($('ollamaList')) $('ollamaList').innerHTML = html; // página antiga em cache não tem a faixa
+    return out;
   }
 
   var GRID_MIN = 6; // 2 linhas de 3 cartões
@@ -282,16 +298,20 @@
     setRemoteBtn(s.remoteMode);
     quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
     quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
-    ollamaPanels(s);
-    // Últimas sessões: todas as ativas pela última mensagem (enviada ou recebida); se sobrar
-    // espaço nas 2 primeiras linhas (6 cartões), completa com as últimas inativas
+    // Últimas sessões: todas as ativas pela última mensagem (enviada ou recebida), depois os
+    // modelos do Ollama carregados; se sobrar espaço nas 2 primeiras linhas (6 cartões), completa
+    // com o Ollama ocioso e as últimas sessões inativas
     var active = s.active.slice().sort(function (a, b) { return b.end - a.end; });
-    var list = active.concat(s.recent.slice(0, Math.max(0, GRID_MIN - active.length)));
-    var html = '', waiting = 0;
-    for (var i = 0; i < list.length; i++) {
-      html += sessCard(list[i], s.now);
-      if (list[i].state === 'waiting') waiting++;
+    var llm = ollamaCards(s);
+    var used = active.length + llm.live.length + llm.idle.length;
+    var fill = s.recent.slice(0, Math.max(0, GRID_MIN - used));
+    var html = '', waiting = 0, i;
+    for (i = 0; i < active.length; i++) {
+      html += sessCard(active[i], s.now);
+      if (active[i].state === 'waiting') waiting++;
     }
+    html += llm.live.join('') + llm.idle.join('');
+    for (i = 0; i < fill.length; i++) html += sessCard(fill[i], s.now);
     $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
     var down = '';
     for (i = 0; s.machines && i < s.machines.length; i++) if (!s.machines[i].ok) down += ' · <span class="hi">🖥 ' + esc(s.machines[i].name) + ' fora do ar</span>';

@@ -339,10 +339,9 @@
     quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
     quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
     ollamaPanel(s);
-    // Últimas sessões: todas as ativas pela última mensagem (enviada ou recebida), depois os
-    // modelos do Ollama carregados; se sobrar espaço nas 2 primeiras linhas (6 cartões), completa
-    // com o Ollama ocioso e as últimas sessões inativas
-    var active = s.active.slice().sort(function (a, b) { return b.end - a.end; });
+    // O servidor prioriza permissões e sessões esperando o usuário, inclusive no hub.
+    // Se sobrar espaço nas duas primeiras linhas, completa com as últimas sessões inativas.
+    var active = s.active.slice();
     var used = active.length;
     var fill = s.recent.slice(0, Math.max(0, GRID_MIN - used));
     var html = '', waiting = 0, i;
@@ -553,8 +552,10 @@
       // Só redesenha se algo mudou ("now" sempre muda), preservando a rolagem da última resposta
       var sig = JSON.stringify(d).replace(/"now":\d+/, '');
       var prev = detailCache[id] && JSON.stringify(detailCache[id]).replace(/"now":\d+/, '');
+      // Mantém no cache o detalhe exibido; uma atualização adiada precisa ser desenhada depois.
+      if (typing()) return;
       detailCache[id] = d;
-      if (sig === prev || typing()) return;
+      if (sig === prev) return;
       var box = $('lastReply'), top = box ? box.scrollTop : 0;
       renderDetail(d);
       if ($('lastReply')) $('lastReply').scrollTop = top;

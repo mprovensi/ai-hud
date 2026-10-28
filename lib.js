@@ -4,6 +4,8 @@ const path = require('path');
 const os = require('os');
 
 const HOME = os.homedir();
+const CODEX_HOME = process.env.CODEX_HOME || path.join(HOME, '.codex');
+const { readCodexHistory } = require('./codex-history');
 
 function walk(dir, ext, out = []) {
   let entries;
@@ -124,25 +126,64 @@ function claudeSessions() {
 }
 
 // Codex: eventos token_count trazem total acumulado da sessão + rate_limits do plano
+function codexWhere(meta) {
+  if (meta.source === 'vscode' || meta.originator === 'codex_vscode') return 'vscode';
+  return meta.originator === 'codex-tui' || meta.source === 'cli' ? 'terminal' : meta.originator || '';
+}
+
+function codexText(content) {
+  if (typeof content === 'string') return content;
+  return Array.isArray(content) ? content.filter((c) => /^(input_text|output_text|text)$/.test(c.type)).map((c) => c.text || '').join('\n') : '';
+}
+
 function parseCodex(f) {
   const s = emptySession('Codex', path.basename(f, '.jsonl'), f);
   s.limitSamples = [];
   let prev = null, limits = null, limitsTs = '';
+  const userPrompts = [], promptIds = new Set();
+  let currentTurn = 'initial', turnIndex = 0;
+  const collectPrompt = (text, source, p, timestamp) => {
+    if (!text) return;
+    const metadata = p.internal_chat_message_metadata_passthrough || {};
+    const turn = p.turn_id || metadata.turn_id || currentTurn;
+    const id = p.client_id || p.id;
+    const identity = id && `${source}:${id}`;
+    if (identity && promptIds.has(identity)) return;
+    if (identity) promptIds.add(identity);
+    // Os formatos antigo e novo podem registrar a mesma mensagem. Une cada par
+    // dentro do turno, preservando mensagens que existem em apenas um formato.
+    const duplicate = userPrompts.find((m) => m.turn === turn && m.text === text && !m.sources.has(source)
+      && (turn !== 'initial' || Math.abs(Date.parse(timestamp) - Date.parse(m.timestamp)) < 1000));
+    if (duplicate) duplicate.sources.add(source);
+    else userPrompts.push({ text, turn, timestamp, sources: new Set([source]) });
+  };
+  let fallbackReply = '', fallbackReplyAt = '', legacyReplyAt = '';
   for (const line of readLines(f)) {
     const r = parse(line);
     if (!r) continue;
     touch(s, r.timestamp);
     const p = r.payload || {};
-    if (r.type === 'session_meta') {
+    // Um rollout de subagente pode conter session_meta herdado do pai.
+    if (r.type === 'session_meta' && (!p.id || p.id === s.id.slice(-36))) {
       s.cwd = p.cwd || '';
       s.subagent = !!(p.source && p.source.subagent);
-      s.where = p.originator === 'codex_vscode' ? 'vscode' : p.originator === 'codex-tui' ? 'terminal' : p.originator || '';
+      s.where = codexWhere(p);
+      s.contextWindow = p.context_window || s.contextWindow;
     }
     if (r.type === 'turn_context' && p.model) s.models.add(p.model);
-    if (p.type === 'task_complete') s.lastStop = 'end_turn';
-    if (p.type === 'task_started') s.lastStop = '';
-    if (p.type === 'user_message' && p.message) prompt(s, p.message);
-    if (p.type === 'agent_message' && p.message) s.lastReply = clip(p.message, 4000);
+    if (p.type === 'task_complete') { s.lastStop = 'end_turn'; currentTurn = `after:${++turnIndex}`; }
+    if (p.type === 'task_started') { s.lastStop = ''; currentTurn = p.turn_id || `turn:${++turnIndex}`; }
+    if (p.type === 'user_message' && p.message) collectPrompt(p.message, 'event', p, r.timestamp);
+    if (p.type === 'agent_message' && p.message) { s.lastReply = clip(p.message, 4000); legacyReplyAt = r.timestamp; }
+    // Novos rollouts não duplicam as mensagens nos eventos user_message/agent_message.
+    if (r.type === 'response_item' && p.type === 'message') {
+      const text = codexText(p.content);
+      const kinds = p.internal_chat_message_metadata_passthrough && p.internal_chat_message_metadata_passthrough.content_item_kinds;
+      const userContent = kinds && kinds.length ? kinds.some((k) => /^user\./.test(k))
+        : !/^(<environment_context>|<turn_aborted>|<external_codex_apps_open_page>|# AGENTS\.md instructions)/.test(text);
+      if (p.role === 'user' && userContent) collectPrompt(text, 'response', p, r.timestamp);
+      if (p.role === 'assistant' && text) { fallbackReply = text; fallbackReplyAt = r.timestamp; }
+    }
     if (r.type === 'response_item' && /^(custom_tool_call|function_call|local_shell_call)$/.test(p.type)) {
       toolCall(s, p.name || p.type);
     }
@@ -168,11 +209,44 @@ function parseCodex(f) {
   }
   s.limits = limits;
   s.limitsTs = limitsTs;
+  for (const m of userPrompts) prompt(s, m.text);
+  if (fallbackReply && fallbackReplyAt >= legacyReplyAt) s.lastReply = clip(fallbackReply, 4000);
   return s.start ? s : null;
 }
 
 function codexData() {
-  const sessions = walk(path.join(HOME, '.codex', 'sessions'), '.jsonl').map((f) => cached(f, parseCodex)).filter(Boolean);
+  const sessions = walk(path.join(CODEX_HOME, 'sessions'), '.jsonl').map((f) => cached(f, parseCodex)).filter(Boolean);
+  const byId = new Map(sessions.map((s) => [s.id.slice(-36), s]));
+  for (const { thread, messages, turn } of readCodexHistory(CODEX_HOME)) {
+    let s = byId.get(thread.id);
+    if (!s && thread.rollout_path) {
+      s = cached(thread.rollout_path, parseCodex);
+      if (s) { sessions.push(s); byId.set(thread.id, s); }
+    }
+    const sqliteOnly = !s;
+    if (!s) {
+      s = emptySession('Codex', thread.id, thread.rollout_path || '');
+      const start = thread.created_at_ms || thread.created_at * 1000;
+      const end = thread.updated_at_ms || thread.updated_at * 1000;
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+      s.start = new Date(start).toISOString(); s.end = new Date(end).toISOString(); s.mtime = end;
+      sessions.push(s);
+    }
+    s.title = thread.name || thread.title || s.title;
+    s.cwd = thread.cwd || s.cwd;
+    const source = parse(thread.source) || thread.source;
+    s.subagent = !!(source && source.subagent);
+    s.where = codexWhere({ source, originator: thread.originator }) || s.where;
+    if (thread.model) s.models.add(thread.model);
+    if (sqliteOnly) {
+      for (const m of messages) {
+        if (m.type === 'userMessage') { const text = codexText(m.content); if (text) prompt(s, text); }
+        if (m.type === 'agentMessage' && m.text) s.lastReply = clip(m.text, 4000);
+      }
+      if (!s.prompts && thread.first_user_message) prompt(s, thread.first_user_message);
+      s.lastStop = turn && turn.status === 'inProgress' ? '' : 'end_turn';
+    }
+  }
   let limits = null, limitsTs = '';
   for (const s of sessions) if (s.limits && s.limitsTs > limitsTs) { limits = s.limits; limitsTs = s.limitsTs; }
   return { sessions, limits, limitsTs };

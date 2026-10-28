@@ -6,7 +6,8 @@ const os = require('os');
 const crypto = require('crypto');
 const { claudeSessions, codexData, antigravitySessions } = require('./lib');
 const { claudeQuota, codexQuota, CODEX } = require('./quotas');
-const { Peers } = require('./peers');
+const { Peers, compareSessions } = require('./peers');
+const { authorized, readJson, handleRequest } = require('./http-utils');
 const { Ollama } = require('./ollama');
 const ollamaChats = require('./ollama-chats');
 const { execFile } = require('child_process');
@@ -178,8 +179,6 @@ function claudeWindow(s) {
   return model.includes('[1m]') || s.context > 200e3 ? 1e6 : 200e3;
 }
 
-const ORDER = { permission: -1, waiting: 0, working: 1, idle: 2, closed: 3 };
-
 // --- Respostas rápidas ---------------------------------------------------
 // O HUD enfileira uma resposta por sessão; o hook-stop.js de cada sessão parada busca a cada 2 s.
 // A chave é o id que o próprio CLI passa ao hook: Claude = nome do .jsonl, Codex = uuid no fim do rollout.
@@ -318,16 +317,6 @@ async function focusSession(s) {
   return { ok: true, message: 'Sessão aberta no VS Code.' };
 }
 
-function readJson(req) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let size = 0;
-    req.on('data', (c) => { size += c.length; if (size < 20e3) chunks.push(c); });
-    // Junta os bytes antes de decodificar: um acento pode vir partido entre dois pacotes
-    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { resolve({}); } });
-  });
-}
-
 const allSessions = () => {
   const claude = claudeSessions();
   for (const s of claude) if (!s.contextWindow) s.contextWindow = claudeWindow(s);
@@ -410,7 +399,7 @@ function snapshot() {
     burn: burn(now, all.filter((s) => s.tool === 'Codex')),
     // Quem espera por você primeiro, depois quem trabalha (como no agent-hud)
     active: sessions.filter((s) => s.state !== 'closed')
-      .sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.end - a.end),
+      .sort(compareSessions),
     recent: sessions.filter((s) => s.state === 'closed').slice(0, 40),
   };
 }
@@ -469,18 +458,12 @@ const PUBLIC_ASSETS = {
   '/app.css': 'text/css; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8',
 };
 
-function authorized(req, url) {
-  const cookie = /(?:^|;\s*)hud=([a-f0-9]+)/.exec(req.headers.cookie || '');
-  const token = url.searchParams.get('t') || (cookie && cookie[1]) || '';
-  return token.length === config.token.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(config.token));
-}
-
 function send(res, status, type, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', ...headers });
   res.end(body);
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(handleRequest((req, res) => {
   if (!allowed(req.socket.remoteAddress)) return send(res, 403, 'text/plain', 'proibido');
   const url = new URL(req.url, 'http://x');
   const ip = req.socket.remoteAddress;
@@ -514,7 +497,7 @@ const server = http.createServer((req, res) => {
       send(res, 303, 'text/plain', '', { Location: `/?t=${config.token}` });
     });
   }
-  if (!authorized(req, url)) {
+  if (!authorized(req, url, config.token)) {
     if (url.pathname === '/') return send(res, 200, 'text/html; charset=utf-8', loginPage(''));
     return send(res, 401, 'text/plain; charset=utf-8', 'acesso negado');
   }
@@ -641,7 +624,7 @@ const server = http.createServer((req, res) => {
     return refreshQuotas().then(() => send(res, 200, 'application/json', JSON.stringify(hubSnapshot())));
   }
   send(res, 404, 'text/plain', 'não encontrado');
-});
+}));
 // A página consulta a cada 10 s: manter a conexão aberta evita um novo handshake a cada vez
 // (caro no Wi-Fi em economia de energia do iPad)
 server.keepAliveTimeout = 65e3;

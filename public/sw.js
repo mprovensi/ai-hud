@@ -1,7 +1,7 @@
 // Service worker do AI HUD: guarda a casca da página para abrir mesmo sem conexão.
 // Os dados (/api/*) vão sempre à rede, para nunca mostrar números velhos como se fossem atuais.
-var CACHE = 'ai-hud-v14';
-var SHELL = ['/', '/app.css?v=14', '/app.js?v=14', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+var CACHE = 'ai-hud-v16';
+var SHELL = ['/', '/app.css?v=16', '/app.js?v=16', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));

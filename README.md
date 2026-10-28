@@ -56,6 +56,8 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | --- | --- |
 | `server.js` | Servidor HTTP: snapshot, detalhe da sessão, PIN, respostas, permissões, Abrir no PC |
 | `lib.js` | Lê os logs do Claude Code, Codex e Antigravity (tokens, sessões, pedidos, respostas) |
+| `codex-history.js` | Recupera conversas do histórico paginado do Codex nos bancos SQLite locais, somente para leitura |
+| `http-utils.js` | Autenticação, validação de JSON e tratamento de erros das requisições HTTP |
 | `quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
 | `peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
 | `ollama-chats.js` | Conversas do app do Ollama (Windows) como sessões: lê o db.sqlite do app (só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
@@ -81,3 +83,13 @@ Em `~/.claude/settings.json`:
 ```
 
 O Codex recebe respostas pela fila nativa (`codex queue`), sem hook.
+
+O leitor respeita `CODEX_HOME` (padrão: `~/.codex`). Quando o Node oferece `node:sqlite`,
+também lê as conversas migradas para os bancos `state_*.sqlite` e `thread_history_*.sqlite`,
+sem alterá-los. Sem SQLite, continua lendo os JSONL. As métricas de tokens dependem dos
+logs JSONL; o HUD não estima tokens ausentes no histórico paginado.
+
+## Testes
+
+Execute `node --test` para rodar os testes de regressão, sem dependências externas.
+Eles usam dados simulados e um servidor HTTP temporário; não acionam os CLIs nem alteram as conversas locais.

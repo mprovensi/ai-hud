@@ -7,6 +7,20 @@ const http = require('http');
 
 const POLL_MS = 10e3;
 const STALE_MS = 60e3; // sem resposta há mais que isso: o PC aparece como fora do ar
+const ORDER = { permission: -1, waiting: 0, working: 1, idle: 2, closed: 3 };
+
+function compareSessions(a, b) {
+  return (ORDER[a.state] ?? 4) - (ORDER[b.state] ?? 4) || b.end - a.end;
+}
+
+function mergeSeries(target, source) {
+  const byTime = new Map(target.map((row) => [row.t, row]));
+  for (const row of source || []) {
+    const match = byTime.get(row.t);
+    if (!match) continue;
+    for (const tool of ['Claude Code', 'Codex']) match[tool] += row[tool] || 0;
+  }
+}
 
 function call(peer, method, route, body, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
@@ -83,10 +97,10 @@ class Peers {
       out.active = out.active.concat(this.tag(p.snap.active, p));
       out.recent = out.recent.concat(this.tag(p.snap.recent, p));
     }
-    out.active.sort((a, b) => b.end - a.end);
+    out.active.sort(compareSessions);
     out.recent = out.recent.sort((a, b) => b.end - a.end).slice(0, 40);
 
-    // Tokens: soma das máquinas (horas e dias alinhados por posição: relógios sincronizados)
+    // Snapshots podem atravessar a virada da hora/dia: alinha os intervalos pelo timestamp.
     out.today = JSON.parse(JSON.stringify(local.today));
     out.sessionsToday = { ...local.sessionsToday };
     out.hours = local.hours.map((h) => ({ ...h }));
@@ -99,8 +113,8 @@ class Peers {
         out.today[tool].cacheRead += s.today[tool].cacheRead;
       }
       for (const tool of Object.keys(out.sessionsToday)) out.sessionsToday[tool] += (s.sessionsToday && s.sessionsToday[tool]) || 0;
-      (s.hours || []).forEach((h, i) => { if (out.hours[i]) { out.hours[i]['Claude Code'] += h['Claude Code']; out.hours[i].Codex += h.Codex; } });
-      (s.days || []).forEach((d, i) => { if (out.days[i]) { out.days[i]['Claude Code'] += d['Claude Code']; out.days[i].Codex += d.Codex; } });
+      mergeSeries(out.hours, s.hours);
+      mergeSeries(out.days, s.days);
     }
 
     // Cotas: mesma conta nos dois PCs = mesma janela (reset igual) → vale a leitura mais recente
@@ -124,4 +138,4 @@ class Peers {
   broadcast(method, route, body) { return Promise.all(this.list.map((p) => call(p, method, route, body).catch(() => null))); }
 }
 
-module.exports = { Peers };
+module.exports = { Peers, compareSessions };

@@ -23,8 +23,22 @@ function toMs(v) {
 }
 
 let cont = {}; // chatId -> { messages: [{ role, content, at, model, tokens }], generating }
-try { cont = JSON.parse(fs.readFileSync(STORE, 'utf8')); } catch {}
+try {
+  const stored = JSON.parse(fs.readFileSync(STORE, 'utf8'));
+  if (stored && typeof stored === 'object' && !Array.isArray(stored)) cont = stored;
+} catch {}
 const save = () => { try { fs.writeFileSync(STORE, JSON.stringify(cont)); } catch {} };
+
+// Uma geração pertence ao processo anterior e não pode continuar após um reinício.
+let recovered = false;
+for (const entry of Object.values(cont)) {
+  if (!entry || !entry.generating) continue;
+  entry.generating = false;
+  if (!Array.isArray(entry.messages)) entry.messages = [];
+  entry.messages.push({ role: 'assistant', content: '⚠ Geração interrompida pelo reinício do HUD. Envie uma nova mensagem para continuar.', at: Date.now() });
+  recovered = true;
+}
+if (recovered) save();
 
 let cache = { sig: '', at: 0, chats: [] };
 

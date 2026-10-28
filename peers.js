@@ -7,10 +7,13 @@ const http = require('http');
 
 const POLL_MS = 10e3;
 const STALE_MS = 60e3; // sem resposta há mais que isso: o PC aparece como fora do ar
-const ORDER = { permission: -1, waiting: 0, working: 1, idle: 2, closed: 3 };
+const ORDER = { permission: 0, closed: 2 };
 
 function compareSessions(a, b) {
-  return (ORDER[a.state] ?? 4) - (ORDER[b.state] ?? 4) || b.end - a.end;
+  const priority = (ORDER[a.state] ?? 1) - (ORDER[b.state] ?? 1);
+  const recent = (b.end || 0) - (a.end || 0);
+  const aId = String(a.id || ''), bId = String(b.id || '');
+  return priority || recent || (aId < bId ? -1 : aId > bId ? 1 : 0);
 }
 
 function mergeSeries(target, source) {

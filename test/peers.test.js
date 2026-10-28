@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Peers } = require('../peers');
+const { Peers, compareSessions } = require('../peers');
 
 function snapshot(active = []) {
   return { active, recent: [], quotas: {}, today: { Codex: { fresh: 0, cacheRead: 0 } },
@@ -13,12 +13,27 @@ function hub(remote) {
   return peers;
 }
 
-test('hub prioritizes permissions and waiting sessions across machines', () => {
+test('hub prioritizes permissions then latest activity across machines', () => {
   const local = snapshot([{ id: 'waiting', state: 'waiting', end: 10 }, { id: 'permission-old', state: 'permission', end: 1 }]);
   const remote = snapshot([{ id: 'working', state: 'working', end: 100 }, { id: 'permission-new', state: 'permission', end: 2 }]);
   const result = hub(remote).merge(local, 'local');
-  assert.deepEqual(result.active.map((s) => s.id), ['m0:permission-new', 'permission-old', 'waiting', 'm0:working']);
+  assert.deepEqual(result.active.map((s) => s.id), ['m0:permission-new', 'permission-old', 'm0:working', 'waiting']);
   assert.equal(local.active[0].id, 'waiting', 'merge must not mutate cached snapshots');
+});
+
+test('recent Codex work precedes an older waiting Ollama without pinning tools', () => {
+  const codex = { id: 'codex', tool: 'Codex', state: 'working', end: 2000 };
+  const ollama = { id: 'ollama', tool: 'Ollama', state: 'waiting', end: 1000 };
+  assert.deepEqual([ollama, codex].sort(compareSessions).map((s) => s.id), ['codex', 'ollama']);
+  const newerOllama = { ...ollama, end: 3000 };
+  assert.deepEqual([codex, newerOllama].sort(compareSessions).map((s) => s.id), ['ollama', 'codex']);
+});
+
+test('equal timestamps have deterministic order regardless of input order', () => {
+  const a = { id: 'a', state: 'working', end: 1000 };
+  const b = { id: 'b', state: 'working', end: 1000 };
+  assert.deepEqual([b, a].sort(compareSessions).map((s) => s.id), ['a', 'b']);
+  assert.deepEqual([a, b].sort(compareSessions).map((s) => s.id), ['a', 'b']);
 });
 
 test('hub merges hours and days by timestamp across window boundaries', () => {

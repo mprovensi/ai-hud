@@ -403,7 +403,7 @@ function snapshot() {
   return {
     now, remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday, ollama: ollama.state,
     burn: burn(now, all.filter((s) => s.tool === 'Codex')),
-    // Quem espera por você primeiro, depois quem trabalha (como no agent-hud)
+    // Permissões pendentes primeiro; os demais cards seguem a última atividade.
     active: sessions.filter((s) => s.state !== 'closed')
       .sort(compareSessions),
     recent: sessions.filter((s) => s.state === 'closed').slice(0, 40),

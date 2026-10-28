@@ -112,13 +112,28 @@ test('legacy sessions without completion timestamps rearm on new activity', () =
   assert.equal(c.context.isSeen({ ...old, prompts: 2 }), false);
 });
 
-test('read cards move after pending cards and leave the waiting counter', () => {
+test('read cards keep their position and leave the waiting counter', () => {
   const c = client(), seen = session(), unread = session({ id: 'unread' }), working = session({ id: 'working', state: 'working' });
   c.context.rememberViewed(seen);
   c.context.acknowledgeViewed();
   c.context.render(snapshot([seen, unread, working]));
   const html = c.nodes.sessList.innerHTML;
+  assert.ok(html.indexOf('data-id="test"') < html.indexOf('data-id="unread"'));
   assert.ok(html.indexOf('data-id="unread"') < html.indexOf('data-id="working"'));
-  assert.ok(html.indexOf('data-id="working"') < html.indexOf('data-id="test"'));
   assert.ok(c.nodes.sessTitle.innerHTML.includes('1 esperando você'));
+});
+
+test('browser and home-screen shortcut show the same order with independent read histories', () => {
+  const browser = client(), shortcut = client();
+  const codex = session({ id: 'codex', end: 2000, completedAt: 2000 });
+  const ollama = session({ id: 'ollama', tool: 'Ollama', end: 1000 });
+  browser.context.rememberViewed(codex);
+  browser.context.acknowledgeViewed();
+  assert.equal(browser.context.isSeen(codex), true);
+  assert.equal(shortcut.context.isSeen(codex), false);
+  for (const c of [browser, shortcut]) {
+    c.context.render(snapshot([codex, ollama]));
+    const html = c.nodes.sessList.innerHTML;
+    assert.ok(html.indexOf('data-id="codex"') < html.indexOf('data-id="ollama"'));
+  }
 });

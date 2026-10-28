@@ -18,6 +18,8 @@ O servidor mostra o endereço na rede local; no aparelho, abra `http://<ip-do-pc
 
 Abrir e fechar os detalhes de uma sessão com **sua vez** marca a resposta como **vista** neste aparelho.
 Uma nova resposta volta a destacar o card e pedir sua atenção.
+A ordem dos cards é a mesma no navegador e no atalho: permissões pendentes primeiro,
+depois a última atividade. Marcar como visto limpa o alerta e mantém a posição do card.
 
 Para iniciar junto com o Windows, copie `start-hidden.vbs` para a pasta Inicializar
 (`Win+R` → `shell:startup`).

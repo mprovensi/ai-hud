@@ -369,10 +369,10 @@
     quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
     quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
     ollamaPanel(s);
-    // O servidor prioriza permissões e sessões esperando o usuário, inclusive no hub.
+    // O servidor prioriza permissões e depois a última atividade, inclusive no hub.
+    // Mantém a mesma ordem no navegador e no atalho, independentemente dos cards vistos.
     // Se sobrar espaço nas duas primeiras linhas, completa com as últimas sessões inativas.
-    var active = s.active.filter(function (x) { return !isSeen(x); })
-      .concat(s.active.filter(function (x) { return isSeen(x); }));
+    var active = s.active.slice();
     var used = active.length;
     var fill = s.recent.slice(0, Math.max(0, GRID_MIN - used));
     var html = '', waiting = 0, i;

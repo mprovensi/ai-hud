@@ -142,7 +142,10 @@ async function refresh(name, fn) {
     quotas[name] = { ...(await fn()), at: Date.now(), error: null };
     record(name, quotas[name]);
   } catch (e) {
-    quotas[name] = { ...prev, error: e.message, errorAt: Date.now() };
+    // Falha passageira com leitura anterior recente: mantém os números sem alarde.
+    // Só mostra o aviso se a última leitura boa tiver mais de 10 min.
+    const fresh = prev.windows && Object.keys(prev.windows).length && Date.now() - (prev.at || 0) < 10 * 60e3;
+    quotas[name] = e.soft && fresh ? prev : { ...prev, error: e.message, errorAt: Date.now() };
   }
 }
 let lastRefresh = 0;

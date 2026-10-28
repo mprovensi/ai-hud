@@ -48,9 +48,17 @@ async function claudeQuota() {
     (m) => (m.type === 'control_response' ? m.response : undefined));
   if (r.subtype === 'error') throw new Error(r.error || 'erro do Claude Code');
   const p = r.response || {};
-  if (!p.rate_limits_available || !p.rate_limits) return { plan: p.subscription_type || null, windows: {} };
+  if (!p.rate_limits_available) return { plan: p.subscription_type || null, windows: {} }; // login sem cota (API key)
   const ms = (w) => w && w.utilization != null && win(w.utilization, Date.parse(w.resets_at));
-  return { plan: p.subscription_type, windows: { five_hour: ms(p.rate_limits.five_hour), seven_day: ms(p.rate_limits.seven_day) } };
+  const windows = p.rate_limits ? { five_hour: ms(p.rate_limits.five_hour), seven_day: ms(p.rate_limits.seven_day) } : {};
+  // Plano com cota, mas sem números: o Claude Code não conseguiu ler (ex.: recusou por consultas
+  // frequentes). É leitura falha, não "sem cota": o servidor mantém a leitura anterior.
+  if (!windows.five_hour && !windows.seven_day) {
+    const e = new Error('leitura sem números (consultas frequentes?)');
+    e.soft = true;
+    throw e;
+  }
+  return { plan: p.subscription_type, windows };
 }
 
 async function codexQuota() {

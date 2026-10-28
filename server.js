@@ -344,6 +344,7 @@ function sessionDetail(id) {
     tool: s.tool, id: s.id, title: s.title || s.firstPrompt, project: s.project || base(s.cwd) || '—', cwd: s.cwd,
     models: [...s.models], start: Date.parse(s.start), end: Date.parse(s.end), state: state(s, now), now,
     completedAt: s.completedAt || 0,
+    ollamaGeneration: s.tool === 'Ollama' ? s.generation || null : undefined,
     input: s.input, output: s.output, cacheRead: s.cacheRead, cacheWrite: s.cacheWrite,
     context: s.context, contextWindow: s.contextWindow, prompts: s.prompts, toolCalls: s.toolCalls,
     lastTool: s.lastTool, tools, lastPrompt: s.lastPrompt, lastReply: s.lastReply,

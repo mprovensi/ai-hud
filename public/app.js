@@ -389,6 +389,66 @@
   // Gaveta da sessão, em ordem de uso: quem é → Abrir no PC → última resposta → Responder → mais detalhes (fechado)
   var moreOpen = store('hud.moreOpen') !== '0'; // aberto por padrão; lembra se o usuário fechar
 
+  function ollamaRuntime(d) {
+    var list = snap && snap.ollamas || [];
+    for (var i = 0; i < list.length; i++) if (d.machine && list[i].machine === d.machine) return list[i];
+    return !d.machine && list.length === 1 ? list[0] : null;
+  }
+
+  function ollamaMore(d) {
+    var terminal = d.where === 'ollama-run', runtime = d.ollama || ollamaRuntime(d);
+    var html = '<div class="stats">' + stat(terminal ? 'Terminal' : 'App', 'origem') +
+      stat(dur(Math.max(0, d.now - d.start)), terminal ? 'aberta há' : 'idade da conversa');
+    if (!terminal && d.prompts > 0) html += stat(d.prompts, 'pedidos na conversa');
+    if (!terminal && d.history && d.history.length) html += stat(d.history.length, 'mensagens exibidas');
+    var tokens = (d.input || 0) + (d.output || 0) + (d.cacheWrite || 0);
+    if (tokens > 0) html += stat(k(tokens), 'tokens registrados no HUD');
+    var generation = d.ollamaGeneration;
+    if (generation) {
+      if (generation.outputTokens > 0) html += stat(k(generation.outputTokens), 'tokens da última resposta');
+      if (generation.tokensPerSecond > 0) html += stat(Number(generation.tokensPerSecond).toFixed(1), 'tokens/s de geração');
+      if (generation.totalMs > 0) html += stat((generation.totalMs / 1000).toFixed(1) + 's', 'tempo total da resposta');
+    }
+    html += '</div>';
+    if (d.lastReply) html += '<h2>Última resposta</h2><div class="quote lastreply" style="margin-bottom:12px">' + esc(d.lastReply) + '</div>';
+    else if (terminal) html += '<p class="muted" style="margin-bottom:12px">O terminal não grava a última resposta para consulta no HUD.</p>';
+    if (!generation) html += '<p class="muted" style="margin-bottom:12px">Tokens/s são registrados nas novas respostas geradas pelo HUD.</p>';
+    var row = function (label, value) { return '<div class="dl"><span>' + esc(label) + '</span><span>' + esc(value) + '</span></div>'; };
+    html += row('Modelo', d.models.join(', ') || 'Não informado');
+    if (d.machine) html += row('PC', d.machine);
+    var pid = /(?:^|:)ollama-run-(\d+)$/.exec(d.id);
+    if (terminal && pid) html += row('Processo (PID)', pid[1]);
+    if (d.start) html += row(terminal ? 'Terminal aberto' : 'Conversa iniciada', when(d.start));
+    if (d.end && (!terminal || d.lastPrompt)) html += row(terminal ? 'Último registro no histórico compartilhado' : 'Última atividade', when(d.end));
+    if (runtime) {
+      html += row('Servidor Ollama', runtime.online ? 'Online' : 'Fora do ar');
+      if (runtime.version) html += row('Versão', runtime.version);
+      if (runtime.installed != null) html += row('Modelos instalados', runtime.installed);
+      var loaded = null, models = runtime.models || [];
+      for (var i = 0; i < models.length && !loaded; i++) {
+        for (var j = 0; j < d.models.length; j++) {
+          if (String(models[i].name).replace(/:latest$/, '') === String(d.models[j]).replace(/:latest$/, '')) loaded = models[i];
+        }
+      }
+      if (runtime.online) html += row('Modelo na memória', loaded ? 'Carregado' : 'Não carregado');
+      if (loaded && runtime.online) {
+        if (loaded.params) html += row('Parâmetros', loaded.params);
+        if (loaded.quant) html += row('Quantização', loaded.quant);
+        if (loaded.size > 0) html += row('Memória do modelo', gb(loaded.size));
+        if (loaded.vram > 0) html += row('VRAM do modelo', gb(loaded.vram));
+        if (loaded.gpuPct != null) html += row('Memória na GPU', loaded.gpuPct + '%');
+        if (loaded.expiresAt) html += row('Carregado até', hm(loaded.expiresAt));
+      }
+      var gpu = runtime.gpu;
+      if (gpu) {
+        html += row('GPU do PC', gpu.name);
+        if (gpu.util != null && gpu.temp != null) html += row('Uso · temperatura da GPU', gpu.util + '% · ' + gpu.temp + '°C');
+        if (gpu.memTotal > 0) html += row('VRAM do PC', gb(gpu.memUsed * 1048576) + ' / ' + gb(gpu.memTotal * 1048576));
+      }
+    }
+    return html;
+  }
+
   function renderDetail(d) {
     var now = d.now, html = '';
     var pct = d.contextWindow ? Math.round(d.context / d.contextWindow * 100) : 0;
@@ -417,8 +477,11 @@
 
     html += '<div class="panel more' + (moreOpen ? ' open' : '') + '" id="more"><button class="mhead row" id="moreToggle">' +
       '<h2 class="grow">Mais detalhes</h2><span class="arrow">▸</span></button><div class="mbody">';
-    if (d.lastPrompt) html += '<h2>Seu último pedido</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
-    html += '<div class="stats">' +
+    if (d.lastPrompt) html += '<h2>' + (d.where === 'ollama-run' ? 'Último comando no histórico compartilhado' : 'Seu último pedido') + '</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
+    if (d.tool === 'Ollama') {
+      html += ollamaMore(d);
+    } else {
+      html += '<div class="stats">' +
       stat(k(d.input + d.output + d.cacheWrite), 'tokens novos') + stat(k(d.output), 'saída') +
       stat(k(d.cacheRead), 'lidos do cache') + stat(k(d.cacheWrite), 'gravados no cache') +
       stat(d.context ? k(d.context) + (pct ? ' <small class="muted">' + pct + '%</small>' : '') : '—', 'contexto atual') +
@@ -440,6 +503,7 @@
     }
     html += '<div class="dl" style="margin-top:12px"><span>Modelo</span><span>' + esc(d.models.join(', ') || '—') + '</span></div>' +
       '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
+    }
     html += '</div></div>';
     setOverlay(html);
     bindReply(d);
@@ -555,6 +619,7 @@
     request('GET', '/api/session?id=' + encodeURIComponent(id), function (err, d) {
       if (location.hash !== '#s=' + encodeURIComponent(id)) return;
       if (err) return setOverlay(head('Sessão') + '<p class="empty">' + esc(err.message) + '</p>');
+      if (d.tool === 'Ollama') d.ollama = ollamaRuntime(d);
       // Só redesenha se algo mudou ("now" sempre muda), preservando a rolagem da última resposta
       var sig = JSON.stringify(d).replace(/"now":\d+/, '');
       var prev = detailCache[id] && JSON.stringify(detailCache[id]).replace(/"now":\d+/, '');

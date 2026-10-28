@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { generationMetrics } = require('./ollama-metrics');
 
 const DB = path.join(process.env.LOCALAPPDATA || '', 'Ollama', 'db.sqlite');
 const STORE = path.join(__dirname, 'ollama-replies.json');
@@ -90,6 +91,7 @@ function toSession(c) {
     input: 0, output: extra.reduce((a, m) => a + (m.tokens || 0), 0), cacheRead: 0, cacheWrite: 0,
     context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,
     history: all, continued: extra.length > 0,
+    generation: replies.length ? replies[replies.length - 1].metrics || null : null,
   };
 }
 
@@ -116,7 +118,8 @@ function replyToChat(session, text, ollamaUrl) {
       let j = {};
       try { j = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {}
       const content = (j.message && j.message.content) || (j.error ? `⚠ ${j.error}` : '⚠ resposta vazia');
-      entry.messages.push({ role: 'assistant', content, at: Date.now(), model, tokens: (j.prompt_eval_count || 0) + (j.eval_count || 0) });
+      entry.messages.push({ role: 'assistant', content, at: Date.now(), model,
+        tokens: (j.prompt_eval_count || 0) + (j.eval_count || 0), metrics: generationMetrics(j) });
       entry.generating = false;
       save();
     });

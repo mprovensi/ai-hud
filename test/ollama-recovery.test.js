@@ -7,13 +7,20 @@ const { EventEmitter } = require('node:events');
 
 const source = fs.readFileSync(path.join(__dirname, '../ollama-chats.js'), 'utf8');
 
-function load(store) {
+function load(store, chats) {
   let disk = JSON.stringify(store), writes = 0;
   const requests = [];
   const sandbox = { module: { exports: {} }, __dirname, process, Buffer, URL, setInterval: () => {},
     require: (name) => {
-      if (name === 'fs') return { readFileSync: () => disk, writeFileSync: (file, data) => { disk = data; writes++; } };
-      if (name === 'node:sqlite') throw new Error('sqlite disabled in test');
+      if (name === 'fs') return { readFileSync: () => disk, writeFileSync: (file, data) => { disk = data; writes++; }, statSync: () => ({ mtimeMs: 1, size: 1 }) };
+      if (name === 'node:sqlite') {
+        if (!chats) throw new Error('sqlite disabled in test');
+        return { DatabaseSync: class {
+          prepare(sql) { return { all: () => sql.includes('FROM chats') ? chats : [] }; }
+          close() {}
+        } };
+      }
+      if (name === './ollama-metrics') return require('../ollama-metrics');
       if (name === 'child_process') return { execFile: () => {} };
       if (name === 'http') return { request: (url, options, respond) => {
         const req = new EventEmitter();
@@ -64,4 +71,19 @@ test('recovery tolerates an invalid persisted root or interrupted entry', () => 
   const loaded = load({ invalid: null, interrupted: { generating: true } });
   assert.equal(loaded.state().interrupted.generating, false);
   assert.equal(loaded.state().interrupted.messages.length, 1);
+});
+
+test('reply saves measured generation speed and exposes it with the last response', async () => {
+  const chats = [{ id: 'test', title: 'Teste', created_at: 1793181600 }];
+  const loaded = load({}, chats);
+  const session = { chatId: 'test', models: new Set(['test-model']), history: [] };
+  await loaded.api.replyToChat(session, 'pergunta', 'http://localhost:11434');
+  loaded.requests[0].respond({ message: { content: 'resposta medida' }, prompt_eval_count: 30,
+    eval_count: 100, eval_duration: 2e9, total_duration: 3e9 });
+  const stored = loaded.state().test.messages.at(-1);
+  assert.equal(stored.metrics.tokensPerSecond, 50);
+  const restored = load(loaded.state(), chats).api.ollamaChatSessions()[0];
+  assert.equal(restored.lastReply, 'resposta medida');
+  assert.equal(restored.generation.tokensPerSecond, 50);
+  assert.equal(restored.generation.outputTokens, 100);
 });

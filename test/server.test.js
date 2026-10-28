@@ -69,4 +69,8 @@ test('actual server routes reject null bodies and malformed tokens without side 
   assert.equal(JSON.parse(responseBody).active[0].completedAt, now);
   assert.equal(await call('/api/session?id=' + session.id), 200);
   assert.equal(JSON.parse(responseBody).completedAt, now);
+  const ollama = { ...session, id: 'ollama-test', tool: 'Ollama', generation: { outputTokens: 100, tokensPerSecond: 50, totalMs: 3000 } };
+  sessions.push(ollama);
+  assert.equal(await call('/api/session?id=' + ollama.id), 200);
+  assert.deepEqual(JSON.parse(responseBody).ollamaGeneration, ollama.generation);
 });

@@ -62,6 +62,7 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | `peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
 | `ollama-chats.js` | Conversas do app do Ollama (Windows) como sessões: lê o db.sqlite do app (só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
 | `ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
+| `ollama-metrics.js` | Converte os tempos medidos pelo Ollama em duração da resposta e tokens por segundo |
 | `hook-stop.js` | Hook `Stop` do Claude Code: entrega respostas enviadas pelo HUD |
 | `hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
 | `focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude); só Windows |
@@ -88,6 +89,12 @@ O leitor respeita `CODEX_HOME` (padrão: `~/.codex`). Quando o Node oferece `nod
 também lê as conversas migradas para os bancos `state_*.sqlite` e `thread_history_*.sqlite`,
 sem alterá-los. Sem SQLite, continua lendo os JSONL. As métricas de tokens dependem dos
 logs JSONL; o HUD não estima tokens ausentes no histórico paginado.
+
+No Ollama, **Mais detalhes** mostra os dados disponíveis da conversa, do modelo e do PC.
+Respostas geradas pelo HUD registram tokens de saída, tempo total e a média de tokens/s,
+calculada com `eval_count / eval_duration * 1e9` ([métricas da API](https://docs.ollama.com/api/usage)).
+O histórico do terminal não salva respostas nem essas métricas; conversas antigas não ganham medições retroativas.
+Em instalações com vários PCs, o HUD da máquina que gera a resposta também precisa estar atualizado.
 
 ## Testes
 

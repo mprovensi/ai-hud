@@ -27,22 +27,25 @@
   function toolIndex(t) { for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i] === t) return i; return 0; }
 
   // ---- Cotas ---------------------------------------------------------------
+  // Só avisa quando preocupa (ritmo para passar de 80% ou acabar antes do reset); no ritmo, nada
   function paceText(w, now) {
     var p = w.pace;
-    if (w.used >= 100) return '<span class="hi">esgotada · volta em ' + dur(w.resetsAt - now) + '</span>';
+    if (w.used >= 100) return '<span class="hi">esgotada</span>';
     if (!p) return '';
     if (p.runsOutIn != null) return '<span class="hi">▲ acaba em ' + dur(p.runsOutIn) + '</span>';
-    if (p.projected != null) return '<span class="' + (p.projected >= 80 ? 'warn' : 'lo') + '">~' + p.projected + '% no reset</span>';
+    if (p.projected != null && p.projected >= 80) return '<span class="warn">~' + p.projected + '% no reset</span>';
     return '';
   }
 
-  function gauge(label, w, now) {
+  // Uma linha: rótulo curto, barra (com a marca do ritmo esperado) e %; embaixo, o reset e o aviso
+  function gauge(label, title, w, now) {
     if (!w) return '';
     var used = Math.max(0, Math.min(100, w.used)), mark = w.pace ? w.pace.expected : null;
-    return '<div class="gauge"><div class="row"><span class="lbl grow">' + label + '</span><span class="pct">' + Math.round(w.used) + '%</span></div>' +
-      '<div class="track"><div class="fill" style="width:' + used + '%;background:' + levelColor(used) + '"></div>' +
+    return '<div class="gauge" title="' + title + '"><div class="row"><span class="lbl">' + label + '</span>' +
+      '<div class="track grow"><div class="fill" style="width:' + used + '%;background:' + levelColor(used) + '"></div>' +
       (mark != null ? '<div class="mark" style="left:' + Math.min(99, mark) + '%"></div>' : '') + '</div>' +
-      '<div class="foot row"><span class="muted grow">reset em ' + dur(w.resetsAt - now) + '</span>' + paceText(w, now) + '</div></div>';
+      '<span class="pct">' + Math.round(w.used) + '%</span></div>' +
+      '<div class="foot row"><span class="muted grow">↻ ' + dur(w.resetsAt - now) + '</span>' + paceText(w, now) + '</div></div>';
   }
 
   // Ícones das extensões do VS Code, servidos pelo HUD já na cor de referência de cada IA
@@ -60,12 +63,12 @@
   }
 
   function quotaPanel(id, name, idx, q, now, used) {
-    var html = '<div class="qhead row">' + brandIcon(idx) + '<span class="name">' + name + '</span><small>' + esc(q && q.plan || '') + '</small>' +
-      '<span class="grow"></span><span class="tokens">' + k(used) + ' <small>tokens hoje</small></span></div>';
+    var html = '<div class="qhead row"' + (q && q.plan ? ' title="Plano ' + esc(q.plan) + '"' : '') + '>' + brandIcon(idx) + '<span class="name">' + name + '</span>' +
+      '<span class="grow"></span><span class="tokens" title="Tokens usados hoje">' + k(used) + ' <small>hoje</small></span></div>';
     if (!q) html += '<div class="empty">lendo…</div>';
     else {
       var w = q.windows || {};
-      if (w.five_hour || w.seven_day) html += gauge('Janela de 5 horas', w.five_hour, now) + gauge('Semana', w.seven_day, now);
+      if (w.five_hour || w.seven_day) html += gauge('5h', 'Janela de 5 horas', w.five_hour, now) + gauge('7d', 'Semana', w.seven_day, now);
       else if (!q.error) html += '<div class="empty">sem cota de plano</div>';
       if (q.error) html += '<div class="qerr">⚠ ' + esc(q.error) + '</div>';
     }
@@ -105,44 +108,57 @@
     return '<span class="badge closed">' + when(x.end) + '</span>';
   }
 
+  // Uso do contexto como anel (pizza vazada) com o % no meio; SVG porque o Safari 9 não tem
+  // conic-gradient. Detalhe (usado / janela) fica no title e na gaveta da sessão.
+  function ctxPie(x) {
+    if (!x.context || !x.contextWindow) return '';
+    var pct = Math.min(100, x.context / x.contextWindow * 100), r = 15.9155; // circunferência = 100
+    return '<span class="pie" title="Contexto ' + Math.round(pct) + '% · ' + k(x.context) + ' de ' + k(x.contextWindow) + '">' +
+      '<svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="' + r + '" class="pbg"/>' +
+      '<circle cx="18" cy="18" r="' + r + '" class="pfg" stroke="' + levelColor(pct) + '" stroke-dasharray="' + pct.toFixed(1) + ' 100"/></svg>' +
+      '<span class="pv">' + Math.round(pct) + '</span></span>';
+  }
+
   function sessRow(x, now) {
-    var i = toolIndex(x.tool), meta = [], bar = '';
-    if (x.context && x.contextWindow) {
-      var pct = Math.min(100, x.context / x.contextWindow * 100);
-      bar = '<div class="ctx"><div style="width:' + pct + '%;background:' + levelColor(pct) + '"></div></div>';
-      meta.push('contexto ' + Math.round(pct) + '%');
-    }
+    var i = toolIndex(x.tool), meta = [];
     meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
     meta.push(dur(now - x.start));
     return '<button class="sess b' + i + '" data-id="' + esc(x.id) + '">' +
       '<div class="row"><span class="proj ell">' + esc(x.project) + '</span><span class="tool">' + esc(x.tool) + '</span>' +
       '<span class="grow"></span>' + badge(x, now) + '<span class="chev">›</span></div>' +
       (x.title ? '<div class="ttl ell">' + esc(x.title) + '</div>' : '') +
-      '<div class="l3 row">' + (bar || '<span class="grow"></span>') + '<span>' + meta.join(' · ') + '</span></div></button>';
+      '<div class="l3 row"><span class="grow">' + meta.join(' · ') + '</span>' + ctxPie(x) + '</div></button>';
   }
 
-  // Cartão da grade principal (a lista de Recentes na gaveta continua em linhas)
+  // Cartão da grade principal (a lista de Recentes na gaveta continua em linhas). Só o essencial:
+  // IA + projeto + contexto, estado + PC, assunto e uso; o último pedido e o resto ficam na gaveta.
   function sessCard(x, now) {
-    var i = toolIndex(x.tool), meta = [], bar = '';
-    if (x.context && x.contextWindow) {
-      var pct = Math.min(100, x.context / x.contextWindow * 100);
-      bar = '<div class="ctx"><div style="width:' + pct + '%;background:' + levelColor(pct) + '"></div></div>';
-      meta.push('ctx ' + Math.round(pct) + '%');
-    }
-    meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens));
+    var i = toolIndex(x.tool), meta = [];
+    meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
     meta.push(dur(now - x.start));
     var ping = pings[x.id] && now - pings[x.id] < 3000 ? ' ping' : '';
     // Cada aviso anima uma vez; redesenhar o painel não reinicia o destaque.
     delete pings[x.id];
     return '<button class="card t' + i + (x.state === 'waiting' && !isSeen(x) ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
-      // Ícone da IA antes do nome da sessão; na linha de baixo, o PC onde ela roda
-      '<div class="row">' + toolIcon(i) + '<span class="proj ell grow">' + esc(x.project) + '</span><span class="chev">›</span></div>' +
-      '<div class="sub row">' + badge(x, now) + '<span class="tool ell grow">' + (x.machine ? '🖥 ' + esc(x.machine) : esc(x.tool)) + '</span>' +
-      // Só o símbolo, para sobrar espaço para o nome do PC: ✉ resposta na fila, ↩ dá para responder ao vivo
+      // Ícone da IA antes do nome da sessão; à direita, o anel do contexto
+      '<div class="row">' + toolIcon(i) + '<span class="proj ell grow">' + esc(x.project) + '</span>' + ctxPie(x) + '</div>' +
+      // Estado; o PC onde a sessão roda fica só na gaveta
+      '<div class="sub row">' + badge(x, now) + '<span class="grow"></span>' +
+      // Só o símbolo: ✉ resposta na fila, ↩ dá para responder ao vivo
       (x.queued ? '<span class="rflag queued" title="Resposta na fila">✉</span>' : x.listening ? '<span class="rflag" title="Pode responder ao vivo">↩</span>' : '') + '</div>' +
-      (x.title ? '<div class="ttl ell">' + esc(x.title) + '</div>' : '') +
-      (x.lastPrompt && x.lastPrompt.toLowerCase() !== String(x.title).toLowerCase() ?'<div class="ask">' + esc(x.lastPrompt) + '</div>' : '') +
-      '<div class="foot">' + bar + '<div class="meta">' + meta.join(' · ') + '</div></div></div></button>';
+      // Assunto: o título da sessão ou, sem título, o último pedido
+      (x.title || x.lastPrompt ? '<div class="ttl ell">' + esc(x.title || x.lastPrompt) + '</div>' : '') +
+      lastMsg(x) +
+      '<div class="foot meta">' + meta.join(' · ') + '</div></div></button>';
+  }
+
+  // Última mensagem numa linha: o seu pedido enquanto a IA trabalha (ou pede permissão);
+  // depois, o começo da resposta. Repetir o assunto não ajuda: nesse caso não mostra nada.
+  function lastMsg(x) {
+    var asking = x.state === 'working' || x.state === 'permission' || !x.lastReply;
+    var text = asking ? x.lastPrompt : x.lastReply;
+    if (!text || text.toLowerCase() === String(x.title || x.lastPrompt).toLowerCase()) return '';
+    return '<div class="lmsg ell' + (asking ? ' me' : '') + '"><span class="who">' + (asking ? 'você' : '↳') + '</span>' + esc(text) + '</div>';
   }
 
   // ---- Burn-up da janela de 5h ----------------------------------------------

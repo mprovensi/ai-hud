@@ -41,8 +41,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .omodel { margin-top: 6px; font-size: .9em; }
 .osmall2 { font-size: .74em; }
 .ouse { margin-top: 6px; }
-/* Ollama: cartão na grade (borda lilás, ícone 🦙) */
-.t3 .in { border-top-color: #b39ddb !important; }
 
 .card .llama { margin-right: .3em; }
 .llm { background: #3a2f52; color: #d8cbf2; }
@@ -51,17 +49,26 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .gtitle { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin: 4px 2px 6px; }
 .grid { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -5px; }
 .card { display: block; padding: 0 5px 10px; }
-.card .in { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background: #1c1c1a;
-  border: 1px solid #2c2c29; border-top: 4px solid #3a3a36; border-radius: 12px; padding: 10px 12px; }
-.card:active .in { background: #232321; }
-.card.waiting-card .in { border-left-color: #3b4a7a; border-right-color: #3b4a7a; border-bottom-color: #3b4a7a; box-shadow: 0 1px 0 1px #3b4a7a; }
+.card .in { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background-color: #1c1c1a;
+  border: 1px solid #2c2c29; border-radius: 12px; padding: 10px 12px; }
+.card:active .in { background-color: #232321; }
+/* Altura fixa no iPad: as linhas não encolhem (cortariam o texto) */
+.card .in > * { -webkit-flex-shrink: 0; flex-shrink: 0; }
+/* Cor da IA: degradê leve no canto superior esquerdo, sumindo antes do meio (texto sempre sobre
+   fundo quase neutro). O ícone continua identificando a IA; a cor só reforça. Bordas ficam para o estado. */
+.t0 .in { background-image: linear-gradient(150deg, rgba(224, 138, 102, .17), rgba(224, 138, 102, 0) 55%); }
+.t1 .in { background-image: linear-gradient(150deg, rgba(95, 184, 164, .15), rgba(95, 184, 164, 0) 55%); }
+.t2 .in { background-image: linear-gradient(150deg, rgba(125, 155, 240, .15), rgba(125, 155, 240, 0) 55%); }
+.t3 .in { background-image: linear-gradient(150deg, rgba(179, 157, 219, .17), rgba(179, 157, 219, 0) 55%); }
+.card.waiting-card .in { border-color: #3b4a7a; box-shadow: 0 0 0 1px #3b4a7a; }
 /* Acabou de passar a esperar por você: o cartão pisca por alguns ciclos */
 /* Sessão inativa que completa a grade: borda tracejada e mais apagada */
-/* Topo colorido liso; laterais e base tracejadas com traços longos (o "dashed" do CSS não deixa
+/* Sem a cor da IA; contorno tracejado com traços longos (o "dashed" do CSS não deixa
    escolher o tamanho do traço, então são gradientes repetidos: 7px de traço, 4px de espaço) */
 .card.old-card .in {
-  opacity: .7; border-left: 0; border-right: 0; border-bottom: 0; padding: 10px 13px 11px;
+  opacity: .7; border: 0; padding: 11px 13px;
   background:
+    linear-gradient(to right, #55554f 64%, transparent 64%) left top / 11px 2px repeat-x,
     linear-gradient(to right, #55554f 64%, transparent 64%) left bottom / 11px 2px repeat-x,
     linear-gradient(#55554f 64%, transparent 64%) left top / 2px 11px repeat-y,
     linear-gradient(#55554f 64%, transparent 64%) right top / 2px 11px repeat-y,
@@ -69,19 +76,31 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .card.old-card:active .in { opacity: 1; }
 .card.ping .in { -webkit-animation: ping 1s ease-in-out 3; animation: ping 1s ease-in-out 3; }
-@-webkit-keyframes ping { 50% { background: #2b3556; } }
-@keyframes ping { 50% { background: #2b3556; } }
-.t0 .in { border-top-color: #e08a66; } .t1 .in { border-top-color: #5fb8a4; } .t2 .in { border-top-color: #7d9bf0; }
+@-webkit-keyframes ping { 50% { background-color: #2b3556; } }
+@keyframes ping { 50% { background-color: #2b3556; } }
 .card .proj { font-weight: 700; font-size: 1.05em; }
+/* Primeira linha com a altura do anel de contexto, mesmo sem ele: os cartões ficam alinhados */
+.card .in > .row:first-child { min-height: 1.65em; }
 .card .sub { margin-top: 3px; }
 .card .sub .tool { font-size: .72em; color: #8d8d87; }
 .card .sub .badge { margin-left: 0; margin-right: 6px; }
-.card .ttl { color: #d5d5cf; font-size: .82em; margin-top: 6px; }
-/* Último pedido do usuário: 2 linhas, como citação */
-.card .ask { color: #8d8d87; font-size: .74em; font-style: italic; line-height: 1.3; margin-top: 4px; padding-left: 8px;
-  border-left: 2px solid #3a3a36; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.card .foot { margin-top: auto; padding-top: 6px; }
-.card .meta { font-size: .72em; color: #8d8d87; margin-top: 4px; }
+.card .ttl { color: #d5d5cf; font-size: .82em; margin-top: 8px; }
+/* Última mensagem: uma linha pequena; "você" no seu pedido, ↳ na resposta da IA */
+.card .lmsg { font-size: .72em; color: #8d8d87; margin-top: 3px; }
+.card .lmsg .who { color: #6f6f6a; margin-right: .4em; }
+.card .lmsg.me .who { color: #8d9bc4; }
+.card .foot { margin-top: auto; padding-top: 8px; }
+.card .meta { font-size: .72em; color: #8d8d87; }
+/* Contexto: anel com o % no meio (trilho cinza, arco na cor do nível, começando no topo) */
+.pie { position: relative; display: inline-block; width: 1.65em; height: 1.65em; margin-left: 8px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.pie svg { width: 100%; height: 100%; -webkit-transform: rotate(-90deg); transform: rotate(-90deg); }
+.pie circle { fill: none; stroke-width: 4; }
+.pie .pbg { stroke: #2c2c29; }
+.pie .pfg { stroke-linecap: round; }
+.pie .pv { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+  font-size: .6em; font-weight: 700; color: #d5d5cf; }
+.sess .pie { width: 1.5em; height: 1.5em; }
 .rflag { font-size: .7em; color: #b3c6ff; white-space: nowrap; margin-left: 6px; }
 .rflag.queued { color: #e0b45a; }
 
@@ -155,12 +174,15 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* No título da gaveta o texto é maior: ícone menor, alinhado ao nome */
 .dtitle .brand { width: .75em; height: .75em; margin-right: .35em; vertical-align: -.02em; }
 .qhead small { color: #8d8d87; font-size: .7em; text-transform: uppercase; margin-left: .5em; }
-.qhead .tokens { font-weight: 700; font-size: 1.1em; white-space: nowrap; }
+.qhead .tokens { font-weight: 400; font-size: .9em; color: #b5b5ae; white-space: nowrap; }
 .qhead .tokens small { text-transform: none; font-weight: 400; margin-left: .2em; }
-.gauge + .gauge { margin-top: 10px; }
-.gauge .lbl { font-size: .8em; color: #b5b5ae; }
-.gauge .pct { font-size: 1.6em; font-weight: 700; line-height: 1.1; }
+.gauge + .gauge { margin-top: 8px; }
+/* Rótulo e % com largura fixa: as barras das duas janelas ficam alinhadas */
+.gauge .lbl { width: 1.9em; font-size: .8em; color: #8d8d87; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.gauge .pct { width: 2.6em; text-align: right; font-size: 1.15em; font-weight: 700; line-height: 1.1; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .track { position: relative; height: 10px; background: #2c2c29; border-radius: 5px; margin: 4px 0 4px; }
+.gauge .track { margin: 0 0 0 6px; }
+.gauge .foot { padding-left: 2.1em; margin-top: 2px; }
 .track .fill { height: 100%; border-radius: 5px; }
 .track .mark { position: absolute; top: -3px; width: 2px; height: 16px; background: #ecece8; opacity: .7; border-radius: 1px; }
 .gauge .foot { font-size: .76em; }
@@ -175,7 +197,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .sess .tool { font-size: .72em; color: #8d8d87; margin-left: 6px; white-space: nowrap; }
 .sess .ttl { color: #b5b5ae; font-size: .86em; margin-top: 1px; }
 .sess .l3 { font-size: .74em; color: #8d8d87; margin-top: 5px; }
-.sess .l3 .ctx { -webkit-flex: 1; flex: 1; margin-right: 10px; }
 .chev { color: #5c5c57; font-size: 1.3em; margin-left: 6px; line-height: 1; }
 .badge { font-size: .72em; border-radius: 10px; padding: 2px 8px; margin-left: 8px; white-space: nowrap; }
 .working { background: #2f4d3a; color: #9fe0b4; }
@@ -195,6 +216,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .pulse { -webkit-animation: pulse 1.6s infinite; animation: pulse 1.6s infinite; }
 @-webkit-keyframes pulse { 50% { opacity: .35; } }
 @keyframes pulse { 50% { opacity: .35; } }
+/* Barra de contexto na gaveta da sessão */
 .ctx { height: 5px; background: #2c2c29; border-radius: 3px; overflow: hidden; }
 .ctx div { height: 100%; }
 .empty { color: #8d8d87; font-size: .9em; padding: 6px 0; }
@@ -254,19 +276,19 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .qhead small { font-size: .75em; }
   .gauge + .gauge { margin-top: 4px; }
   .gauge .lbl { font-size: .85em; }
-  .gauge .pct { font-size: 1.3em; }
+  .gauge .pct { font-size: 1.1em; }
   .track { height: 10px; margin: 2px 0; }
+  .gauge .track { margin: 0 0 0 6px; }
   .track .mark { height: 18px; }
   .gauge .foot { font-size: .82em; }
   .sess { padding: 8px 0 8px 12px; }
   .sess .tool { font-size: .78em; }
   .sess .ttl { font-size: .9em; }
   .sess .l3 { font-size: .8em; margin-top: 4px; }
-  .ctx { height: 7px; }
   .badge { font-size: .8em; }
   .axis { font-size: .75em; }
   .card { width: 33.333%; }
-  .card .in { height: 198px; }
+  .card .in { height: 186px; }
   .burnbox { height: 260px; }
   .burnbox text { font-size: 15px; }
   #overlay { width: 62%; min-width: 560px; padding: 16px 20px 28px; }

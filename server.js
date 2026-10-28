@@ -405,6 +405,8 @@ function snapshot() {
     completedAt: s.completedAt || 0,
     tokens: s.input + s.output + s.cacheWrite + (s.subTokens || 0), prompts: s.prompts,
     lastPrompt: (s.lastPrompt || '').replace(/\s+/g, ' ').slice(0, 160),
+    // Começo da última resposta, em uma linha e sem marcação de Markdown, para o cartão
+    lastReply: (s.lastReply || '').slice(0, 400).replace(/[#*`]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 160),
     context: s.context, contextWindow: s.contextWindow, ...replyInfo(s, now),
   });
   const sessions = all.filter((s) => !s.subagent).map(view).sort((a, b) => b.end - a.end);

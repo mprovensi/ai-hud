@@ -290,6 +290,8 @@ const openUri = (uri) => new Promise((resolve) => execFile('explorer.exe', [uri]
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function focusSession(s) {
+  // Trazer janelas para frente usa PowerShell/Win32 (focus.ps1): só no Windows por enquanto
+  if (process.platform !== 'win32') return { ok: false, message: 'Abrir no PC ainda só funciona em PCs com Windows.' };
   const plan = focusPlan(s);
   if (!plan) {
     return { ok: false, message: s.where === 'claude-desktop' ? 'Essa sessão não está mais no app do Claude.'

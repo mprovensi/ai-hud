@@ -1,11 +1,28 @@
 // Cotas ao vivo, perguntando aos próprios CLIs (sem gastar turno de modelo).
 // Técnica do agent-hud-open: Claude via control_request get_usage, Codex via app-server.
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const { HOME } = require('./lib');
 
-const CLAUDE = path.join(HOME, '.local', 'bin', 'claude.exe');
-const CODEX = path.join(HOME, 'AppData', 'Local', 'Programs', 'OpenAI', 'Codex', 'bin', 'codex.exe');
+// Acha o executável: variável de ambiente, locais conhecidos de cada sistema, depois o PATH.
+// No Windows só .exe: spawn sem shell não executa .cmd.
+const WIN = process.platform === 'win32';
+function findExe(name, envVar, known) {
+  if (process.env[envVar]) return process.env[envVar];
+  const file = WIN ? `${name}.exe` : name;
+  const dirs = known.concat((process.env.PATH || '').split(path.delimiter).filter(Boolean));
+  for (const dir of dirs) {
+    const p = path.join(dir, file);
+    try { if (fs.statSync(p).isFile()) return p; } catch {}
+  }
+  return file; // deixa o spawn tentar; se não existir, a cota mostra o erro
+}
+
+const CLAUDE = findExe('claude', 'AI_HUD_CLAUDE', [path.join(HOME, '.local', 'bin'), path.join(HOME, '.claude', 'local')]);
+const CODEX = findExe('codex', 'AI_HUD_CODEX', WIN
+  ? [path.join(HOME, 'AppData', 'Local', 'Programs', 'OpenAI', 'Codex', 'bin')]
+  : [path.join(HOME, '.local', 'bin'), '/usr/local/bin']);
 
 // Inicia o CLI, manda as mensagens JSON-lines e resolve com a primeira resposta que `pick` aceitar
 function ask(exe, args, env, messages, pick, timeoutMs = 40000) {

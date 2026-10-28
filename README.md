@@ -19,6 +19,21 @@ O servidor mostra o endereço na rede local; no aparelho, abra `http://<ip-do-pc
 Para iniciar junto com o Windows, copie `start-hidden.vbs` para a pasta Inicializar
 (`Win+R` → `shell:startup`).
 
+## Linux
+
+Funciona igual (servidor, sessões, tokens, cotas, respostas, permissões, hub), exceto
+**Abrir no PC**, que por enquanto só existe no Windows. O `claude` e o `codex` são
+procurados em `~/.local/bin` e no `PATH` (ou defina `AI_HUD_CLAUDE` / `AI_HUD_CODEX`).
+
+```
+git clone https://mprovensi@github.com/mprovensi/ai-hud.git ~/ai-hud
+cd ~/ai-hud && node server.js            # teste; Ctrl+C para parar
+```
+
+Para rodar sempre (e reiniciar se cair), use o serviço do systemd em `ai-hud.service`
+(instruções no próprio arquivo). Se houver firewall: `sudo ufw allow 8787/tcp`.
+Nos hooks do Claude Code, use os caminhos do Linux, ex.: `node ~/ai-hud/hook-stop.js claude`.
+
 ## Vários PCs (hub)
 
 Um PC pode juntar as sessões de outros. Instale o AI HUD também no PC secundário e,
@@ -45,7 +60,8 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | `peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
 | `hook-stop.js` | Hook `Stop` do Claude Code: entrega respostas enviadas pelo HUD |
 | `hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
-| `focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude) |
+| `focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude); só Windows |
+| `ai-hud.service` | Serviço do systemd para rodar no Linux |
 | `statusline.js` | Statusline do Claude Code com contexto, custo e cotas |
 | `dashboard.js` | Painel HTML estático (versão inicial) |
 | `public/` | Página: `index.html`, `app.css`, `app.js`, PWA (`manifest.json`, `sw.js`) e ícones |

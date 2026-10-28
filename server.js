@@ -414,7 +414,7 @@ function snapshot() {
   for (const v of sessions) if (v.permission) v.state = 'permission';
 
   return {
-    now, remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday, ollama: ollama.state,
+    now, remoteMode, quotas: quotasView(now), hours, days, today, sessionsToday, ollama: config.ollama === false ? null : ollama.state,
     burn: burn(now, all.filter((s) => s.tool === 'Codex')),
     // Permissões pendentes primeiro; os demais cards seguem a última atividade.
     active: sessions.filter((s) => s.state !== 'closed')
@@ -426,8 +426,9 @@ function snapshot() {
 // --- Hub: outros PCs (config.peers) ----------------------------------------
 // Este PC junta as sessões e tokens dos secundários e repassa a eles as ações das sessões deles.
 const machineName = config.name || os.hostname();
-const peers = new Peers(config.peers);
-// Ollama deste PC (só aparece no HUD se responder); config.ollamaUrl muda o endereço
+const peers = new Peers(config.peers, path.join(DATA, 'peer-ollamas.json'));
+// Ollama deste PC (aparece no HUD se estiver instalado ou responder); config.ollamaUrl muda o
+// endereço e config.ollama = false esconde o cartão (quando o Ollama fica só em outro PC)
 const ollama = new Ollama(config.ollamaUrl);
 const hubSnapshot = () => peers.merge(snapshot(), machineName);
 

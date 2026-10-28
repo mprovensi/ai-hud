@@ -298,6 +298,12 @@
   // do servidor de cada PC: online, modelos carregados, instalados e GPU. Toque abre os detalhes.
   function gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
 
+  // unreachable: o PC secundário não responde, então não dá para saber do Ollama dele
+  function ollamaState(o) {
+    return o.online ? '<span class="lo">● online</span>'
+      : '<span class="hi">● ' + (o.unreachable ? 'PC sem conexão' : 'fora do ar') + '</span>';
+  }
+
   function ollamaPanel(s) {
     var el = $('q-ollama'), list = s.ollamas || [], html = '', i, j;
     if (!el) return;
@@ -309,7 +315,7 @@
     for (i = 0; i < list.length; i++) {
       var o = list[i];
       html += '<div class="ostat">' + (multi && o.machine ? '<div class="omach">🖥 ' + esc(o.machine) + '</div>' : '') +
-        (o.online ? '<span class="lo">● online</span>' : '<span class="hi">● fora do ar</span>');
+        ollamaState(o);
       if (o.online && !o.models.length) html += '<div class="muted omodel">ocioso</div>';
       for (j = 0; o.online && j < o.models.length; j++) {
         var m = o.models[j];
@@ -342,7 +348,7 @@
     for (i = 0; i < list.length; i++) {
       var o = list[i], g = o.gpu;
       html += '<div class="panel"><h2>🖥 ' + esc(o.machine || '') + '</h2>' +
-        '<div class="dl"><span>Estado</span><span>' + (o.online ? '<span class="lo">● online</span>' : '<span class="hi">● fora do ar</span>') + '</span></div>' +
+        '<div class="dl"><span>Estado</span><span>' + ollamaState(o) + '</span></div>' +
         '<div class="dl"><span>Versão</span><span>' + esc(o.version || '—') + '</span></div>' +
         '<div class="dl"><span>Modelos instalados</span><span>' + (o.installed != null ? o.installed : '—') + '</span></div>' +
         (g ? '<div class="dl"><span>GPU</span><span>' + esc(g.name) + '</span></div>' +
@@ -382,10 +388,8 @@
     }
     for (i = 0; i < fill.length; i++) html += sessCard(fill[i], s.now);
     $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
-    var down = '';
-    for (i = 0; s.machines && i < s.machines.length; i++) if (!s.machines[i].ok) down += ' · <span class="hi">🖥 ' + esc(s.machines[i].name) + ' fora do ar</span>';
     $('sessTitle').innerHTML = 'Últimas sessões · ' + active.length + (active.length === 1 ? ' ativa' : ' ativas') +
-      (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '') + down;
+      (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '');
     if (view === 'recent') renderRecent();
     if (view === 'stats') renderStats();
     if (view === 'ollama') renderOllama();

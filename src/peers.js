@@ -3,6 +3,7 @@
 //   "peers": [{ "name": "PC-Trabalho", "url": "http://192.168.5.40:8787", "token": "<token do config.json de lá>" }]
 // O principal consulta cada secundário a cada 10 s e repassa as ações (responder, permissões,
 // abrir no PC, detalhes) ao PC dono da sessão. Ids de sessões remotas ganham o prefixo "m<n>:".
+const fs = require('fs');
 const http = require('http');
 
 const POLL_MS = 10e3;
@@ -48,9 +49,15 @@ function call(peer, method, route, body, timeoutMs = 8000) {
 }
 
 class Peers {
-  constructor(list) {
+  // ollamaFile: onde lembrar quais secundários têm Ollama, para o cartão mostrá-los como sem
+  // conexão quando o PC não responde (mesmo logo após reiniciar o HUD)
+  constructor(list, ollamaFile) {
+    this.ollamaFile = ollamaFile;
+    let known = {};
+    try { known = JSON.parse(fs.readFileSync(ollamaFile, 'utf8')) || {}; } catch {}
     this.list = (list || []).filter((p) => p && p.url && p.token)
-      .map((p, i) => ({ name: p.name || `PC ${i + 2}`, url: p.url, token: p.token, i, snap: null, at: 0, error: null }));
+      .map((p, i) => ({ name: p.name || `PC ${i + 2}`, url: p.url, token: p.token, i, snap: null, at: 0, error: null,
+        ollamas: Array.isArray(known[p.name]) ? known[p.name] : [] }));
     if (this.list.length) {
       this.pollAll();
       setInterval(() => this.pollAll(), POLL_MS);
@@ -60,13 +67,30 @@ class Peers {
   pollAll() {
     for (const p of this.list) {
       call(p, 'GET', '/api/snapshot').then((r) => {
-        if (r.status === 200 && r.json) { p.snap = r.json; p.at = Date.now(); p.error = null; }
+        if (r.status === 200 && r.json) { p.snap = r.json; p.at = Date.now(); p.error = null; this.rememberOllamas(p); }
         else p.error = r.status === 401 ? 'token inválido' : `HTTP ${r.status}`;
       }, (e) => { p.error = e.message; });
     }
   }
 
   live(now) { return this.list.filter((p) => p.snap && now - p.at < STALE_MS); }
+
+  // Ollamas que o secundário mandou (com o nome do PC); grava só quando a lista de máquinas muda
+  peerOllamas(p) {
+    const theirs = (p.snap && p.snap.ollamas) || [];
+    return theirs.length === 1 ? [{ ...theirs[0], machine: p.name }] : theirs;
+  }
+
+  rememberOllamas(p) {
+    const list = this.peerOllamas(p).map((o) => ({ machine: o.machine, version: o.version || null, installed: o.installed ?? null }));
+    const key = (l) => l.map((o) => o.machine).join('\n');
+    const changed = key(list) !== key(p.ollamas || []);
+    p.ollamas = list;
+    if (!changed || !this.ollamaFile) return;
+    const all = {};
+    for (const q of this.list) if (q.ollamas && q.ollamas.length) all[q.name] = q.ollamas;
+    try { fs.writeFileSync(this.ollamaFile, JSON.stringify(all, null, 2)); } catch {}
+  }
 
   // "m0:<id>" → { peer, rid }; sessão local → null
   byId(id) {
@@ -90,9 +114,10 @@ class Peers {
     // Ollama: um item por máquina que tem Ollama (o secundário já manda a lista dele)
     out.ollamas = local.ollama ? [{ ...local.ollama, machine: localName }] : [];
     delete out.ollama;
-    for (const p of live) {
-      const theirs = p.snap.ollamas || [];
-      out.ollamas = out.ollamas.concat(theirs.length === 1 ? [{ ...theirs[0], machine: p.name }] : theirs);
+    for (const p of this.list) {
+      // PC sem resposta: o Ollama dele aparece fora do ar, marcado como sem conexão com o PC
+      out.ollamas = out.ollamas.concat(live.includes(p) ? this.peerOllamas(p)
+        : (p.ollamas || []).map((o) => ({ ...o, online: false, unreachable: true, models: [], gpu: null })));
     }
     if (!live.length) return out;
 

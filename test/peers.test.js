@@ -50,3 +50,19 @@ test('hub merges hours and days by timestamp across window boundaries', () => {
   assert.deepEqual(result.days, [row(86400000, 23), row(172800000, 4)]);
   assert.equal(JSON.stringify(local), before);
 });
+
+test('hub keeps a known Ollama of an unreachable peer as offline', () => {
+  const peers = new Peers([]);
+  peers.list = [{ i: 0, name: 'PC-Desktop', at: 0, snap: null, ollamas: [{ machine: 'PC-Desktop', version: '0.12', installed: 3 }] }];
+  const result = peers.merge({ ...snapshot(), ollama: { online: false, models: [] } }, 'local');
+  assert.deepEqual(result.ollamas.map((o) => [o.machine, o.online, !!o.unreachable]), [['local', false, false], ['PC-Desktop', false, true]]);
+  assert.equal(result.ollamas[1].version, '0.12');
+});
+
+test('hub remembers which peers have Ollama when they answer', () => {
+  const peers = new Peers([]);
+  const p = { i: 0, name: 'PC-Desktop', snap: { ollamas: [{ online: true, version: '0.12', models: [] }] }, ollamas: [] };
+  peers.list = [p];
+  peers.rememberOllamas(p);
+  assert.deepEqual(p.ollamas, [{ machine: 'PC-Desktop', version: '0.12', installed: null }]);
+});

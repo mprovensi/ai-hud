@@ -1,7 +1,9 @@
 // Estado do Ollama local (se houver) e da GPU NVIDIA, para o cartão do HUD.
 // Só leitura e só local: consulta a API do Ollama neste PC (padrão 127.0.0.1:11434, ou a URL
 // em config.ollamaUrl / OLLAMA_HOST) e o nvidia-smi. Não guarda histórico de tokens.
+const fs = require('fs');
 const http = require('http');
+const path = require('path');
 const { execFile } = require('child_process');
 
 const POLL_MS = 10e3;
@@ -30,11 +32,23 @@ function gpu() {
     }));
 }
 
+// Ollama instalado neste PC? (app do Windows ou executável no PATH) Assim o cartão aparece
+// como "fora do ar" mesmo quando o servidor nunca respondeu desde que o HUD subiu.
+function installed() {
+  const exe = process.platform === 'win32' ? 'ollama.exe' : 'ollama';
+  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  if (process.platform === 'win32') dirs.push(path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama'));
+  else dirs.push('/usr/local/bin', '/usr/bin', '/opt/homebrew/bin', '/Applications/Ollama.app/Contents/Resources');
+  return dirs.some((d) => { try { return fs.statSync(path.join(d, exe)).isFile(); } catch { return false; } });
+}
+
 class Ollama {
   constructor(url) {
     const host = process.env.OLLAMA_HOST && !/^0\.0\.0\.0/.test(process.env.OLLAMA_HOST) ? process.env.OLLAMA_HOST : '';
     this.url = url || (host ? (host.startsWith('http') ? host : `http://${host}`) : 'http://127.0.0.1:11434');
-    this.state = null;   // null = nunca respondeu (PC sem Ollama: o HUD não mostra nada)
+    // Com Ollama instalado (ou URL configurada) o HUD mostra o cartão desde o início, fora do ar
+    // até responder; sem Ollama, null e o HUD não mostra nada
+    this.state = url || installed() ? { online: false, version: null, models: [], installed: null, gpu: null, at: Date.now() } : null;
     this.installed = null;
     this.tagsAt = 0;
     this.poll();
@@ -55,10 +69,10 @@ class Ollama {
       }));
       this.state = { online: true, version: version.version, models, installed: this.installed, gpu: await gpu(), at: Date.now() };
     } catch {
-      // Já respondeu antes: agora está fora do ar. Nunca respondeu: este PC não tem Ollama.
+      // Já respondeu antes (ou está instalado): agora está fora do ar. Sem state: este PC não tem Ollama.
       if (this.state) this.state = { ...this.state, online: false, models: [], gpu: await gpu(), at: Date.now() };
     }
   }
 }
 
-module.exports = { Ollama };
+module.exports = { Ollama, installed };

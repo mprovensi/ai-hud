@@ -57,6 +57,9 @@ Reinicie o servidor principal. O principal consulta o secundário a cada 10 s e 
 tudo junto (com o nome da máquina em cada sessão); responder, permissões, Abrir no PC e
 detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o principal.
 
+O cartão do Ollama mostra cada PC com Ollama, inclusive fora do ar ou sem conexão. Se o
+Ollama fica só em outro PC, `"ollama": false` no `data/config.json` esconde o deste.
+
 ## Arquivos
 
 | Arquivo | Função |

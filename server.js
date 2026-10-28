@@ -350,6 +350,9 @@ function sessionDetail(id) {
     lastTool: s.lastTool, tools, lastPrompt: s.lastPrompt, lastReply: s.lastReply,
     subagents: s.subagents || 0, subTokens: s.subTokens || 0, ...replyInfo(s, now), where: s.where || '',
     turns: s.events.slice(-10).reverse().map((e) => ({ t: Date.parse(e.ts), fresh: e.fresh, cacheRead: e.cacheRead })),
+    // Ollama: últimas mensagens da conversa (app) ou comandos digitados (terminal) para a gaveta
+    history: s.history ? s.history.filter((m) => m.role === 'user' || m.role === 'assistant').slice(-12)
+      .map((m) => ({ role: m.role, content: String(m.content || '').slice(0, 2000), at: m.at || 0 })) : null,
   };
 }
 

@@ -494,8 +494,18 @@
     if (places[d.where]) {
       html += '<button class="pcaction" id="focusPc">🖥 Abrir no PC <small>' + places[d.where] + '</small></button>';
     }
-    // Ler e responder sem rolar: última resposta (com rolagem própria) logo acima de Responder
-    if (d.lastReply) html += '<div class="panel"><h2>Última resposta</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
+    // Ler e responder sem rolar: última resposta (com rolagem própria) logo acima de Responder.
+    // Ollama: no lugar dela, as últimas mensagens da conversa (ou comandos do terminal) como chat
+    if (d.history && d.history.length) {
+      var conv = '';
+      for (var hi = 0; hi < d.history.length; hi++) {
+        var hm2 = d.history[hi];
+        conv += '<div class="msg ' + (hm2.role === 'user' ? 'me' : 'ai') + '">' + esc(hm2.content) +
+          (hm2.at ? '<div class="mt">' + when(hm2.at) + '</div>' : '') + '</div>';
+      }
+      html += '<div class="panel"><h2>' + (d.where === 'ollama-run' ? 'Últimos comandos no terminal' : 'Últimas mensagens') + '</h2>' +
+        '<div class="convo lastreply" id="lastReply">' + conv + '</div></div>';
+    } else if (d.lastReply) html += '<div class="panel"><h2>Última resposta</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
     // ollama run no terminal: não há como escrever na conversa
     if (d.tool !== 'Antigravity' && d.where !== 'ollama-run') html += replyBox(d);
     if (d.where === 'ollama-run') html += '<div class="panel"><div class="muted" style="font-size:.85em">Conversa no terminal (ollama run): o Ollama não grava essas conversas, então não dá para ler as respostas nem responder por aqui. Use Abrir no PC.</div></div>';
@@ -533,6 +543,8 @@
     setOverlay(html);
     rememberViewed(d);
     bindReply(d);
+    var cv = $('lastReply');
+    if (cv && cv.className.indexOf('convo') >= 0) cv.scrollTop = cv.scrollHeight; // chat abre no fim
     if (d.permission) {
       var decide = function (decision) {
         $('permAllow').disabled = $('permDeny').disabled = true;
@@ -655,8 +667,11 @@
       detailCache[id] = d;
       if (sig === prev) return;
       var box = $('lastReply'), top = box ? box.scrollTop : 0;
+      // Conversa (chat): se estava no fim, continua no fim para mostrar a mensagem nova
+      var atEnd = !box || box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
       renderDetail(d);
-      if ($('lastReply')) $('lastReply').scrollTop = top;
+      var nb = $('lastReply');
+      if (nb) nb.scrollTop = nb.className.indexOf('convo') >= 0 && atEnd ? nb.scrollHeight : top;
     });
   }
 

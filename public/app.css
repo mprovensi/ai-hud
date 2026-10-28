@@ -87,6 +87,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 /* Última resposta na gaveta: altura limitada com rolagem própria, para Responder ficar visível */
 .lastreply { max-height: 27vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* Conversa do Ollama na gaveta: balões (você à direita, modelo à esquerda) */
+.convo { max-height: 34vh; }
+.msg { max-width: 85%; padding: 6px 10px; border-radius: 12px; margin: 0 0 6px; font-size: .86em; white-space: pre-wrap; word-wrap: break-word; }
+.msg.me { margin-left: auto; background: #2b3556; color: #dbe4ff; border-bottom-right-radius: 4px; }
+.msg.ai { background: #262624; border-bottom-left-radius: 4px; }
+.msg .mt { font-size: .7em; color: #8d8d87; margin-top: 2px; text-align: right; }
 
 /* Resposta rápida */
 .reply { border-color: #3b4a7a; }

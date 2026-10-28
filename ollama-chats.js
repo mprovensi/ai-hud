@@ -172,11 +172,13 @@ setInterval(scanRuns, 15e3);
 
 function ollamaRunSessions() {
   if (!runs.length) return [];
-  let lastCmd = '', histAt = 0;
+  let lastCmd = '', histAt = 0, cmds = [];
   try {
     const lines = fs.readFileSync(HISTORY, 'utf8').split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('/'));
     lastCmd = lines.length ? lines[lines.length - 1] : '';
     histAt = fs.statSync(HISTORY).mtimeMs;
+    // Últimos comandos digitados (o terminal não grava as respostas)
+    cmds = lines.slice(-12).map((l) => ({ role: 'user', content: l }));
   } catch {}
   return runs.map((r) => ({
     tool: 'Ollama', id: `ollama-run-${r.pid}`, pid: r.pid, file: '', cwd: '', where: 'ollama-run',
@@ -185,7 +187,7 @@ function ollamaRunSessions() {
     // Processo aberto = sessão ativa esperando o usuário no terminal
     mtime: Date.now(), lastStop: 'end_turn',
     firstPrompt: '', lastPrompt: lastCmd.length > 400 ? lastCmd.slice(0, 399) + '…' : lastCmd, lastReply: '',
-    prompts: 0, models: new Set([r.model]), lastTool: '',
+    prompts: 0, models: new Set([r.model]), lastTool: '', history: cmds,
     input: 0, output: 0, cacheRead: 0, cacheWrite: 0, context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,
   }));
 }

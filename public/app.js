@@ -258,42 +258,64 @@
     $('sound').innerHTML = on ? '🔔' : '🔕';
   }
 
-  // ---- Ollama: cartões na grade, junto com as sessões ----------------------
+  // ---- Ollama: cartão de status na linha das cotas (meia largura) -----------
+  // As conversas do app do Ollama aparecem na grade como sessões normais; aqui fica só o estado
+  // do servidor de cada PC: online, modelos carregados, instalados e GPU. Toque abre os detalhes.
   function gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; }
 
-  // Um cartão por modelo carregado; sem modelo, um cartão "Ollama" apagado; fora do ar, aviso.
-  // Devolve { live: [...], idle: [...] }: os carregados entram junto das sessões ativas.
-  function ollamaCards(s) {
-    var out = { live: [], idle: [] }, list = s.ollamas || [], i, j;
+  function ollamaPanel(s) {
+    var el = $('q-ollama'), list = s.ollamas || [], html = '', i, j;
+    if (!el) return;
+    el.style.display = list.length ? '' : 'none';
+    if (!list.length) return;
+    var multi = s.machines && s.machines.length > 1;
+    html += '<div class="qhead row"><span class="llama">🦙</span><span class="name">Ollama</span><span class="grow"></span><span class="chev">›</span></div>';
+    for (i = 0; i < list.length; i++) {
+      var o = list[i];
+      html += '<div class="ostat">' + (multi && o.machine ? '<div class="omach">🖥 ' + esc(o.machine) + '</div>' : '') +
+        (o.online ? '<span class="lo">● online</span> <span class="muted">v' + esc(o.version) + '</span>' : '<span class="hi">● fora do ar</span>');
+      if (o.online && !o.models.length) html += '<div class="muted osmall2">nenhum modelo carregado</div>';
+      for (j = 0; o.online && j < o.models.length; j++) {
+        var m = o.models[j];
+        html += '<div class="omodel ell"><b>' + esc(m.name) + '</b></div>' +
+          '<div class="track"><div class="fill" style="width:' + m.gpuPct + '%;background:#b39ddb"></div></div>' +
+          '<div class="osmall2 muted">' + gb(m.size) + ' · ' + m.gpuPct + '% GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</div>';
+      }
+      var extra = [];
+      if (o.installed != null) extra.push(o.installed + ' instalados');
+      if (o.gpu) extra.push('GPU ' + o.gpu.util + '% · ' + o.gpu.temp + '°C');
+      if (extra.length) html += '<div class="osmall2 muted">' + extra.join(' · ') + '</div>';
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  // Gaveta #ollama: detalhes de cada PC com Ollama
+  function renderOllama() {
+    if (!snap) return;
+    var list = snap.ollamas || [], html = head('<span class="llama">🦙</span>Ollama'), i, j;
+    if (!list.length) html += '<p class="empty">Nenhum PC com Ollama.</p>';
     for (i = 0; i < list.length; i++) {
       var o = list[i], g = o.gpu;
-      var gpu = g ? ' · GPU ' + g.util + '% · ' + g.temp + '°C' : '';
-      var card = function (cls, name, badge, ttl, ask, pct, meta) {
-        return '<div class="card t3 ' + cls + '"><div class="in">' +
-          '<div class="row"><span class="llama">🦙</span><span class="proj ell grow">' + esc(name) + '</span></div>' +
-          '<div class="sub row">' + badge + '<span class="tool ell grow">🖥 ' + esc(o.machine || '') + '</span></div>' +
-          (ttl ? '<div class="ttl ell">' + ttl + '</div>' : '') + (ask ? '<div class="ask">' + ask + '</div>' : '') +
-          '<div class="foot">' + (pct != null ? '<div class="ctx"><div style="width:' + pct + '%;background:#b39ddb"></div></div>' : '') +
-          '<div class="meta">' + meta + '</div></div></div></div>';
-      };
-      if (!o.online) {
-        out.idle.push(card('old-card', 'Ollama', '<span class="badge closed">fora do ar</span>', 'O servidor do Ollama não responde', '', null, 'versão ' + esc(o.version || '?')));
-        continue;
-      }
-      if (!o.models.length) {
-        out.idle.push(card('old-card', 'Ollama', '<span class="badge idle">ocioso</span>', 'Nenhum modelo carregado',
-          o.installed != null ? o.installed + ' modelos instalados' : '', null, 'versão ' + esc(o.version) + gpu));
-        continue;
-      }
+      html += '<div class="panel"><h2>🖥 ' + esc(o.machine || '') + '</h2>' +
+        '<div class="dl"><span>Estado</span><span>' + (o.online ? '<span class="lo">● online</span>' : '<span class="hi">● fora do ar</span>') + '</span></div>' +
+        '<div class="dl"><span>Versão</span><span>' + esc(o.version || '—') + '</span></div>' +
+        '<div class="dl"><span>Modelos instalados</span><span>' + (o.installed != null ? o.installed : '—') + '</span></div>' +
+        (g ? '<div class="dl"><span>GPU</span><span>' + esc(g.name) + '</span></div>' +
+          '<div class="dl"><span>Uso · temperatura</span><span>' + g.util + '% · ' + g.temp + '°C</span></div>' +
+          '<div class="dl"><span>VRAM</span><span>' + (g.memUsed / 1024).toFixed(1) + ' / ' + (g.memTotal / 1024).toFixed(0) + ' GB</span></div>' : '') +
+        '<h2 style="margin-top:12px">Modelos carregados</h2>';
+      if (!o.models.length) html += '<div class="empty">Nenhum agora (o Ollama descarrega ~5 min após o último uso).</div>';
       for (j = 0; j < o.models.length; j++) {
         var m = o.models[j];
-        out.live.push(card('', m.name, '<span class="badge llm">● carregado</span>',
-          esc([m.params, m.quant].filter(Boolean).join(' · ') || 'modelo local'),
-          m.expiresAt ? 'Fica na memória até ' + hm(m.expiresAt) : '',
-          m.gpuPct, gb(m.size) + ' · ' + m.gpuPct + '% na GPU' + gpu));
+        html += '<div class="dl" style="border:0;padding-bottom:0"><span><b>' + esc(m.name) + '</b></span><span>' + gb(m.size) + '</span></div>' +
+          '<div class="hbar"><div style="width:' + m.gpuPct + '%;background:#b39ddb"></div></div>' +
+          '<div class="dl"><span class="muted">' + esc([m.params, m.quant].filter(Boolean).join(' · ')) + '</span><span class="muted">' +
+          m.gpuPct + '% na GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</span></div>';
       }
+      html += '</div>';
     }
-    return out;
+    setOverlay(html);
   }
 
   var GRID_MIN = 6; // 2 linhas de 3 cartões
@@ -302,19 +324,18 @@
     setRemoteBtn(s.remoteMode);
     quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
     quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
+    ollamaPanel(s);
     // Últimas sessões: todas as ativas pela última mensagem (enviada ou recebida), depois os
     // modelos do Ollama carregados; se sobrar espaço nas 2 primeiras linhas (6 cartões), completa
     // com o Ollama ocioso e as últimas sessões inativas
     var active = s.active.slice().sort(function (a, b) { return b.end - a.end; });
-    var llm = ollamaCards(s);
-    var used = active.length + llm.live.length + llm.idle.length;
+    var used = active.length;
     var fill = s.recent.slice(0, Math.max(0, GRID_MIN - used));
     var html = '', waiting = 0, i;
     for (i = 0; i < active.length; i++) {
       html += sessCard(active[i], s.now);
       if (active[i].state === 'waiting') waiting++;
     }
-    html += llm.live.join('') + llm.idle.join('');
     for (i = 0; i < fill.length; i++) html += sessCard(fill[i], s.now);
     $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
     var down = '';
@@ -323,6 +344,7 @@
       (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '') + down;
     if (view === 'recent') renderRecent();
     if (view === 'stats') renderStats();
+    if (view === 'ollama') renderOllama();
   }
 
   // ---- Sobreposições: #s=<id> (detalhe) e #recentes ------------------------
@@ -526,7 +548,7 @@
   // A tela sobreposta fica no #hash: o botão Voltar do Android fecha
   function syncHash() {
     var h = location.hash;
-    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : null;
+    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
     if (view) $('overlay').scrollTop = 0;
     else if (snap) render(snap); // o fundo não é redesenhado com a gaveta aberta
@@ -534,6 +556,7 @@
     if (view === 'recent') renderRecent();
     // A gaveta precisa estar visível para o gráfico medir a própria largura
     if (view === 'stats') setTimeout(renderStats, 30);
+    if (view === 'ollama') renderOllama();
   }
   function closeOverlay() { if (location.hash) history.back(); else syncHash(); }
 
@@ -547,6 +570,7 @@
   window.addEventListener('hashchange', syncHash);
   $('openRecent').onclick = function () { location.hash = 'recentes'; };
   $('openStats').onclick = function () { location.hash = 'estatisticas'; };
+  $('q-ollama').onclick = function () { location.hash = 'ollama'; };
   $('backdrop').onclick = closeOverlay;
 
   // ---- Rede ----------------------------------------------------------------
@@ -588,6 +612,7 @@
     checkAlerts(s);
     if (first || !view) return render(s); // a primeira vez desenha o fundo mesmo com gaveta aberta
     if (view === 'stats') renderStats();
+    if (view === 'ollama') renderOllama();
     if (view === 'recent') renderRecent();
   }
 

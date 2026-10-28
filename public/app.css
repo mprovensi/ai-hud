@@ -30,6 +30,14 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .quotas { display: -webkit-flex; display: flex; }
 .quotas .panel { -webkit-flex: 1; flex: 1; min-width: 0; }
 .quotas .panel + .panel { margin-left: 10px; }
+/* Ollama: meia largura na linha das cotas, clicável */
+.quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; }
+.olla:active { background: #232321; }
+.olla .llama, .dtitle .llama { margin-right: .35em; }
+.ostat + .ostat { border-top: 1px solid #2c2c29; margin-top: 6px; padding-top: 6px; }
+.omach { font-size: .78em; color: #8d8d87; }
+.omodel { margin-top: 6px; font-size: .9em; }
+.osmall2 { font-size: .74em; }
 /* Ollama: cartão na grade (borda lilás, ícone 🦙) */
 .t3 .in { border-top-color: #b39ddb !important; }
 
@@ -259,6 +267,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (max-width: 760px) {
   .quotas { display: block; }
   .quotas .panel + .panel { margin-left: 0; }
+  .quotas .olla { width: 100%; }
   .card { width: 100%; }
   .top .clock { display: none; }
   .top .btn { margin-left: 6px; }

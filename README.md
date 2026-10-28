@@ -23,8 +23,8 @@ Uma nova resposta volta a destacar o card e pedir sua atenção.
 A ordem dos cards é a mesma no navegador e no atalho: permissões pendentes primeiro,
 depois a última atividade. Marcar como visto limpa o alerta e mantém a posição do card.
 
-Para iniciar junto com o Windows, copie `windows/tray/start-tray.vbs` (ícone na bandeja) ou
-`windows/start-hidden.vbs` (só o servidor) para a pasta Inicializar (`Win+R` → `shell:startup`).
+Para iniciar junto com o Windows, copie `windows/tray/start-tray.vbs` (ícone na bandeja, sem janela)
+para a pasta Inicializar (`Win+R` → `shell:startup`).
 
 ## Linux
 
@@ -81,12 +81,11 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | `windows/terminal-focus.ps1` | Seleciona a aba do CLI no Windows Terminal (usado por `src/terminal-focus.js`) |
 | `windows/install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
 | `windows/tray/` | App de bandeja: inicia, reinicia e mostra o status e o log do servidor |
-| `windows/start-hidden.vbs` | Inicia só o servidor, sem janela |
 | `linux/ai-hud.service` | Serviço do systemd para rodar no Linux |
 | `vscode-terminal/` | Integração local do VS Code para selecionar terminais pelo processo, inclusive abas com nomes iguais |
 | `public/` | Página: `index.html`, `app.css`, `app.js`, PWA (`manifest.json`, `sw.js`) e ícones |
 | `data/` | Gerado ao rodar, fora do git: `config.json` (token e PIN), filas, históricos e `server.log` |
-| `scripts/` | Teste nativo do Windows Terminal e `dashboard.js`, o painel HTML estático da versão inicial |
+| `scripts/` | Teste nativo opcional do Windows Terminal |
 | `test/` | Testes de regressão (`node --test`) |
 
 ## Integração com o Claude Code

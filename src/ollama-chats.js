@@ -192,4 +192,4 @@ function ollamaRunSessions() {
   }));
 }
 
-module.exports = { ollamaChatSessions, ollamaRunSessions, replyToChat, available: () => !!sqlite };
+module.exports = { ollamaChatSessions, ollamaRunSessions, replyToChat };

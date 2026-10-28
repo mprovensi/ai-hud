@@ -280,4 +280,4 @@ function antigravitySessions() {
   return [...byConv.values()];
 }
 
-module.exports = { claudeSessions, codexData, antigravitySessions, day, HOME };
+module.exports = { claudeSessions, codexData, antigravitySessions, HOME };

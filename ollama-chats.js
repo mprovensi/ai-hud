@@ -26,15 +26,17 @@ let cont = {}; // chatId -> { messages: [{ role, content, at, model, tokens }], 
 try { cont = JSON.parse(fs.readFileSync(STORE, 'utf8')); } catch {}
 const save = () => { try { fs.writeFileSync(STORE, JSON.stringify(cont)); } catch {} };
 
-let cache = { mtime: 0, chats: [] };
+let cache = { sig: '', at: 0, chats: [] };
 
 // Lê chats e mensagens; relê só quando o banco (ou o WAL) mudou
 function readChats() {
   if (!sqlite) return [];
-  let mtime = 0;
-  for (const f of [DB, `${DB}-wal`]) { try { mtime = Math.max(mtime, fs.statSync(f).mtimeMs); } catch {} }
-  if (!mtime) return [];
-  if (mtime === cache.mtime) return cache.chats;
+  // Assinatura = data + tamanho do banco e do WAL. No Windows a data de um arquivo mantido aberto
+  // (o app segura o db) não atualiza; o tamanho sim. E relê no máximo a cada 30 s de qualquer jeito.
+  let sig = '';
+  for (const f of [DB, `${DB}-wal`]) { try { const st = fs.statSync(f); sig += `${st.mtimeMs}:${st.size};`; } catch {} }
+  if (!sig) return [];
+  if (sig === cache.sig && Date.now() - cache.at < 30e3) return cache.chats;
   let db;
   try {
     db = new sqlite.DatabaseSync(DB, { readOnly: true });
@@ -42,7 +44,7 @@ function readChats() {
     const msgs = db.prepare('SELECT chat_id, role, content, model_name, created_at, updated_at FROM messages ORDER BY id').all();
     const byChat = {};
     for (const m of msgs) (byChat[m.chat_id] = byChat[m.chat_id] || []).push(m);
-    cache = { mtime, chats: chats.map((c) => ({ ...c, messages: byChat[c.id] || [] })) };
+    cache = { sig, at: Date.now(), chats: chats.map((c) => ({ ...c, messages: byChat[c.id] || [] })) };
   } catch { /* banco ocupado: usa a leitura anterior */ } finally { try { db && db.close(); } catch {} }
   return cache.chats;
 }

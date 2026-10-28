@@ -255,6 +255,8 @@ function claudeDesktopId(cliId) {
 function focusPlan(s) {
   const key = replyKey(s);
   // App do Ollama: o link ollama:// só abre o app (não uma conversa); depois traz a janela para frente
+  // ollama run: o terminal (título costuma ter o modelo ou "ollama"); não há link para a aba
+  if (s.where === 'ollama-run') return { process: 'WindowsTerminal|powershell|pwsh|cmd|conhost', include: [noPipe([...s.models][0] || ''), 'ollama', ''].join('|'), exclude: '', label: 'Terminal do ollama run em primeiro plano.' };
   if (s.where === 'ollama-app') return { uriFirst: true, uri: 'ollama://', process: 'ollama app', include: '', exclude: '', label: 'App do Ollama aberto: escolha a conversa nele.' };
   if (s.where === 'claude-desktop') {
     const local = claudeDesktopId(s.id);
@@ -330,7 +332,7 @@ const allSessions = () => {
   const claude = claudeSessions();
   for (const s of claude) if (!s.contextWindow) s.contextWindow = claudeWindow(s);
   // Conversas do app do Ollama (só se este PC tiver o app e o Node tiver node:sqlite)
-  return [...claude, ...codexData().sessions, ...antigravitySessions(), ...ollamaChats.ollamaChatSessions()];
+  return [...claude, ...codexData().sessions, ...antigravitySessions(), ...ollamaChats.ollamaChatSessions(), ...ollamaChats.ollamaRunSessions()];
 };
 
 // Atividade pelo último registro do log: no Windows a data de modificação de um arquivo

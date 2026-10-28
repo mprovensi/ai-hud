@@ -386,13 +386,15 @@
         '<div class="permcmd">' + esc(d.permission.summary) + '</div><div class="row">' +
         '<button class="pbtn allow" id="permAllow">Permitir</button><button class="pbtn deny" id="permDeny">Negar</button></div></div>';
     }
-    var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude', 'ollama-app': 'no app do Ollama' };
+    var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude', 'ollama-app': 'no app do Ollama', 'ollama-run': 'no terminal' };
     if (places[d.where]) {
       html += '<button class="pcaction" id="focusPc">🖥 Abrir no PC <small>' + places[d.where] + '</small></button>';
     }
     // Ler e responder sem rolar: última resposta (com rolagem própria) logo acima de Responder
     if (d.lastReply) html += '<div class="panel"><h2>Última resposta</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
-    if (d.tool !== 'Antigravity') html += replyBox(d);
+    // ollama run no terminal: não há como escrever na conversa
+    if (d.tool !== 'Antigravity' && d.where !== 'ollama-run') html += replyBox(d);
+    if (d.where === 'ollama-run') html += '<div class="panel"><div class="muted" style="font-size:.85em">Conversa no terminal (ollama run): o Ollama não grava essas conversas, então não dá para ler as respostas nem responder por aqui. Use Abrir no PC.</div></div>';
 
     html += '<div class="panel more' + (moreOpen ? ' open' : '') + '" id="more"><button class="mhead row" id="moreToggle">' +
       '<h2 class="grow">Mais detalhes</h2><span class="arrow">▸</span></button><div class="mbody">';

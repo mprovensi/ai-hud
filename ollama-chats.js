@@ -114,4 +114,63 @@ function replyToChat(session, text, ollamaUrl) {
   return Promise.resolve({ sent: true });
 }
 
-module.exports = { ollamaChatSessions, replyToChat, available: () => !!sqlite };
+// ---- `ollama run` no terminal ---------------------------------------------
+// A conversa do terminal não é gravada; só dá para mostrar que a sessão existe (modelo, desde quando),
+// o último comando digitado (~/.ollama/history, compartilhado por todos os `ollama run`) e trazer o
+// terminal para frente. Procura os processos a cada 15 s.
+const { execFile } = require('child_process');
+const HISTORY = path.join(require('os').homedir(), '.ollama', 'history');
+let runs = []; // [{ pid, model, start }]
+
+function modelFrom(cmd) {
+  const args = String(cmd).trim().split(/\s+/);
+  const i = args.findIndex((a) => a === 'run');
+  for (let j = i + 1; i >= 0 && j < args.length; j++) if (!args[j].startsWith('-')) return args[j].replace(/^"|"$/g, '');
+  return null;
+}
+
+function scanRuns() {
+  if (process.platform === 'win32') {
+    const ps = "Get-CimInstance Win32_Process -Filter \"Name='ollama.exe'\" | Where-Object { $_.CommandLine -match '\\srun\\s' } | " +
+      "ForEach-Object { \"$($_.ProcessId)|$($_.CreationDate.ToString('o'))|$($_.CommandLine)\" }";
+    execFile('powershell', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 15e3 }, (err, out) => {
+      if (err) return;
+      runs = String(out).split(/\r?\n/).filter(Boolean).map((l) => {
+        const [pid, start, ...cmd] = l.split('|');
+        return { pid: Number(pid), start: Date.parse(start) || Date.now(), model: modelFrom(cmd.join('|')) };
+      }).filter((r) => r.model);
+    });
+  } else {
+    execFile('ps', ['-eo', 'pid=,etimes=,args='], { timeout: 15e3 }, (err, out) => {
+      if (err) return;
+      runs = String(out).split('\n').filter((l) => /\bollama\s+run\s/.test(l)).map((l) => {
+        const [, pid, secs, cmd] = l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/) || [];
+        return { pid: Number(pid), start: Date.now() - Number(secs) * 1000, model: modelFrom(cmd) };
+      }).filter((r) => r.pid && r.model);
+    });
+  }
+}
+scanRuns();
+setInterval(scanRuns, 15e3);
+
+function ollamaRunSessions() {
+  if (!runs.length) return [];
+  let lastCmd = '', histAt = 0;
+  try {
+    const lines = fs.readFileSync(HISTORY, 'utf8').split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('/'));
+    lastCmd = lines.length ? lines[lines.length - 1] : '';
+    histAt = fs.statSync(HISTORY).mtimeMs;
+  } catch {}
+  return runs.map((r) => ({
+    tool: 'Ollama', id: `ollama-run-${r.pid}`, pid: r.pid, file: '', cwd: '', where: 'ollama-run',
+    project: r.model, title: 'terminal · ollama run',
+    start: new Date(r.start).toISOString(), end: new Date(Math.max(r.start, histAt)).toISOString(),
+    // Processo aberto = sessão ativa esperando o usuário no terminal
+    mtime: Date.now(), lastStop: 'end_turn',
+    firstPrompt: '', lastPrompt: lastCmd.length > 400 ? lastCmd.slice(0, 399) + '…' : lastCmd, lastReply: '',
+    prompts: 0, models: new Set([r.model]), lastTool: '',
+    input: 0, output: 0, cacheRead: 0, cacheWrite: 0, context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,
+  }));
+}
+
+module.exports = { ollamaChatSessions, ollamaRunSessions, replyToChat, available: () => !!sqlite };

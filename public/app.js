@@ -273,7 +273,7 @@
         '<span class="omodels grow ell">' + (o.online ? '<span class="lo">●</span> ' : '') + parts.join(' &nbsp; ') + '</span>' +
         (gpu ? '<span class="ogpu">' + gpu + '</span>' : '') + '</div>';
     }
-    $('ollamaList').innerHTML = html;
+    if ($('ollamaList')) $('ollamaList').innerHTML = html; // página antiga em cache não tem a faixa
   }
 
   var GRID_MIN = 6; // 2 linhas de 3 cartões

@@ -193,7 +193,7 @@
   }
 
   // ---- Alertas: bipe + aviso quando uma sessão passa a esperar por você ou a cota de 5h está acabando ----
-  var prevStates = null, pings = {}, quotaAlerted = {}, audio = null;
+  var prevStates = null, prevCompleted = null, pings = {}, quotaAlerted = {}, audio = null;
   var soundOn = store('hud.sound') !== '0';
 
   // O iOS só libera áudio depois de um toque do usuário: o primeiro toque cria o contexto
@@ -223,12 +223,15 @@
   }
 
   function checkAlerts(s) {
-    var msgs = [], states = {}, i;
+    var msgs = [], states = {}, completed = {}, i;
     for (i = 0; i < s.active.length; i++) {
       var x = s.active[i];
       states[x.id] = x.state;
-      // Só transições: na primeira leitura não há "antes"
-      if (prevStates && x.state === 'waiting' && prevStates[x.id] !== 'waiting') {
+      completed[x.id] = x.completedAt || 0;
+      // Um turno curto pode começar e terminar entre consultas, sem mostrar "working".
+      // A primeira leitura só estabelece a referência, sem avisar sobre respostas antigas.
+      var newReply = prevCompleted && completed[x.id] > (prevCompleted[x.id] || 0);
+      if (prevStates && x.state === 'waiting' && (prevStates[x.id] !== 'waiting' || newReply)) {
         pings[x.id] = s.now;
         msgs.push(x.project + ' (' + x.tool + ') espera você');
       }
@@ -238,6 +241,7 @@
       }
     }
     prevStates = states;
+    prevCompleted = completed;
     var names = [['claude', 'Claude'], ['codex', 'Codex']];
     for (i = 0; i < names.length; i++) {
       var q = s.quotas[names[i][0]], w = q && q.windows && q.windows.five_hour;

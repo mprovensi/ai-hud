@@ -112,6 +112,23 @@ test('Codex: não trata blocos internos como pedidos do usuário', (t) => {
   assert.equal(s.firstPrompt, '<exemplo>Texto solicitado pelo usuário</exemplo>');
 });
 
+test('Codex: exposes each completed turn even when consecutive replies are identical', (t) => {
+  const { root, lib } = fixture(t);
+  const records = [meta(ID), message('user', 'Fale oi'), message('assistant', 'oi'),
+    { type: 'event_msg', payload: { type: 'task_complete' } }];
+  rollout(root, ID, records);
+  assert.equal(lib.codexData().sessions[0].completedAt, Date.parse(TS));
+  const next = '2026-10-28T10:00:05.000Z';
+  records.push({ timestamp: next, type: 'event_msg', payload: { type: 'task_started', turn_id: 'next' } },
+    { ...message('assistant', 'oi'), timestamp: next },
+    { timestamp: next, type: 'event_msg', payload: { type: 'task_complete' } });
+  rollout(root, ID, records);
+  const updated = lib.codexData().sessions[0];
+  assert.equal(updated.completedAt, Date.parse(next));
+  assert.equal(updated.lastStop, 'end_turn');
+  assert.equal(updated.lastReply, 'oi');
+});
+
 test('Codex paginado: recupera SQLite sem JSONL e não duplica conversas existentes', { skip: !DatabaseSync }, (t) => {
   const { root, lib } = fixture(t);
   const file = rollout(root, ID, [meta(ID), message('user', 'Mensagem do rollout'), { type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 100, cached_input_tokens: 40, output_tokens: 20 } } } }]);
@@ -146,6 +163,7 @@ test('Codex paginado: recupera SQLite sem JSONL e não duplica conversas existen
   assert.equal(migrated.firstPrompt, 'Pergunta preservada');
   assert.equal(migrated.lastReply, 'Resposta preservada');
   assert.equal(migrated.lastStop, 'end_turn');
+  assert.equal(migrated.completedAt, 1793181660000);
   assert.equal(migrated.where, 'vscode');
   assert.equal(migrated.input, 0); // SQLite não informa a distribuição de tokens por turno.
   assert.equal(migrated.events.length, 0);

@@ -343,6 +343,7 @@ function sessionDetail(id) {
   return {
     tool: s.tool, id: s.id, title: s.title || s.firstPrompt, project: s.project || base(s.cwd) || '—', cwd: s.cwd,
     models: [...s.models], start: Date.parse(s.start), end: Date.parse(s.end), state: state(s, now), now,
+    completedAt: s.completedAt || 0,
     input: s.input, output: s.output, cacheRead: s.cacheRead, cacheWrite: s.cacheWrite,
     context: s.context, contextWindow: s.contextWindow, prompts: s.prompts, toolCalls: s.toolCalls,
     lastTool: s.lastTool, tools, lastPrompt: s.lastPrompt, lastReply: s.lastReply,
@@ -384,6 +385,7 @@ function snapshot() {
   const view = (s) => ({
     tool: s.tool, id: s.id, project: s.project || base(s.cwd) || '—', title: s.title || s.firstPrompt,
     start: Date.parse(s.start), end: Date.parse(s.end), state: state(s, now), lastTool: s.lastTool,
+    completedAt: s.completedAt || 0,
     tokens: s.input + s.output + s.cacheWrite + (s.subTokens || 0), prompts: s.prompts,
     lastPrompt: (s.lastPrompt || '').replace(/\s+/g, ' ').slice(0, 160),
     context: s.context, contextWindow: s.contextWindow, ...replyInfo(s, now),

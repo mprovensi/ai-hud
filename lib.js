@@ -136,9 +136,15 @@ function codexText(content) {
   return Array.isArray(content) ? content.filter((c) => /^(input_text|output_text|text)$/.test(c.type)).map((c) => c.text || '').join('\n') : '';
 }
 
+function codexTime(value) {
+  if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
+  return Date.parse(value) || 0;
+}
+
 function parseCodex(f) {
   const s = emptySession('Codex', path.basename(f, '.jsonl'), f);
   s.limitSamples = [];
+  s.completedAt = 0;
   let prev = null, limits = null, limitsTs = '';
   const userPrompts = [], promptIds = new Set();
   let currentTurn = 'initial', turnIndex = 0;
@@ -171,7 +177,11 @@ function parseCodex(f) {
       s.contextWindow = p.context_window || s.contextWindow;
     }
     if (r.type === 'turn_context' && p.model) s.models.add(p.model);
-    if (p.type === 'task_complete') { s.lastStop = 'end_turn'; currentTurn = `after:${++turnIndex}`; }
+    if (p.type === 'task_complete') {
+      s.lastStop = 'end_turn';
+      s.completedAt = codexTime(r.timestamp);
+      currentTurn = `after:${++turnIndex}`;
+    }
     if (p.type === 'task_started') { s.lastStop = ''; currentTurn = p.turn_id || `turn:${++turnIndex}`; }
     if (p.type === 'user_message' && p.message) collectPrompt(p.message, 'event', p, r.timestamp);
     if (p.type === 'agent_message' && p.message) { s.lastReply = clip(p.message, 4000); legacyReplyAt = r.timestamp; }
@@ -245,6 +255,7 @@ function codexData() {
       }
       if (!s.prompts && thread.first_user_message) prompt(s, thread.first_user_message);
       s.lastStop = turn && turn.status === 'inProgress' ? '' : 'end_turn';
+      s.completedAt = turn && turn.status === 'completed' ? codexTime(turn.completed_at) : 0;
     }
   }
   let limits = null, limitsTs = '';

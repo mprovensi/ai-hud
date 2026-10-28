@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { claudeSessions, codexData, antigravitySessions } = require('./lib');
 const { claudeQuota, codexQuota, CODEX } = require('./quotas');
 const { Peers, compareSessions } = require('./peers');
+const { createTerminalFocus } = require('./terminal-focus');
 const { authorized, readJson, handleRequest } = require('./http-utils');
 const { Ollama } = require('./ollama');
 const ollamaChats = require('./ollama-chats');
@@ -221,6 +222,7 @@ function replyInfo(s, now) {
 const VSCODE_STORAGE = path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'storage.json');
 const winPath = (p) => String(p || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
 const noPipe = (t) => String(t || '').replace(/\|/g, ' ');
+const focusTerminal = createTerminalFocus();
 
 function vscodeFolders() {
   try {
@@ -254,8 +256,6 @@ function claudeDesktopId(cliId) {
 function focusPlan(s) {
   const key = replyKey(s);
   // App do Ollama: o link ollama:// só abre o app (não uma conversa); depois traz a janela para frente
-  // ollama run: o terminal (título costuma ter o modelo ou "ollama"); não há link para a aba
-  if (s.where === 'ollama-run') return { process: 'WindowsTerminal|powershell|pwsh|cmd|conhost', include: [noPipe([...s.models][0] || ''), 'ollama', ''].join('|'), exclude: '', label: 'Terminal do ollama run em primeiro plano.' };
   if (s.where === 'ollama-app') return { uriFirst: true, uri: 'ollama://', process: 'ollama app', include: '', exclude: '', label: 'App do Ollama aberto: escolha a conversa nele.' };
   if (s.where === 'claude-desktop') {
     const local = claudeDesktopId(s.id);
@@ -267,9 +267,6 @@ function focusPlan(s) {
   const cwd = winPath(s.cwd);
   const own = folders.filter((f) => cwd === f || cwd.startsWith(f + '\\')).sort((a, b) => b.length - a.length)[0];
   const title = (f) => `${path.win32.basename(f)} - Visual Studio Code`;
-  // CLI rodando no terminal integrado do VS Code: a janela é a do VS Code daquela pasta
-  // (não há link para a aba do terminal, então só foca a janela)
-  if (s.where === 'terminal' && own) return { process: 'Code', include: noPipe(title(own)), exclude: '', label: 'Janela do VS Code em primeiro plano (terminal integrado).' };
   if (s.where === 'vscode') {
     return {
       process: 'Code',
@@ -279,16 +276,12 @@ function focusPlan(s) {
       uri: s.tool === 'Codex' ? `vscode://openai.chatgpt/local/${key}` : `vscode://anthropic.claude-code/open?session=${key}`,
     };
   }
-  if (s.where === 'terminal') {
-    // O Claude põe o título da sessão no título do terminal; senão a pasta; senão qualquer terminal
-    return { process: 'WindowsTerminal|pwsh|powershell|cmd', include: [noPipe((s.title || '').slice(0, 24)), noPipe(base(s.cwd)), ''].join('|'), exclude: '' };
-  }
   return null;
 }
 
 function focusWindow(plan) {
   return new Promise((resolve) => execFile('powershell', ['-NoProfile', '-File', path.join(__dirname, 'focus.ps1'), '-Process', plan.process,
-    '-Include', plan.include, '-Exclude', plan.exclude], { windowsHide: true, timeout: 20e3 },
+    '-Include', plan.include, '-Exclude', plan.exclude, ...(plan.unique ? ['-Unique'] : [])], { windowsHide: true, timeout: 20e3 },
   (err, out) => resolve(String(out || '').trim().startsWith('ok'))));
 }
 const openUri = (uri) => new Promise((resolve) => execFile('explorer.exe', [uri], { windowsHide: true }, () => resolve()));
@@ -297,6 +290,18 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function focusSession(s) {
   // Trazer janelas para frente usa PowerShell/Win32 (focus.ps1): só no Windows por enquanto
   if (process.platform !== 'win32') return { ok: false, message: 'Abrir no PC ainda só funciona em PCs com Windows.' };
+  if (s.where === 'terminal' || s.where === 'ollama-run') {
+    const result = await focusTerminal(s);
+    if (result.ok && result.host === 'vscode') {
+      const folders = result.folders || [];
+      const folder = folders.find((f) => winPath(s.cwd) === winPath(f) || winPath(s.cwd).startsWith(winPath(f) + '\\')) || folders[0];
+      const names = [...new Set([result.workspaceName, base(folder)].filter(Boolean))];
+      const include = names.map((name) => noPipe(`${name} - Visual Studio Code`)).concat('Visual Studio Code').join('|');
+      const focused = await focusWindow({ process: 'Code', include, exclude: '', unique: true });
+      if (!focused) return { ok: false, message: 'Aba selecionada, mas não identifiquei uma janela única do VS Code para trazê-la à frente.' };
+    }
+    return { ok: result.ok, message: result.message };
+  }
   const plan = focusPlan(s);
   if (!plan) {
     return { ok: false, message: s.where === 'claude-desktop' ? 'Essa sessão não está mais no app do Claude.'

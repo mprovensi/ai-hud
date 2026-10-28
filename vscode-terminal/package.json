@@ -1,0 +1,12 @@
+{
+  "name": "terminal-focus",
+  "displayName": "AI HUD Terminal Focus",
+  "description": "Seleciona o terminal integrado solicitado pelo AI HUD local.",
+  "publisher": "ai-hud",
+  "version": "0.1.2",
+  "engines": { "vscode": "^1.85.0" },
+  "main": "./extension.js",
+  "activationEvents": ["*"],
+  "extensionKind": ["ui"],
+  "capabilities": { "untrustedWorkspaces": { "supported": true } }
+}

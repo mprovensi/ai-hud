@@ -71,6 +71,9 @@ detalhes são repassados ao PC dono da sessão. Os aparelhos acessam só o princ
 | `hook-stop.js` | Hook `Stop` do Claude Code: entrega respostas enviadas pelo HUD |
 | `hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
 | `focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude); só Windows |
+| `terminal-focus.js` / `terminal-focus.ps1` | Identificam o processo do CLI e selecionam a aba no VS Code ou Windows Terminal |
+| `vscode-terminal/` | Integração local do VS Code para selecionar terminais pelo processo, inclusive abas com nomes iguais |
+| `install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
 | `ai-hud.service` | Serviço do systemd para rodar no Linux |
 | `statusline.js` | Statusline do Claude Code com contexto, custo e cotas |
 | `dashboard.js` | Painel HTML estático (versão inicial) |
@@ -101,7 +104,27 @@ calculada com `eval_count / eval_duration * 1e9` ([métricas da API](https://doc
 O histórico do terminal não salva respostas nem essas métricas; conversas antigas não ganham medições retroativas.
 Em instalações com vários PCs, o HUD da máquina que gera a resposta também precisa estar atualizado.
 
+## Selecionar a aba do CLI ao abrir no PC
+
+No Windows, **Abrir no PC** seleciona o terminal da sessão antes de trazer a janela para frente.
+No **VS Code**, instale a integração local uma vez em cada PC que hospeda os CLIs:
+
+```powershell
+powershell -NoProfile -File install-terminal-focus.ps1
+```
+
+A integração identifica o processo de cada terminal; abas com nomes iguais continuam distintas.
+Ela só aceita pedidos locais autenticados e não escreve comandos no terminal. Se o VS Code pedir
+para recarregar após a instalação, recarregue a janela para ativar a integração.
+
+No **Windows Terminal**, não há extensão para instalar. O HUD procura uma aba com título único
+compatível com a sessão, projeto ou modelo. Se duas abas forem indistinguíveis, dê nomes diferentes
+a elas: o HUD informa a ambiguidade em vez de selecionar uma ao acaso. Uma sessão já encerrada
+precisa estar aberta no CLI para que a aba possa ser selecionada.
+
 ## Testes
 
 Execute `node --test` para rodar os testes de regressão, sem dependências externas.
 Eles usam dados simulados e um servidor HTTP temporário; não acionam os CLIs nem alteram as conversas locais.
+O teste nativo opcional `node scripts/windows-terminal-smoke.js` abre abas próprias no Windows Terminal,
+verifica a troca e a recusa de títulos duplicados, e encerra apenas seus processos de teste ao terminar.

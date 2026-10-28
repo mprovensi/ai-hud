@@ -11,7 +11,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
   const root = path.join(__dirname, '..');
   const sessions = [];
   let server, configWrites = 0;
-  const sandbox = { __dirname: root, Buffer, URL, URLSearchParams, process,
+  const sandbox = { __dirname: root, Buffer, URL, URLSearchParams, process: { env: process.env, platform: 'win32' },
     console: { log: () => {} }, setInterval: () => {}, setTimeout, clearTimeout,
     require: (name) => {
       if (name === 'http') return { createServer: (handler) => {
@@ -32,6 +32,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
       if (name === './lib') return { claudeSessions: () => [], codexData: () => ({ sessions }), antigravitySessions: () => [] };
       if (name === './quotas') return { claudeQuota: async () => ({ windows: {} }), codexQuota: async () => ({ windows: {} }) };
       if (name === './peers') return { Peers, compareSessions: require('../peers').compareSessions };
+      if (name === './terminal-focus') return { createTerminalFocus: () => async () => ({ ok: true, host: 'windows-terminal', message: 'test tab selected' }) };
       if (name === './http-utils') return require('../http-utils');
       if (name === './ollama') return { Ollama: class { constructor() { this.state = null; } } };
       if (name === './ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [] };
@@ -62,13 +63,15 @@ test('actual server routes reject null bodies and malformed tokens without side 
   const now = Date.now();
   const session = { id: '00000000-0000-4000-8000-000000000001', tool: 'Codex', cwd: '/project',
     start: new Date(now - 20000).toISOString(), end: new Date(now).toISOString(), mtime: now,
-    lastStop: 'end_turn', completedAt: now, models: new Set(), tools: {}, events: [],
+    lastStop: 'end_turn', completedAt: now, where: 'terminal', models: new Set(), tools: {}, events: [],
     input: 0, output: 0, cacheRead: 0, cacheWrite: 0, prompts: 1, lastReply: 'oi' };
   sessions.push(session);
   assert.equal(await call('/api/snapshot'), 200);
   assert.equal(JSON.parse(responseBody).active[0].completedAt, now);
   assert.equal(await call('/api/session?id=' + session.id), 200);
   assert.equal(JSON.parse(responseBody).completedAt, now);
+  assert.equal(await call('/api/focus', JSON.stringify({ id: session.id })), 200);
+  assert.equal(JSON.parse(responseBody).message, 'test tab selected');
   const ollama = { ...session, id: 'ollama-test', tool: 'Ollama', generation: { outputTokens: 100, tokensPerSecond: 50, totalMs: 3000 } };
   sessions.push(ollama);
   assert.equal(await call('/api/session?id=' + ollama.id), 200);

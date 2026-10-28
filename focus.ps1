@@ -3,7 +3,7 @@
 #   -Include  trechos de título, em ordem de preferência, separados por "|"; vazio = qualquer janela
 #   -Exclude  trechos que o título não pode ter, separados por "|"
 #   -DryRun   só informa qual janela seria escolhida
-param([string]$Process, [string]$Include = '', [string]$Exclude = '', [switch]$DryRun)
+param([string]$Process, [string]$Include = '', [string]$Exclude = '', [switch]$DryRun, [switch]$Unique)
 
 Add-Type @"
 using System; using System.Runtime.InteropServices; using System.Text;
@@ -40,7 +40,9 @@ $excl = @($Exclude -split '\|' | Where-Object { $_ })
 $candidates = @($windows | Where-Object { $t = $_.t; -not ($excl | Where-Object { $t.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) })
 $found = $null
 foreach ($want in @($Include -split '\|')) {
-  $found = $candidates | Where-Object { -not $want -or $_.t.IndexOf($want, [StringComparison]::OrdinalIgnoreCase) -ge 0 } | Select-Object -First 1
+  $matching = @($candidates | Where-Object { -not $want -or $_.t.IndexOf($want, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+  if ($Unique -and $matching.Count -gt 1) { continue }
+  $found = $matching | Select-Object -First 1
   if ($found) { break }
 }
 if (-not $found) { Write-Output 'none'; exit 1 }

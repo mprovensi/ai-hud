@@ -98,6 +98,89 @@ function toSession(c) {
 
 function ollamaChatSessions() { return readChats().map(toSession); }
 
+// ---- Conversas de qualquer cliente, gravadas pelo proxy -----------------------
+// O ollama-proxy (~/ollama-proxy) fica na :11434 e grava pergunta + resposta de cada chamada em
+// conversas.sqlite, agrupadas por session_id (IP + modelo + primeira pergunta). Só leitura aqui.
+const PROXY_DB = process.env.AI_HUD_OLLAMA_PROXY_DB || path.join(require('os').homedir(), 'ollama-proxy', 'conversas.sqlite');
+const LOCAL_IP = /^(127\.|::1$|::ffff:127\.)/;
+let proxyCache = { sig: '', at: 0, calls: [] };
+
+function readProxyCalls() {
+  if (!sqlite) return [];
+  let sig = '';
+  for (const f of [PROXY_DB, `${PROXY_DB}-wal`]) { try { const st = fs.statSync(f); sig += `${st.mtimeMs}:${st.size};`; } catch {} }
+  if (!sig) return [];
+  if (sig === proxyCache.sig && Date.now() - proxyCache.at < 30e3) return proxyCache.calls;
+  let db;
+  try {
+    db = new sqlite.DatabaseSync(PROXY_DB, { readOnly: true });
+    // As 40 sessões mais recentes, chamada por chamada
+    const calls = db.prepare(`SELECT id, ts, client_ip, user_agent, endpoint, model, session_id, last_user, response_text,
+        prompt_tokens, completion_tokens, client_aborted FROM calls
+      WHERE session_id IN (SELECT session_id FROM calls GROUP BY session_id ORDER BY MAX(id) DESC LIMIT 40)
+      ORDER BY id`).all();
+    // Respostas que o próprio HUD gerou já aparecem como continuação da conversa original
+    proxyCache = { sig, at: Date.now(), calls: calls.filter((c) => c.user_agent !== 'ai-hud') };
+  } catch { /* banco ocupado: usa a leitura anterior */ } finally { try { db && db.close(); } catch {} }
+  return proxyCache.calls;
+}
+
+// Chamadas de um `ollama run` aberto agora: mesmo modelo, vindas deste PC, depois que ele começou
+const runCalls = (r, calls) => calls.filter((c) => /^ollama\//.test(c.user_agent || '') && LOCAL_IP.test(c.client_ip)
+  && c.model === r.model && toMs(c.ts) >= r.start - 5e3);
+
+function proxyToSession(sid, calls) {
+  const extra = (cont[sid] && cont[sid].messages) || [];
+  const all = [];
+  for (const c of calls) {
+    all.push({ role: 'user', content: c.last_user || '', at: toMs(c.ts), model: c.model });
+    all.push({ role: 'assistant', content: (c.response_text || '') + (c.client_aborted ? ' [interrompida]' : ''), at: toMs(c.ts), model: c.model });
+  }
+  for (const m of extra) all.push({ ...m });
+  const first = calls[0], last = calls[calls.length - 1];
+  const users = all.filter((m) => m.role === 'user' && m.content);
+  const replies = all.filter((m) => m.role === 'assistant' && m.content);
+  const generating = !!(cont[sid] && cont[sid].generating);
+  const end = Math.max(...all.map((m) => m.at || 0));
+  const ip = String(first.client_ip).replace(/^::ffff:/, '');
+  const client = (first.user_agent || '').split(/[\s/]/)[0] || 'cliente';
+  const clip = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+  return {
+    tool: 'Ollama', id: `ollama-api-${sid}`, chatId: sid, file: PROXY_DB, cwd: '', where: 'ollama-api',
+    start: new Date(toMs(first.ts)).toISOString(), end: new Date(end).toISOString(),
+    mtime: generating ? Date.now() : end,
+    lastStop: generating ? '' : 'end_turn',
+    project: clip(users[0] ? users[0].content : 'Conversa via API', 60),
+    title: `${last.model || 'Ollama'} · ${LOCAL_IP.test(first.client_ip) ? 'este PC' : ip} (${client})`,
+    firstPrompt: users[0] ? clip(users[0].content, 120) : '',
+    lastPrompt: users.length ? clip(users[users.length - 1].content, 400) : '',
+    lastReply: replies.length ? clip(replies[replies.length - 1].content, 4000) : '',
+    lastReplyAt: replies.length ? replies[replies.length - 1].at || 0 : 0,
+    prompts: users.length, models: new Set(calls.map((c) => c.model).filter(Boolean)), lastTool: generating ? 'gerando' : '',
+    input: calls.reduce((a, c) => a + (c.prompt_tokens || 0), 0),
+    output: calls.reduce((a, c) => a + (c.completion_tokens || 0), 0) + extra.reduce((a, m) => a + (m.tokens || 0), 0),
+    cacheRead: 0, cacheWrite: 0, context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,
+    history: all, continued: extra.length > 0,
+    generation: replies.length ? replies[replies.length - 1].metrics || null : null,
+  };
+}
+
+function ollamaProxySessions() {
+  const calls = readProxyCalls();
+  if (!calls.length) return [];
+  // Conversas do app passam pelo proxy também: já aparecem pelo db.sqlite (com título), então ficam de fora
+  const appFirst = new Set(readChats().map((c) => {
+    const u = c.messages.find((m) => m.role === 'user');
+    return u ? String(u.content).trim() : null;
+  }).filter(Boolean));
+  // Chamadas de um `ollama run` aberto vão para o cartão dele
+  const claimed = new Set(runs.flatMap((r) => runCalls(r, calls).map((c) => c.id)));
+  const bySid = new Map();
+  for (const c of calls) if (!claimed.has(c.id)) (bySid.get(c.session_id) || bySid.set(c.session_id, []).get(c.session_id)).push(c);
+  return [...bySid].filter(([, cs]) => !appFirst.has(String(cs[0].last_user || '').trim()))
+    .map(([sid, cs]) => proxyToSession(sid, cs));
+}
+
 // Responder: histórico da conversa + mensagem nova → Ollama /api/chat; guarda a continuação
 function replyToChat(session, text, ollamaUrl) {
   const chatId = session.chatId;
@@ -112,7 +195,7 @@ function replyToChat(session, text, ollamaUrl) {
   save();
   const body = JSON.stringify({ model, messages, stream: false });
   const req = http.request(new URL('/api/chat', ollamaUrl), { method: 'POST', timeout: 10 * 60e3,
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (res) => {
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'User-Agent': 'ai-hud' } }, (res) => {
     const chunks = [];
     res.on('data', (c) => chunks.push(c));
     res.on('end', () => {
@@ -133,9 +216,10 @@ function replyToChat(session, text, ollamaUrl) {
 }
 
 // ---- `ollama run` no terminal ---------------------------------------------
-// A conversa do terminal não é gravada; só dá para mostrar que a sessão existe (modelo, desde quando),
-// o último comando digitado (~/.ollama/history, compartilhado por todos os `ollama run`) e trazer o
-// terminal para frente. Procura os processos a cada 15 s.
+// O Ollama não grava a conversa do terminal: o cartão mostra que a sessão existe (modelo, desde quando),
+// o último comando digitado (~/.ollama/history, compartilhado por todos os `ollama run`) e traz o
+// terminal para frente. Com o ollama-proxy, pergunta e resposta vêm do banco dele.
+// Procura os processos a cada 15 s.
 const { execFile } = require('child_process');
 const HISTORY = path.join(require('os').homedir(), '.ollama', 'history');
 let runs = []; // [{ pid, model, start }]
@@ -181,16 +265,31 @@ function ollamaRunSessions() {
     // Últimos comandos digitados (o terminal não grava as respostas)
     cmds = lines.slice(-12).map((l) => ({ role: 'user', content: l }));
   } catch {}
-  return runs.map((r) => ({
-    tool: 'Ollama', id: `ollama-run-${r.pid}`, pid: r.pid, file: '', cwd: '', where: 'ollama-run',
-    project: r.model, title: 'terminal · ollama run',
-    start: new Date(r.start).toISOString(), end: new Date(Math.max(r.start, histAt)).toISOString(),
-    // Processo aberto = sessão ativa esperando o usuário no terminal
-    mtime: Date.now(), lastStop: 'end_turn',
-    firstPrompt: '', lastPrompt: lastCmd.length > 400 ? lastCmd.slice(0, 399) + '…' : lastCmd, lastReply: '',
-    prompts: 0, models: new Set([r.model]), lastTool: '', history: cmds,
-    input: 0, output: 0, cacheRead: 0, cacheWrite: 0, context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,
-  }));
+  const calls = readProxyCalls();
+  const clip = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+  return runs.map((r) => {
+    const mine = runCalls(r, calls);
+    const last = mine[mine.length - 1];
+    // Com o proxy, a conversa inteira; sem ele, só os comandos digitados
+    const history = mine.length ? mine.flatMap((c) => [
+      { role: 'user', content: c.last_user || '', at: toMs(c.ts), model: c.model },
+      { role: 'assistant', content: c.response_text || '', at: toMs(c.ts), model: c.model },
+    ]) : cmds;
+    return {
+      tool: 'Ollama', id: `ollama-run-${r.pid}`, pid: r.pid, file: '', cwd: '', where: 'ollama-run',
+      project: r.model, title: 'terminal · ollama run',
+      start: new Date(r.start).toISOString(), end: new Date(Math.max(r.start, histAt, last ? toMs(last.ts) : 0)).toISOString(),
+      // Processo aberto = sessão ativa esperando o usuário no terminal
+      mtime: Date.now(), lastStop: 'end_turn',
+      firstPrompt: mine.length ? clip(mine[0].last_user || '', 120) : '',
+      lastPrompt: clip(last ? last.last_user || '' : lastCmd, 400),
+      lastReply: last ? clip(last.response_text || '', 4000) : '',
+      lastReplyAt: last ? toMs(last.ts) : 0,
+      prompts: mine.length, models: new Set([r.model]), lastTool: '', history,
+      input: mine.reduce((a, c) => a + (c.prompt_tokens || 0), 0), output: mine.reduce((a, c) => a + (c.completion_tokens || 0), 0),
+      cacheRead: 0, cacheWrite: 0, context: 0, contextWindow: 0, toolCalls: 0, tools: {}, events: [], subagent: false,
+    };
+  });
 }
 
-module.exports = { ollamaChatSessions, ollamaRunSessions, replyToChat };
+module.exports = { ollamaChatSessions, ollamaRunSessions, ollamaProxySessions, replyToChat };

@@ -151,7 +151,7 @@ Se o Ollama fica só em outro PC, `"ollama": false` na raiz de `data/config.json
 | `src/http-utils.js` | Autenticação, validação de JSON e tratamento de erros das requisições HTTP |
 | `src/quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
 | `src/peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
-| `src/ollama-chats.js` | Conversas do app do Ollama (Windows) como sessões: lê o db.sqlite do app (só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
+| `src/ollama-chats.js` | Conversas do Ollama como sessões: lê o db.sqlite do app e o `conversas.sqlite` do ollama-proxy (qualquer cliente da API; só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
 | `src/ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
 | `src/ollama-metrics.js` | Converte os tempos medidos pelo Ollama em duração da resposta e tokens por segundo |
 | `src/terminal-focus.js` | Identifica o processo do CLI e seleciona a aba no VS Code ou Windows Terminal |

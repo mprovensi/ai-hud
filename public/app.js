@@ -562,7 +562,7 @@
 
   function ollamaMore(d) {
     var terminal = d.where === 'ollama-run', runtime = d.ollama || ollamaRuntime(d);
-    var html = '<div class="stats">' + stat(terminal ? 'Terminal' : 'App', 'origem') +
+    var html = '<div class="stats">' + stat(terminal ? 'Terminal' : d.where === 'ollama-api' ? 'API' : 'App', 'origem') +
       stat(dur(Math.max(0, d.now - d.start)), terminal ? 'aberta há' : 'idade da conversa');
     if (!terminal && d.prompts > 0) html += stat(d.prompts, 'pedidos na conversa');
     if (!terminal && d.history && d.history.length) html += stat(d.history.length, 'mensagens exibidas');
@@ -646,16 +646,16 @@
         conv += '<div class="msg ' + (hm2.role === 'user' ? 'me' : 'ai') + '">' + esc(hm2.content) +
           (hm2.at ? '<div class="mt">' + when(hm2.at) + '</div>' : '') + '</div>';
       }
-      html += '<div class="panel"><h2>' + (d.where === 'ollama-run' ? 'Últimos comandos no terminal' : 'Últimas mensagens') + '</h2>' +
+      html += '<div class="panel"><h2>' + (d.where === 'ollama-run' && !d.lastReply ? 'Últimos comandos no terminal' : 'Últimas mensagens') + '</h2>' +
         '<div class="convo lastreply" id="lastReply">' + conv + '</div></div>';
     } else if (d.lastReply) html += '<div class="panel"><h2>Última resposta' + replyTime(d) + '</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
     // ollama run no terminal: não há como escrever na conversa
     if (d.tool !== 'Antigravity' && d.where !== 'ollama-run') html += replyBox(d);
-    if (d.where === 'ollama-run') html += '<div class="panel"><div class="muted" style="font-size:.85em">Conversa no terminal (ollama run): o Ollama não grava essas conversas, então não dá para ler as respostas nem responder por aqui. Use Abrir no PC.</div></div>';
+    if (d.where === 'ollama-run' && !d.lastReply) html += '<div class="panel"><div class="muted" style="font-size:.85em">Conversa no terminal (ollama run): o Ollama não grava essas conversas, então não dá para ler as respostas nem responder por aqui. Use Abrir no PC.</div></div>';
 
     html += '<div class="panel more' + (moreOpen ? ' open' : '') + '" id="more"><button class="mhead row" id="moreToggle">' +
       '<h2 class="grow">Mais detalhes</h2><span class="arrow">▸</span></button><div class="mbody">';
-    if (d.lastPrompt) html += '<h2>' + (d.where === 'ollama-run' ? 'Último comando no histórico compartilhado' : 'Seu último pedido') + '</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
+    if (d.lastPrompt) html += '<h2>' + (d.where === 'ollama-run' && !d.lastReply ? 'Último comando no histórico compartilhado' : 'Seu último pedido') + '</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
     if (d.tool === 'Ollama') {
       html += ollamaMore(d);
     } else {

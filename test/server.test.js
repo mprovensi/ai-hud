@@ -39,7 +39,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
       if (name === './src/http-utils') return require('../src/http-utils');
       if (name === './src/web-assets') return require('../src/web-assets');
       if (name === './src/ollama') return { Ollama: class { constructor() { this.state = null; } } };
-      if (name === './src/ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [] };
+      if (name === './src/ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [], ollamaProxySessions: () => [] };
       return require(name);
     } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'server.js'), 'utf8'), sandbox);

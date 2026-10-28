@@ -341,8 +341,9 @@ async function focusSession(s) {
 const allSessions = () => {
   const claude = claudeSessions();
   for (const s of claude) if (!s.contextWindow) s.contextWindow = claudeWindow(s);
-  // Conversas do app do Ollama (só se este PC tiver o app e o Node tiver node:sqlite)
-  return [...claude, ...codexData().sessions, ...antigravitySessions(), ...ollamaChats.ollamaChatSessions(), ...ollamaChats.ollamaRunSessions()];
+  // Conversas do app do Ollama e do ollama-proxy (só se existirem e o Node tiver node:sqlite)
+  return [...claude, ...codexData().sessions, ...antigravitySessions(), ...ollamaChats.ollamaChatSessions(),
+    ...ollamaChats.ollamaRunSessions(), ...ollamaChats.ollamaProxySessions()];
 };
 
 // Atividade pelo último registro do log: no Windows a data de modificação de um arquivo

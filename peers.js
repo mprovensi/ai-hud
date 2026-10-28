@@ -84,7 +84,7 @@ class Peers {
       out.recent = out.recent.concat(this.tag(p.snap.recent, p));
     }
     out.active.sort((a, b) => b.end - a.end);
-    out.recent = out.recent.sort((a, b) => b.end - a.end).slice(0, 20);
+    out.recent = out.recent.sort((a, b) => b.end - a.end).slice(0, 40);
 
     // Tokens: soma das máquinas (horas e dias alinhados por posição: relógios sincronizados)
     out.today = JSON.parse(JSON.stringify(local.today));

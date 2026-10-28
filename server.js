@@ -409,7 +409,7 @@ function snapshot() {
     // Quem espera por você primeiro, depois quem trabalha (como no agent-hud)
     active: sessions.filter((s) => s.state !== 'closed')
       .sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.end - a.end),
-    recent: sessions.filter((s) => s.state === 'closed').slice(0, 20),
+    recent: sessions.filter((s) => s.state === 'closed').slice(0, 40),
   };
 }
 

@@ -580,6 +580,8 @@ server.headersTimeout = 70e3;
 server.listen(PORT, '0.0.0.0', () => {
   snapshot(); // aquece o cache de logs: a primeira leitura de todos os arquivos leva ~1,5 s
   console.log(`AI HUD na porta ${PORT} · PIN ${config.pin}. Abra em um destes endereços:`);
+  // Pelo nome (mDNS do Windows) o endereço não muda quando o roteador troca o IP do PC
+  console.log(`  http://${os.hostname()}.local:${PORT}  (pelo nome, recomendado)`);
   for (const list of Object.values(os.networkInterfaces())) {
     for (const a of list) if (a.family === 'IPv4' && !a.internal) console.log(`  http://${a.address}:${PORT}`);
   }

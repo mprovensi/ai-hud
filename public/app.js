@@ -543,8 +543,16 @@
   // O iPad mini 1 é lento para redesenhar: só quando os dados mudaram, e não com a gaveta aberta
   var lastText = '';
   function apply(err, s, text) {
-    if (err && err.offline) return setOffline(true);
+    if (err && err.offline) {
+      // Wi-Fi instável (iPad antigo) perde um pedido de vez em quando: só mostra a tela de
+      // desconectado na 2ª falha seguida; na 1ª, tenta de novo em ~3 s sem alarde
+      failures++;
+      if (failures >= 2) return setOffline(true);
+      lastAttempt = new Date().getTime() - (offline ? RETRY_MS : POLL_MS) + 3000;
+      return;
+    }
     if (err) { $('status').innerHTML = '<span class="hi">● ' + esc(err.message) + '</span>'; return; }
+    failures = 0;
     setOffline(false);
     lastOk = new Date().getTime();
     text = (text || '').replace(/^\{"now":\d+/, ''); // "now" muda sempre; o resto diz se algo mudou
@@ -559,7 +567,7 @@
   }
 
   // ---- Desconectado: tela própria e nova tentativa a cada 5 s (conectado: a cada 10 s) ----
-  var offline = false, inFlight = false, lastAttempt = 0;
+  var offline = false, inFlight = false, lastAttempt = 0, failures = 0;
   var POLL_MS = 10000, RETRY_MS = 5000;
 
   function setOffline(on) {

@@ -140,6 +140,32 @@ Use `"ollama": true` no objeto de um peer para fixá-lo desde a primeira abertur
 últimos dados conhecidos; modelos carregados e GPU não são apresentados como atuais sem conexão.
 Se o Ollama fica só em outro PC, `"ollama": false` na raiz de `data/config.json` omite o Ollama local.
 
+## Conversas do Ollama de qualquer cliente (ollama-proxy)
+
+O Ollama não grava as conversas feitas pela API; só o app dele guarda as próprias. O `ollama-proxy/`
+fica na porta pública do Ollama (11434), repassa tudo ao servidor real numa porta interna (11435) e
+grava pergunta, resposta, raciocínio, tokens, IP e cliente de cada chamada em
+`data/ollama-conversas.sqlite`. Vale para qualquer cliente: `ollama run`, CLIs (Hermes, Aider…),
+SDKs, curl e outros PCs da rede, nas APIs nativa (`/api/chat`, `/api/generate`), OpenAI
+(`/v1/chat/completions`, `/v1/completions`, `/v1/responses`) e Anthropic (`/v1/messages`).
+Só Python 3, sem dependências.
+
+No HUD, cada conversa vira uma sessão do Ollama com modelo, IP e cliente. Conversas do app não
+duplicam, e chamadas de um `ollama run` aberto aparecem no cartão do terminal.
+
+```
+powershell -ExecutionPolicy Bypass -File ollama-proxy\instalar.ps1           # instala e inicia
+powershell -ExecutionPolicy Bypass -File ollama-proxy\instalar.ps1 -Remover  # volta ao normal
+python ollama-proxy\sessoes.py [session_id | --busca texto]                  # consulta no terminal
+```
+
+O instalador cria a tarefa agendada **Ollama Log Proxy**, que inicia no login, sobe o `ollama serve`
+em `127.0.0.1:11435` e o reinicia se cair. Ele também tira o app do Ollama da inicialização, porque o
+app sobe o próprio servidor na 11434. Como o servidor não é mais iniciado pelo app, as configurações
+do app (tamanho de contexto, expor na rede) não se aplicam: use variáveis como
+`OLLAMA_CONTEXT_LENGTH`. Para outros PCs acessarem, libere a porta 11434 no firewall para o
+`pythonw.exe`. `python ollama-proxy\proxy.py --help` lista as opções (`--allow` restringe por IP).
+
 ## Arquivos
 
 | Arquivo | Função |
@@ -151,7 +177,7 @@ Se o Ollama fica só em outro PC, `"ollama": false` na raiz de `data/config.json
 | `src/http-utils.js` | Autenticação, validação de JSON e tratamento de erros das requisições HTTP |
 | `src/quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
 | `src/peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
-| `src/ollama-chats.js` | Conversas do Ollama como sessões: lê o db.sqlite do app e o `conversas.sqlite` do ollama-proxy (qualquer cliente da API; só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
+| `src/ollama-chats.js` | Conversas do Ollama como sessões: lê o db.sqlite do app e o `data/ollama-conversas.sqlite` do ollama-proxy (qualquer cliente da API; só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
 | `src/ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
 | `src/ollama-metrics.js` | Converte os tempos medidos pelo Ollama em duração da resposta e tokens por segundo |
 | `src/terminal-focus.js` | Identifica o processo do CLI e seleciona a aba no VS Code ou Windows Terminal |
@@ -164,6 +190,7 @@ Se o Ollama fica só em outro PC, `"ollama": false` na raiz de `data/config.json
 | `windows/terminal-focus.ps1` | Seleciona a aba do CLI no Windows Terminal (usado por `src/terminal-focus.js`) |
 | `windows/install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
 | `windows/tray/` | App de bandeja: inicia, reinicia e mostra o status e o log do servidor |
+| `ollama-proxy/` | Proxy que grava as conversas de qualquer cliente do Ollama (`proxy.py`), consulta (`sessoes.py`) e instalador do Windows |
 | `linux/ai-hud.service` | Serviço do systemd para rodar no Linux |
 | `vscode-terminal/` | Integração local do VS Code para selecionar terminais pelo processo, inclusive abas com nomes iguais |
 | `public/` | Página: `index.html`, `app.css`, `app.js`, PWA (`manifest.json`, `sw.js`) e ícones |

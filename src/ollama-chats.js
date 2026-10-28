@@ -99,9 +99,9 @@ function toSession(c) {
 function ollamaChatSessions() { return readChats().map(toSession); }
 
 // ---- Conversas de qualquer cliente, gravadas pelo proxy -----------------------
-// O ollama-proxy (~/ollama-proxy) fica na :11434 e grava pergunta + resposta de cada chamada em
-// conversas.sqlite, agrupadas por session_id (IP + modelo + primeira pergunta). Só leitura aqui.
-const PROXY_DB = process.env.AI_HUD_OLLAMA_PROXY_DB || path.join(require('os').homedir(), 'ollama-proxy', 'conversas.sqlite');
+// O ollama-proxy (pasta ollama-proxy/) fica na :11434 e grava pergunta + resposta de cada chamada em
+// data/ollama-conversas.sqlite, agrupadas por session_id (IP + modelo + primeira pergunta). Só leitura aqui.
+const PROXY_DB = process.env.AI_HUD_OLLAMA_PROXY_DB || path.join(__dirname, '..', 'data', 'ollama-conversas.sqlite');
 const LOCAL_IP = /^(127\.|::1$|::ffff:127\.)/;
 let proxyCache = { sig: '', at: 0, calls: [] };
 

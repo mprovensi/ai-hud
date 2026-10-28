@@ -251,6 +251,8 @@ body.read-larger { font-size: 19px; }
 .ico { width: 1.3em; height: 1.3em; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round; }
 .top-actions .btn { line-height: 1; }
+/* Ícone sozinho no botão: bloco centralizado (inline, ficava fora do centro pela linha de base do texto) */
+.top-actions .btn .ico { display: block; margin: 0 auto; }
 .btn.on { background: #4d3f22; border-color: #8a6a2a; color: #f0cf8a; }
 .waiting { background: #2b3556; color: #b3c6ff; }
 .idle, .closed { background: #2c2c29; color: #b5b5ae; }

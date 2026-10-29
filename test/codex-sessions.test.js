@@ -4,9 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const vm = require('node:vm');
-const { createRequire } = require('node:module');
-const libFile = path.resolve(__dirname, '../src/lib.js');
-const localRequire = createRequire(libFile);
+const { codexData, codexWhere } = require('../src/sources/codex');
 let DatabaseSync;
 try { ({ DatabaseSync } = require('node:sqlite')); } catch {}
 const ID = '00000000-0000-4000-8000-000000000001';
@@ -19,9 +17,7 @@ function fixture(t) {
     assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));
     fs.rmSync(root, { recursive: true, force: true });
   });
-  const sandbox = { module: { exports: {} }, require: localRequire, process: { env: { CODEX_HOME: root } } };
-  vm.runInNewContext(fs.readFileSync(libFile, 'utf8'), sandbox, { filename: libFile });
-  return { root, lib: sandbox.module.exports };
+  return { root, lib: { codexData: () => codexData(root) } };
 }
 
 function rollout(root, id, records) {
@@ -40,7 +36,7 @@ function message(role, text) {
   return { type: 'response_item', payload: { type: 'message', role, content: [{ type: role === 'user' ? 'input_text' : 'output_text', text }] } };
 }
 
-test('Codex atual: lê mensagens response_item, ignora contexto e usa CODEX_HOME', (t) => {
+test('Codex atual: lê mensagens response_item, ignora contexto e usa a pasta do Codex informada', (t) => {
   const { root, lib } = fixture(t);
   rollout(root, ID, [meta(ID), message('user', '<environment_context>contexto interno</environment_context>'), message('user', 'Analise o projeto'), message('assistant', 'Análise pronta')]);
   const { sessions } = lib.codexData();
@@ -171,7 +167,7 @@ test('Codex paginado: recupera SQLite sem JSONL e não duplica conversas existen
 });
 
 test('Codex: ausência de node:sqlite mantém fallback JSONL sem acessar bancos', () => {
-  const source = fs.readFileSync(path.resolve(__dirname, '../src/codex-history.js'), 'utf8');
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/sources/codex-history.js'), 'utf8');
   const sandbox = { module: { exports: {} }, require: (name) => {
     if (name === 'node:sqlite') throw new Error('indisponível');
     if (name === 'fs') return { readdirSync: () => assert.fail('não deve acessar SQLite') };
@@ -182,7 +178,6 @@ test('Codex: ausência de node:sqlite mantém fallback JSONL sem acessar bancos'
 });
 
 test('Codex: onde a sessão roda vem do originator, não do source "vscode" que todas gravam', () => {
-  const { codexWhere } = require('../src/lib');
   assert.equal(codexWhere({ originator: 'codex_vscode', source: 'vscode' }), 'vscode');
   assert.equal(codexWhere({ originator: 'codex-tui', source: 'vscode' }), 'terminal');
   assert.equal(codexWhere({ originator: 'Codex Desktop', source: 'vscode' }), 'codex-desktop');

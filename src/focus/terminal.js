@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { execFile } = require('child_process');
+const { ROOT } = require('../paths');
 
 function selectBridge(records, ancestors, now = Date.now()) {
   const ids = new Set(ancestors.map((item) => item.pid));
@@ -25,7 +26,7 @@ function titleHints(session, info) {
 function createTerminalFocus(options = {}) {
   const home = options.home || os.homedir();
   const native = options.native || ((args) => new Promise((resolve) => {
-    execFile('powershell', ['-NoProfile', '-File', path.join(__dirname, '..', 'windows', 'terminal-focus.ps1'), ...args],
+    execFile('powershell', ['-NoProfile', '-File', path.join(ROOT, 'windows', 'terminal-focus.ps1'), ...args],
       { windowsHide: true, timeout: 15000 }, (error, out) => { try { resolve(JSON.parse(String(out).trim())); } catch { resolve({ ok: false, message: 'O seletor de abas não respondeu.' }); } });
   }));
   const send = options.send || ((record, pid) => new Promise((resolve) => {

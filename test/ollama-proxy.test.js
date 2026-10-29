@@ -3,10 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const vm = require('node:vm');
 const { DatabaseSync } = require('node:sqlite');
 
-const source = fs.readFileSync(path.join(__dirname, '../src/ollama-chats.js'), 'utf8');
+const { createOllamaSource } = require('../src/sources/ollama');
 
 // Bancos de verdade numa pasta temporária: o do ollama-proxy e o do app do Ollama
 function setup() {
@@ -31,19 +30,12 @@ function setup() {
 }
 
 function load(dir) {
-  const env = { ...process.env, LOCALAPPDATA: dir, AI_HUD_OLLAMA_PROXY_DB: path.join(dir, 'conversas.sqlite') };
-  const sandbox = { module: { exports: {} }, __dirname, Buffer, URL, setInterval: () => {}, process: { ...process, env },
-    require: (name) => {
-      if (name === './ollama-metrics') return require('../src/ollama-metrics');
-      if (name === 'child_process') return { execFile: () => {} };
-      return require(name);
-    } };
-  vm.runInNewContext(source, sandbox);
-  return sandbox.module.exports;
+  return createOllamaSource({ dataDir: dir, appDb: path.join(dir, 'Ollama', 'db.sqlite'), proxyDb: path.join(dir, 'conversas.sqlite'),
+    scanner: { runs: () => [], start() {} } });
 }
 
 test('conversas do ollama-proxy viram sessões, sem as do app nem as do próprio HUD', () => {
-  const sessions = load(setup()).ollamaProxySessions();
+  const sessions = load(setup()).proxySessions();
   assert.equal(sessions.length, 1);
   const s = sessions[0];
   assert.equal(s.id, 'ollama-api-aaa');

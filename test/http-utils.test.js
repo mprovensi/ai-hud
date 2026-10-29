@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { EventEmitter } = require('node:events');
-const { authorized, readJson, handleRequest } = require('../src/http-utils');
+const { authorized, readJson, handleRequest } = require('../src/http/utils');
 
 const TOKEN = 'a'.repeat(24);
 

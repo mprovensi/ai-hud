@@ -50,4 +50,12 @@ function handleRequest(handler) {
   });
 }
 
-module.exports = { authorized, readJson, handleRequest };
+// Resposta sem cache, com a versão do app (o aparelho percebe que há versão nova)
+function createSend(version) {
+  return function send(res, status, type, body, headers = {}) {
+    res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-AI-HUD-Version': version, ...headers });
+    res.end(body);
+  };
+}
+
+module.exports = { authorized, readJson, handleRequest, createSend };

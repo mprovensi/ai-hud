@@ -1,0 +1,26 @@
+@media (max-width: 760px) {
+  .quotas { display: block; }
+  .quotas .panel + .panel { margin-left: 0; }
+  .quotas .olla { width: 100%; }
+  .card { width: 100%; }
+  .top .clock { display: inline-block; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
+  .top .btn { margin-left: 6px; }
+  .top .status { margin-right: 4px; }
+  .top-actions { -webkit-flex-basis: 100%; flex-basis: 100%; margin: 8px 0 0; -webkit-justify-content: space-between; justify-content: space-between; }
+  /* Botões têm 44px de alvo de toque: o ícone acompanha (com .9em ficava minúsculo no meio) */
+  .top-actions .btn { margin-left: 0; min-width: 48px; padding: .15em .5em; font-size: 1.1em; }
+  .reading-options .btn { margin: 4px 2px; padding-left: .5em; padding-right: .5em; }
+  body.read-large .rform textarea, body.read-larger .rform textarea { font-size: 1em; }
+  .stat { width: 50%; }
+}
+@media (max-width: 420px) {
+  /* Celular estreito (~360px): do "ao vivo" fica só a bolinha */
+  .top .stxt { display: none; }
+  .top .btn { margin-left: 4px; padding: .3em .45em; }
+  .top-actions .btn { margin-left: 0; }
+}
+body.read-large .dtitle, body.read-larger .dtitle { white-space: normal; word-wrap: break-word; }
+@media (prefers-reduced-motion: reduce) {
+  #overlay { -webkit-transition: none; transition: none; }
+  .ping .in, .pulse, .mic.on { -webkit-animation: none; animation: none; }
+}

@@ -3,48 +3,26 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
-const vm = require('node:vm');
-const { Peers } = require('../src/peers');
+const os = require('node:os');
+const { createApp } = require('../src/app');
 
 test('actual server routes reject null bodies and malformed tokens without side effects', async (t) => {
   const token = 'a'.repeat(24);
-  const root = path.join(__dirname, '..');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-server-'));
+  const configFile = path.join(dataDir, 'config.json');
+  fs.writeFileSync(configFile, JSON.stringify({ token, pin: '12345678' }));
+  const configBefore = fs.readFileSync(configFile, 'utf8');
   const sessions = [];
-  let server, configWrites = 0;
-  const sandbox = { __dirname: root, Buffer, URL, URLSearchParams, process: { env: process.env, platform: 'win32' },
-    console: { log: () => {} }, setInterval: () => {}, setTimeout, clearTimeout,
-    require: (name) => {
-      if (name === 'http') return { createServer: (handler) => {
-        server = http.createServer(handler);
-        const listen = server.listen;
-        server.listen = (port, host, callback) => listen.call(server, 0, '127.0.0.1', callback);
-        return server;
-      } };
-      if (name === 'fs') return {
-        readFileSync: (file) => {
-          if (path.basename(file) === 'config.json') return JSON.stringify({ token, pin: '12345678' });
-          if (path.dirname(file) === path.join(root, 'public')) return fs.readFileSync(file);
-          if (path.extname(file) === '.json') return '{}';
-          throw new Error('test fixture has no such asset');
-        },
-        writeFileSync: (file) => { if (path.basename(file) === 'config.json') configWrites++; },
-        readdirSync: () => [],
-        mkdirSync: () => {},
-        renameSync: () => { throw new Error('no legacy files in test'); },
-      };
-      if (name === './src/lib') return { claudeSessions: () => [], codexData: () => ({ sessions }), antigravitySessions: () => [] };
-      if (name === './src/quotas') return { claudeQuota: async () => ({ windows: {} }), codexQuota: async () => ({ windows: {} }) };
-      if (name === './src/peers') return { Peers, compareSessions: require('../src/peers').compareSessions };
-      if (name === './src/terminal-focus') return { createTerminalFocus: () => async () => ({ ok: true, host: 'windows-terminal', message: 'test tab selected' }) };
-      if (name === './src/http-utils') return require('../src/http-utils');
-      if (name === './src/web-assets') return require('../src/web-assets');
-      if (name === './src/ollama') return { Ollama: class { constructor() { this.state = null; } } };
-      if (name === './src/ollama-chats') return { ollamaChatSessions: () => [], ollamaRunSessions: () => [], ollamaProxySessions: () => [] };
-      return require(name);
-    } };
-  vm.runInNewContext(fs.readFileSync(path.join(root, 'server.js'), 'utf8'), sandbox);
+  const { server } = createApp({
+    dataDir,
+    sources: { all: () => sessions, ollamaReply: async () => ({ sent: true }) },
+    quotaFetchers: { claude: async () => ({ windows: {} }), codex: async () => ({ windows: {} }) },
+    focus: async () => ({ ok: true, message: 'test tab selected' }),
+    brands: false,
+    log: () => {},
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
-  await new Promise((resolve) => server.once('listening', resolve));
   let responseBody, responseHeaders;
   const call = (route, body, accessToken = token) => new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port: server.address().port,
@@ -96,7 +74,7 @@ test('actual server routes reject null bodies and malformed tokens without side 
     '/hook/permission', '/hook/permission-expire', '/hook/listen', '/hook/unlisten']) {
     assert.equal(await call(route, 'null'), 400, route);
   }
-  assert.equal(configWrites, 0);
+  assert.equal(fs.readFileSync(configFile, 'utf8'), configBefore);
   const now = Date.now();
   const session = { id: '00000000-0000-4000-8000-000000000001', tool: 'Codex', cwd: '/project',
     start: new Date(now - 20000).toISOString(), end: new Date(now).toISOString(), mtime: now,

@@ -10,8 +10,9 @@ $backup  = Join-Path $dir "..\data\Ollama.lnk"  # atalho original do app, para -
 
 function Stop-Ollama {
     Get-Process "ollama app", ollama -ErrorAction SilentlyContinue | Stop-Process -Force
-    Get-CimInstance Win32_Process -Filter "name='pythonw.exe'" |
-        Where-Object CommandLine -like "*proxy.py*" |
+    # Proxy em Node (atual) ou em Python (versão anterior, proxy.py)
+    Get-CimInstance Win32_Process -Filter "name='node.exe' OR name='pythonw.exe'" |
+        Where-Object { $_.CommandLine -like "*ollama-proxy*proxy.*" -or $_.CommandLine -like "*proxy.py*" } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
     Start-Sleep 2
 }
@@ -26,7 +27,8 @@ if ($Remover) {
     return
 }
 
-$pythonw = Join-Path (Split-Path (Get-Command python).Source) "pythonw.exe"
+$node = (Get-Command node -ErrorAction SilentlyContinue).Source
+if (-not $node) { throw "Node.js não encontrado no PATH (o proxy precisa do Node 22.5 ou mais novo)." }
 
 # O app do Ollama sobe o próprio servidor na 11434 e brigaria pela porta.
 if (Test-Path $startup) {
@@ -34,7 +36,10 @@ if (Test-Path $startup) {
     Move-Item $startup $backup -Force
 }
 
-$action   = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$dir\proxy.py`" --spawn-ollama" -WorkingDirectory $dir
+# Node é programa de console: o PowerShell oculto evita a janela preta no login.
+# Sem console, o proxy grava o registro em data\ollama-proxy.log.
+$command  = "& '$node' '$dir\proxy.js' --spawn-ollama"
+$action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"$command`"" -WorkingDirectory $dir
 $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
             -ExecutionTimeLimit 0 -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const app = require('./helpers/app-source');
 function section(from, to) {
   const start = app.indexOf(from), end = app.indexOf(to, start);
   assert.ok(start >= 0 && end > start);

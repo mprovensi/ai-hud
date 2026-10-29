@@ -1,0 +1,59 @@
+/* Grade de sessões: 3 colunas, quantas linhas precisar (flex-wrap; o Safari 9 não tem CSS Grid) */
+.gtitle { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin: 4px 2px 6px; }
+.grid { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -5px; }
+.card { display: block; padding: 0 5px 10px; }
+.card .in { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background-color: #1c1c1a;
+  border: 1px solid #2c2c29; border-radius: 12px; padding: 10px 12px; }
+.card:active .in { background-color: #232321; }
+/* Altura fixa no iPad: as linhas não encolhem (cortariam o texto) */
+.card .in > * { -webkit-flex-shrink: 0; flex-shrink: 0; }
+/* Cor da IA: degradê leve no canto superior esquerdo, sumindo antes do meio (texto sempre sobre
+   fundo quase neutro). O ícone continua identificando a IA; a cor só reforça. Bordas ficam para o estado. */
+.t0 .in { background-image: linear-gradient(150deg, rgba(224, 138, 102, .17), rgba(224, 138, 102, 0) 55%); }
+.t1 .in { background-image: linear-gradient(150deg, rgba(95, 184, 164, .15), rgba(95, 184, 164, 0) 55%); }
+.t2 .in { background-image: linear-gradient(150deg, rgba(125, 155, 240, .15), rgba(125, 155, 240, 0) 55%); }
+.t3 .in { background-image: linear-gradient(150deg, rgba(179, 157, 219, .17), rgba(179, 157, 219, 0) 55%); }
+.card.waiting-card .in { border-color: #3b4a7a; box-shadow: 0 0 0 1px #3b4a7a; }
+/* Acabou de passar a esperar por você: o cartão pisca por alguns ciclos */
+/* Sessão inativa que completa a grade: borda tracejada e mais apagada */
+/* Sem a cor da IA; contorno tracejado com traços longos (o "dashed" do CSS não deixa
+   escolher o tamanho do traço, então são gradientes repetidos: 7px de traço, 4px de espaço) */
+.card.old-card .in {
+  opacity: .7; border: 0; padding: 11px 13px;
+  background:
+    linear-gradient(to right, #55554f 64%, transparent 64%) left top / 11px 2px repeat-x,
+    linear-gradient(to right, #55554f 64%, transparent 64%) left bottom / 11px 2px repeat-x,
+    linear-gradient(#55554f 64%, transparent 64%) left top / 2px 11px repeat-y,
+    linear-gradient(#55554f 64%, transparent 64%) right top / 2px 11px repeat-y,
+    #181817;
+}
+.card.old-card:active .in { opacity: 1; }
+.card.ping .in { -webkit-animation: ping 1s ease-in-out 3; animation: ping 1s ease-in-out 3; }
+@-webkit-keyframes ping { 50% { background-color: #2b3556; } }
+@keyframes ping { 50% { background-color: #2b3556; } }
+.card .proj { font-weight: 700; font-size: 1.05em; }
+/* Primeira linha com a altura do anel de contexto, mesmo sem ele: os cartões ficam alinhados */
+.card .in > .row:first-child { min-height: 1.65em; }
+.card .sub { margin-top: 3px; }
+.card .sub .tool { font-size: .72em; color: #8d8d87; }
+.card .sub .badge { margin-left: 0; margin-right: 6px; }
+.card .ttl { color: #d5d5cf; font-size: .82em; margin-top: 8px; }
+/* Última mensagem: uma linha pequena; "você" no seu pedido, ↳ na resposta da IA */
+.card .lmsg { font-size: .72em; color: #8d8d87; margin-top: 3px; }
+.card .lmsg .who { color: #6f6f6a; margin-right: .4em; }
+.card .lmsg.me .who { color: #8d9bc4; }
+.card .foot { margin-top: auto; padding-top: 8px; }
+.card .meta { font-size: .72em; color: #8d8d87; }
+/* Contexto: anel com o % no meio (trilho cinza, arco na cor do nível, começando no topo) */
+.pie { position: relative; display: inline-block; width: 1.65em; height: 1.65em; margin-left: 8px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.pie svg { width: 100%; height: 100%; -webkit-transform: rotate(-90deg); transform: rotate(-90deg); }
+.pie circle { fill: none; stroke-width: 4; }
+.pie .pbg { stroke: #2c2c29; }
+.pie .pfg { stroke-linecap: round; }
+.pie .pv { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+  font-size: .6em; font-weight: 700; color: #d5d5cf; }
+.sess .pie { width: 1.5em; height: 1.5em; }
+.rflag { font-size: .7em; color: #b3c6ff; white-space: nowrap; margin-left: 6px; }
+.rflag.queued { color: #e0b45a; }
+

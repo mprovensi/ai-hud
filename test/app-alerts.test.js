@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const app = require('./helpers/app-source');
 const start = app.indexOf('  function checkAlerts(s)');
 const end = app.indexOf('\n  function setRemoteBtn', start);
 assert.ok(start >= 0 && end > start);

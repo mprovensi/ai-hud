@@ -1,0 +1,28 @@
+/* Cota: medidor com marca do ritmo esperado */
+.qhead { margin-bottom: 4px; }
+.qhead .name { font-weight: 700; font-size: 1.1em; }
+.brand { width: 1.15em; height: 1.15em; margin-right: .4em; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.card .brand { width: .95em; height: .95em; margin-right: .35em; }
+/* No título da gaveta o texto é maior: ícone menor, alinhado ao nome */
+.dtitle .brand { width: .75em; height: .75em; margin-right: .35em; vertical-align: -.02em; }
+.qhead small { color: #8d8d87; font-size: .7em; text-transform: uppercase; margin-left: .5em; }
+.qhead .tokens { font-weight: 400; font-size: .9em; color: #b5b5ae; white-space: nowrap; }
+.qhead .tokens small { text-transform: none; font-weight: 400; margin-left: .2em; }
+.gauge + .gauge { margin-top: 8px; }
+/* Rótulo e % com largura fixa: as barras das duas janelas ficam alinhadas */
+.gauge .lbl { width: 1.9em; font-size: .8em; color: #8d8d87; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.gauge .pct { width: 2.6em; text-align: right; font-size: 1.15em; font-weight: 700; line-height: 1.1; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.track { position: relative; height: 10px; background: #2c2c29; border-radius: 5px; margin: 4px 0 4px; }
+.gauge .track { margin: 0 0 0 6px; }
+.gauge .foot { padding-left: 2.1em; margin-top: 2px; }
+/* Avisos nos cartões de uso e estado do Ollama: menores e em vermelho/âmbar suaves (o % e a
+   barra já chamam a atenção; o texto só explica) */
+.gauge .foot .hi, .gauge .foot .warn { font-size: .88em; }
+.gauge .foot .hi, .ostat .hi { color: #c98a85; }
+.gauge .foot .warn { color: #c9a66a; }
+.ostat .lo, .ostat .hi { font-size: .78em; }
+.track .fill { height: 100%; border-radius: 5px; }
+.track .mark { position: absolute; top: -3px; width: 2px; height: 16px; background: #ecece8; opacity: .7; border-radius: 1px; }
+.gauge .foot { font-size: .76em; }
+.qerr { font-size: .8em; color: #e0b45a; margin-top: 6px; }
+

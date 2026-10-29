@@ -148,7 +148,7 @@ grava pergunta, resposta, raciocínio, tokens, IP e cliente de cada chamada em
 `data/ollama-conversas.sqlite`. Vale para qualquer cliente: `ollama run`, CLIs (Hermes, Aider…),
 SDKs, curl e outros PCs da rede, nas APIs nativa (`/api/chat`, `/api/generate`), OpenAI
 (`/v1/chat/completions`, `/v1/completions`, `/v1/responses`) e Anthropic (`/v1/messages`).
-Só Python 3, sem dependências.
+Só Node 22.5+ (o mesmo do HUD), sem dependências.
 
 No HUD, cada conversa vira uma sessão do Ollama com modelo, IP e cliente. Conversas do app não
 duplicam, e chamadas de um `ollama run` aberto aparecem no cartão do terminal.
@@ -156,7 +156,7 @@ duplicam, e chamadas de um `ollama run` aberto aparecem no cartão do terminal.
 ```
 powershell -ExecutionPolicy Bypass -File ollama-proxy\instalar.ps1           # instala e inicia
 powershell -ExecutionPolicy Bypass -File ollama-proxy\instalar.ps1 -Remover  # volta ao normal
-python ollama-proxy\sessoes.py [session_id | --busca texto]                  # consulta no terminal
+node ollama-proxy\sessoes.js [session_id | --busca texto]                    # consulta no terminal
 ```
 
 O instalador cria a tarefa agendada **Ollama Log Proxy**, que inicia no login, sobe o `ollama serve`
@@ -164,36 +164,39 @@ em `127.0.0.1:11435` e o reinicia se cair. Ele também tira o app do Ollama da i
 app sobe o próprio servidor na 11434. Como o servidor não é mais iniciado pelo app, as configurações
 do app (tamanho de contexto, expor na rede) não se aplicam: use variáveis como
 `OLLAMA_CONTEXT_LENGTH`. Para outros PCs acessarem, libere a porta 11434 no firewall para o
-`pythonw.exe`. `python ollama-proxy\proxy.py --help` lista as opções (`--allow` restringe por IP).
+`node.exe`. `node ollama-proxy\proxy.js --help` lista as opções (`--allow` restringe por IP).
+Quem instalou a versão anterior, em Python, precisa rodar o `instalar.ps1` de novo: a tarefa passa a usar o Node.
 
 ## Arquivos
 
 | Arquivo | Função |
 | --- | --- |
-| `server.js` | Servidor HTTP: snapshot, detalhe da sessão, PIN, respostas, permissões, Abrir no PC |
+| `server.js` | Inicia o servidor (porta, PIN e endereços no log); a montagem fica em `src/app.js` |
 | **`src/`** | **Módulos do servidor** |
-| `src/lib.js` | Lê os logs do Claude Code, Codex e Antigravity (tokens, sessões, pedidos, respostas) |
-| `src/codex-history.js` | Recupera conversas do histórico paginado do Codex nos bancos SQLite locais, somente para leitura |
-| `src/http-utils.js` | Autenticação, validação de JSON e tratamento de erros das requisições HTTP |
-| `src/quotas.js` | Cotas ao vivo: Claude via `get_usage`, Codex via `app-server` |
+| `src/app.js` | Monta o servidor a partir das peças abaixo; os testes usam com fontes e cotas falsas |
+| `src/config.js`, `src/store.js`, `src/paths.js` | `data/config.json` (token, PIN, opções), gravação segura dos JSON em `data/` e pastas do projeto |
+| `src/http/` | `handler.js` (rede permitida → arquivos públicos → PIN → token → rotas), `routes.js` (tabela de rotas da API e dos hooks), `auth.js` (PIN, bloqueio de tentativas, IPs permitidos), `static.js` (PWA e ícones), `utils.js` |
+| `src/sources/` | Uma fonte de sessões por ferramenta, todas no formato de `common.js`: `claude.js`, `codex.js` (+ `codex-history.js`, bancos SQLite do Codex), `antigravity.js` e `ollama.js` (app, `ollama run`, ollama-proxy e continuações pelo HUD); `index.js` junta todas |
+| `src/sessions/snapshot.js` | Monta `/api/snapshot` e `/api/session` (estado de cada sessão, tokens por hora/dia); o formato é o contrato com aparelhos e outros PCs |
+| `src/quotas/` | `cli.js` (cotas ao vivo: Claude via `get_usage`, Codex via `app-server`) e `tracker.js` (histórico, ritmo e gráfico da janela de 5h) |
+| `src/actions/` | `replies.js` (fila de respostas rápidas para o hook-stop) e `permissions.js` (modo remoto) |
+| `src/focus/` | Abrir no PC: `index.js` (VS Code, apps do Claude/Codex/Ollama) e `terminal.js` (aba do CLI no VS Code ou Windows Terminal) |
+| `src/ollama/` | `status.js` (Ollama local e GPU NVIDIA no cartão) e `metrics.js` (duração e tokens por segundo) |
 | `src/peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
-| `src/ollama-chats.js` | Conversas do Ollama como sessões: lê o db.sqlite do app e o `data/ollama-conversas.sqlite` do ollama-proxy (qualquer cliente da API; só leitura) e responde pelo Ollama local, guardando a continuação no HUD |
-| `src/ollama.js` | Estado do Ollama local (modelos carregados, versão) e da GPU NVIDIA; aparece no HUD só se houver Ollama |
-| `src/ollama-metrics.js` | Converte os tempos medidos pelo Ollama em duração da resposta e tokens por segundo |
-| `src/terminal-focus.js` | Identifica o processo do CLI e seleciona a aba no VS Code ou Windows Terminal |
+| `src/web-assets.js` | Junta `public/js/` e `public/css/` em `app.js` e `app.css` e gera a versão dos arquivos |
 | **`claude/`** | **Integração com o Claude Code** |
 | `claude/hook-stop.js` | Hook `Stop`: entrega respostas enviadas pelo HUD |
 | `claude/hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
 | `claude/statusline.js` | Statusline com contexto, custo e cotas |
 | **`windows/`** | **Scripts só do Windows** |
 | `windows/focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude) |
-| `windows/terminal-focus.ps1` | Seleciona a aba do CLI no Windows Terminal (usado por `src/terminal-focus.js`) |
+| `windows/terminal-focus.ps1` | Seleciona a aba do CLI no Windows Terminal (usado por `src/focus/terminal.js`) |
 | `windows/install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
 | `windows/tray/` | App de bandeja: inicia, reinicia e mostra o status e o log do servidor |
-| `ollama-proxy/` | Proxy que grava as conversas de qualquer cliente do Ollama (`proxy.py`), consulta (`sessoes.py`) e instalador do Windows |
+| `ollama-proxy/` | Proxy que grava as conversas de qualquer cliente do Ollama (`proxy.js`), consulta (`sessoes.js`) e instalador do Windows |
 | `linux/ai-hud.service` | Serviço do systemd para rodar no Linux |
 | `vscode-terminal/` | Integração local do VS Code para selecionar terminais pelo processo, inclusive abas com nomes iguais |
-| `public/` | Página: `index.html`, `app.css`, `app.js`, PWA (`manifest.json`, `sw.js`) e ícones |
+| `public/` | Página: `index.html`, `js/` e `css/` (pedaços do `app.js` e do `app.css`, em ES5 para o Safari 9), PWA (`manifest.json`, `sw.js`) e ícones |
 | `data/` | Gerado ao rodar, fora do git: `config.json` (token e PIN), filas, históricos e `server.log` |
 | `scripts/` | Teste nativo opcional do Windows Terminal |
 | `test/` | Testes de regressão (`node --test`) |

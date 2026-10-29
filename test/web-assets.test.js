@@ -13,9 +13,11 @@ test('the server generates one content version and freezes all resources until r
     assert.equal(path.dirname(path.resolve(scratch)), path.resolve(os.tmpdir()));
     fs.rmSync(scratch, { recursive: true, force: true });
   });
-  for (const file of ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.json', 'icon-192.png', 'icon-512.png']) {
+  for (const file of ['index.html', 'sw.js', 'manifest.json', 'icon-192.png', 'icon-512.png']) {
     fs.copyFileSync(path.join(directory, file), path.join(scratch, file));
   }
+  fs.cpSync(path.join(directory, 'js'), path.join(scratch, 'js'), { recursive: true });
+  fs.cpSync(path.join(directory, 'css'), path.join(scratch, 'css'), { recursive: true });
   const before = createWebAssets(scratch);
   assert.equal(createWebAssets(scratch).version, before.version);
   for (const url of ['/app.js', '/app.css']) {
@@ -24,7 +26,7 @@ test('the server generates one content version and freezes all resources until r
   }
   assert.ok(!before.html.includes('__HUD_'));
   assert.ok(!before.assets['/sw.js'].includes('__HUD_'));
-  fs.appendFileSync(path.join(scratch, 'app.js'), '\n// new version\n');
+  fs.appendFileSync(path.join(scratch, 'js', 'main.js'), '\n// new version\n');
   assert.notEqual(createWebAssets(scratch).version, before.version);
   assert.ok(!before.assets['/app.js'].includes('// new version'));
 });

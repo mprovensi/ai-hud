@@ -1,0 +1,55 @@
+/* AI HUD: estilos. ES5 e flexbox sem gap no JS/CSS: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #121211; color: #ecece8; overflow-x: hidden; }
+/* Sem a espera de ~300 ms do Safari para distinguir toque de duplo toque */
+html { touch-action: manipulation; -ms-touch-action: manipulation; }
+button { -webkit-tap-highlight-color: transparent; }
+body { font: 15px/1.35 -apple-system, "Helvetica Neue", Roboto, sans-serif; padding: 12px 14px 20px; -webkit-text-size-adjust: 100%; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
+.muted { color: #8d8d87; }
+.lo { color: #5fb8a4; } .warn { color: #e0b45a; } .hi { color: #e87070; }
+.dot { display: inline-block; width: .6em; height: .6em; border-radius: 50%; margin-right: .4em; vertical-align: .05em; }
+.c0 { background: #e08a66; } .c1 { background: #5fb8a4; } .c2 { background: #7d9bf0; }
+.row { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.grow { -webkit-flex: 1; flex: 1; min-width: 0; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Estrutura: no iPad tudo cabe em uma tela (100vh), sem rolagem */
+.app { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
+.top { margin-bottom: 10px; }
+.top { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.top-actions { margin-left: 8px; }
+.top h1 { font-size: 1.15em; font-weight: 700; white-space: nowrap; }
+/* Mesmo desenho do ícone do app (icon.html), sem o fundo */
+.top .logo { width: 1.4em; height: 1em; margin-right: .4em; vertical-align: -.12em; }
+.top .status { min-width: 0; text-align: right; }
+/* Botões do topo só com ícone em todos os aparelhos (o texto fica no aria-label) */
+.top .lbl { display: none; }
+.top .btn { padding: .35em .6em; font-size: .9em; }
+.top .clock { font-size: 1.15em; margin-left: .5em; color: #8d8d87; }
+.top .status { margin-left: auto; font-size: .78em; }
+.btn { margin-left: 8px; background: #262624; border: 1px solid #3a3a36; border-radius: 8px; padding: .3em .7em; font-size: .82em; white-space: nowrap; }
+/* Alvos de toque físicos, inclusive no Safari 9; o texto continua ajustável. */
+button { min-width: 44px; min-height: 44px; }
+button:focus, [role="button"]:focus { outline: 2px solid #8ca5ff; outline-offset: 2px; }
+/* Cards superiores: sem destaque ao clicar/tocar; foco de teclado quando suportado. */
+.quotas [role="button"] { -webkit-tap-highlight-color: transparent; }
+.quotas [role="button"]:focus { outline: none; }
+.quotas [role="button"]:focus-visible { outline: 2px solid #8ca5ff; outline-offset: 2px; }
+/* Cards de sessão: idem; o contorno de teclado vai no .in para acompanhar as bordas arredondadas */
+.card:focus { outline: none; }
+.card:focus-visible .in { box-shadow: 0 0 0 2px #8ca5ff; }
+.connection-info { font-size: .8em; color: #aaa9a2; margin: 0 0 10px; word-wrap: break-word; }
+.reading-options, .update-notice { padding: 8px 10px; margin-bottom: 10px; background: #262624; border: 1px solid #3a3a36; border-radius: 10px; }
+.reading-options > span, .update-notice > span { display: inline-block; margin: 4px 6px 4px 0; }
+.reading-options button[aria-pressed="true"] { background: #35496b; border-color: #8ca5ff; }
+.update-notice { border-color: #8a6a2a; color: #f0cf8a; }
+body.read-large { font-size: 17px; }
+body.read-larger { font-size: 19px; }
+.panel { background: #1c1c1a; border: 1px solid #2c2c29; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+.panel h2 { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+/* Horário ao lado do título de um painel (ex.: Última resposta · às 09:12) */
+.htime { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.quotas { display: -webkit-flex; display: flex; }
+.quotas .panel { -webkit-flex: 1; flex: 1; min-width: 0; }
+.quotas .panel + .panel { margin-left: 10px; }

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const app = require('./helpers/app-source');
 const start = app.indexOf('  function gb('), end = app.indexOf('  var GRID_MIN =', start);
 assert.ok(start >= 0 && end > start);
 function client() {

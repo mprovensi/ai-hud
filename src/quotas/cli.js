@@ -3,7 +3,9 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { HOME } = require('./lib');
+const { ROOT } = require('../paths');
+
+const HOME = require('os').homedir();
 
 // Acha o executável: variável de ambiente, locais conhecidos de cada sistema, depois o PATH.
 // No Windows só .exe: spawn sem shell não executa .cmd.
@@ -27,7 +29,7 @@ const CODEX = findExe('codex', 'AI_HUD_CODEX', WIN
 // Inicia o CLI, manda as mensagens JSON-lines e resolve com a primeira resposta que `pick` aceitar
 function ask(exe, args, env, messages, pick, timeoutMs = 40000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(exe, args, { env: { ...process.env, ...env }, windowsHide: true, cwd: path.join(__dirname, '..') });
+    const child = spawn(exe, args, { env: { ...process.env, ...env }, windowsHide: true, cwd: ROOT });
     let buf = '', done = false;
     const finish = (err, val) => {
       if (done) return;

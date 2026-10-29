@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // Isola a função real da UI para simular consultas sem navegador ou dependências.
-const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const app = require('./helpers/app-source');
 const start = app.indexOf('  function loadDetail()');
 const end = app.indexOf('\n  // A tela sobreposta', start);
 assert.ok(start >= 0 && end > start);

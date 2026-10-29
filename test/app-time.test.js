@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const app = require('./helpers/app-source');
 const start = app.indexOf('  function pad('), end = app.indexOf('\n  function k(', start);
 const resetStart = app.indexOf('  function resetAt('), resetEnd = app.indexOf('\n  }', resetStart) + 4;
 

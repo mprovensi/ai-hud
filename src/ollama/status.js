@@ -51,6 +51,9 @@ class Ollama {
     this.state = url || installed() ? { online: false, version: null, models: [], installed: null, gpu: null, at: Date.now() } : null;
     this.installed = null;
     this.tagsAt = 0;
+  }
+
+  start() {
     this.poll();
     setInterval(() => this.poll(), POLL_MS);
   }

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const app = require('./helpers/app-source');
 const network = app.slice(app.indexOf('  function request(method'), app.indexOf('\n  setSound(soundOn);'));
 
 function client() {

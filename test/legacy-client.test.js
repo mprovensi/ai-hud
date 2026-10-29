@@ -24,7 +24,7 @@ test('the complete client boots and receives data without service workers, Promi
     Promise: undefined, fetch: undefined, localStorage: { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); } },
     addEventListener: () => {}, setInterval: () => {}, setTimeout: () => {}, innerWidth: 1024 };
   context.window = context;
-  vm.runInNewContext(fs.readFileSync(path.join(directory, 'app.js'), 'utf8'), context);
+  vm.runInNewContext(require('./helpers/app-source'), context);
   assert.equal(requests.length, 1);
   assert.match(nodes.status.innerHTML, /conectando/);
   Object.assign(requests[0], { readyState: 4, status: 200, responseText: JSON.stringify({

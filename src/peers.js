@@ -62,10 +62,13 @@ class Peers {
         return { name, url: p.url, token: p.token, ollama: p.ollama, i, snap: null, at: 0, error: null,
           ollamas: p.ollama === false ? [] : saved.length ? saved : p.ollama === true ? [{ machine: name, version: null, installed: null }] : [] };
       });
-    if (this.list.length) {
-      this.pollAll();
-      setInterval(() => this.pollAll(), POLL_MS);
-    }
+  }
+
+  // Consulta os secundários a cada 10 s
+  start() {
+    if (!this.list.length) return;
+    this.pollAll();
+    setInterval(() => this.pollAll(), POLL_MS);
   }
 
   pollAll() {

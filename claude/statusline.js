@@ -1,5 +1,5 @@
 // Statusline do Claude Code: modelo · contexto · tokens/custo da sessão · limites Claude e Codex
-const { codexData } = require('../src/lib');
+const { codexData } = require('../src/sources/codex');
 
 let raw = '';
 process.stdin.on('data', (c) => (raw += c));

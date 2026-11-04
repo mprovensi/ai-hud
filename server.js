@@ -1,10 +1,10 @@
 // Servidor do AI HUD: serve a página e /api/snapshot para iPad/Android na rede local ou no Tailscale.
-// A montagem fica em src/app.js; cada peça está em src/ (veja a tabela no README).
+// A montagem fica em src/main.js; o desenho está em docs/system-design.md.
 const os = require('os');
-const { ROOT, DATA } = require('./src/paths');
-const { migrateLegacy } = require('./src/config');
-const { createApp } = require('./src/app');
-const { claudeQuota, codexQuota, CODEX } = require('./src/quotas/cli');
+const { ROOT, DATA } = require('./src/infra/paths');
+const { migrateLegacy } = require('./src/infra/config');
+const { createApp } = require('./src/main');
+const { claudeQuota, codexQuota, CODEX } = require('./src/collect/quotas/cli');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
 

@@ -1,0 +1,9 @@
+{
+  "name": "ai-hud",
+  "private": true,
+  "description": "Painel das sessões e cotas de IA (Claude Code, Codex, Antigravity, Ollama) para iPad e Android",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

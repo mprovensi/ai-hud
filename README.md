@@ -23,17 +23,17 @@ Uma nova resposta volta a destacar o card e pedir sua atenção.
 A ordem dos cards é a mesma no navegador e no atalho: permissões pendentes primeiro,
 depois a última atividade. Marcar como visto limpa o alerta e mantém a posição do card.
 
-Para iniciar junto com o Windows, copie `windows/tray/start-tray.vbs` (ícone na bandeja, sem janela)
+Para iniciar junto com o Windows, copie `platform/windows/tray/start-tray.vbs` (ícone na bandeja, sem janela)
 para a pasta Inicializar (`Win+R` → `shell:startup`).
 
 ## Atualizações, conexão e leitura
 
 O iPad mini 1 (iOS 9.3.5 / Safari 9) continua sendo a referência mínima. A interface usa ES5,
-flexbox com prefixos e consultas HTTP periódicas. Não depende de service worker, Push ou APIs modernas.
+flexbox com prefixos e consultas HTTP com long-polling (o servidor responde quando algo muda). Não depende de service worker, Push ou APIs modernas.
 
 O servidor gera uma versão por conteúdo e entrega HTML, JavaScript, CSS e cache do PWA com a mesma
 identificação. Não é necessário alterar `?v=N` manualmente. **Reinicie o servidor depois de alterar
-os arquivos em `public/`**: cada execução mantém uma cópia consistente da interface em memória.
+os arquivos em `web/`**: cada execução mantém uma cópia consistente da interface em memória.
 Se um app aberto detectar outra versão no servidor, mostra **Atualizar app**; a atualização é manual
 e pede confirmação quando há uma resposta em edição. No iPad, os URLs versionados funcionam mesmo
 sem service worker. Nos aparelhos com PWA, a casca da interface pode abrir offline, mas dados,
@@ -115,7 +115,7 @@ cd ~/ai-hud && node server.js            # teste; Ctrl+C para parar
 
 Para rodar sempre (e reiniciar se cair), use o serviço do systemd em `linux/ai-hud.service`
 (instruções no próprio arquivo). Se houver firewall: `sudo ufw allow 8787/tcp`.
-Nos hooks do Claude Code, use os caminhos do Linux, ex.: `node ~/ai-hud/claude/hook-stop.js claude`.
+Nos hooks do Claude Code, use os caminhos do Linux, ex.: `node ~/ai-hud/integrations/claude/hook-stop.js claude`.
 
 ## Vários PCs (hub)
 
@@ -142,7 +142,7 @@ Se o Ollama fica só em outro PC, `"ollama": false` na raiz de `data/config.json
 
 ## Conversas do Ollama de qualquer cliente (ollama-proxy)
 
-O Ollama não grava as conversas feitas pela API; só o app dele guarda as próprias. O `ollama-proxy/`
+O Ollama não grava as conversas feitas pela API; só o app dele guarda as próprias. O `integrations/ollama-proxy/`
 fica na porta pública do Ollama (11434), repassa tudo ao servidor real numa porta interna (11435) e
 grava pergunta, resposta, raciocínio, tokens, IP e cliente de cada chamada em
 `data/ollama-conversas.sqlite`. Vale para qualquer cliente: `ollama run`, CLIs (Hermes, Aider…),
@@ -154,9 +154,9 @@ No HUD, cada conversa vira uma sessão do Ollama com modelo, IP e cliente. Conve
 duplicam, e chamadas de um `ollama run` aberto aparecem no cartão do terminal.
 
 ```
-powershell -ExecutionPolicy Bypass -File ollama-proxy\instalar.ps1           # instala e inicia
-powershell -ExecutionPolicy Bypass -File ollama-proxy\instalar.ps1 -Remover  # volta ao normal
-node ollama-proxy\sessoes.js [session_id | --busca texto]                    # consulta no terminal
+powershell -ExecutionPolicy Bypass -File integrations\ollama-proxy\instalar.ps1           # instala e inicia
+powershell -ExecutionPolicy Bypass -File integrations\ollama-proxy\instalar.ps1 -Remover  # volta ao normal
+node integrations\ollama-proxy\sessoes.js [session_id | --busca texto]       # consulta no terminal
 ```
 
 O instalador cria a tarefa agendada **Ollama Log Proxy**, que inicia no login, sobe o `ollama serve`
@@ -164,52 +164,59 @@ em `127.0.0.1:11435` e o reinicia se cair. Ele também tira o app do Ollama da i
 app sobe o próprio servidor na 11434. Como o servidor não é mais iniciado pelo app, as configurações
 do app (tamanho de contexto, expor na rede) não se aplicam: use variáveis como
 `OLLAMA_CONTEXT_LENGTH`. Para outros PCs acessarem, libere a porta 11434 no firewall para o
-`node.exe`. `node ollama-proxy\proxy.js --help` lista as opções (`--allow` restringe por IP).
+`node.exe`. `node integrations\ollama-proxy\proxy.js --help` lista as opções (`--allow` restringe por IP).
 Quem instalou a versão anterior, em Python, precisa rodar o `instalar.ps1` de novo: a tarefa passa a usar o Node.
 
 ## Arquivos
 
-| Arquivo | Função |
+O desenho do sistema (camadas, fluxos e compatibilidade) está em [docs/system-design.md](docs/system-design.md)
+e o contrato da API em [docs/api.md](docs/api.md).
+
+| Pasta | Função |
 | --- | --- |
-| `server.js` | Inicia o servidor (porta, PIN e endereços no log); a montagem fica em `src/app.js` |
-| **`src/`** | **Módulos do servidor** |
-| `src/app.js` | Monta o servidor a partir das peças abaixo; os testes usam com fontes e cotas falsas |
-| `src/config.js`, `src/store.js`, `src/paths.js` | `data/config.json` (token, PIN, opções), gravação segura dos JSON em `data/` e pastas do projeto |
-| `src/http/` | `handler.js` (rede permitida → arquivos públicos → PIN → token → rotas), `routes.js` (tabela de rotas da API e dos hooks), `auth.js` (PIN, bloqueio de tentativas, IPs permitidos), `static.js` (PWA e ícones), `utils.js` |
-| `src/sources/` | Uma fonte de sessões por ferramenta, todas no formato de `common.js`: `claude.js`, `codex.js` (+ `codex-history.js`, bancos SQLite do Codex), `antigravity.js` e `ollama.js` (app, `ollama run`, ollama-proxy e continuações pelo HUD); `index.js` junta todas |
-| `src/sessions/snapshot.js` | Monta `/api/snapshot` e `/api/session` (estado de cada sessão, tokens por hora/dia); o formato é o contrato com aparelhos e outros PCs |
-| `src/quotas/` | `cli.js` (cotas ao vivo: Claude via `get_usage`, Codex via `app-server`) e `tracker.js` (histórico, ritmo e gráfico da janela de 5h) |
-| `src/actions/` | `replies.js` (fila de respostas rápidas para o hook-stop) e `permissions.js` (modo remoto) |
-| `src/focus/` | Abrir no PC: `index.js` (VS Code, apps do Claude/Codex/Ollama) e `terminal.js` (aba do CLI no VS Code ou Windows Terminal) |
-| `src/ollama/` | `status.js` (Ollama local e GPU NVIDIA no cartão) e `metrics.js` (duração e tokens por segundo) |
-| `src/peers.js` | Hub: junta os dados de outros PCs e repassa as ações a eles |
-| `src/web-assets.js` | Junta `public/js/` e `public/css/` em `app.js` e `app.css` e gera a versão dos arquivos |
-| **`claude/`** | **Integração com o Claude Code** |
-| `claude/hook-stop.js` | Hook `Stop`: entrega respostas enviadas pelo HUD |
-| `claude/hook-permission.js` | Hook `PermissionRequest`: Permitir/Negar pelo HUD no modo remoto |
-| `claude/statusline.js` | Statusline com contexto, custo e cotas |
-| **`windows/`** | **Scripts só do Windows** |
-| `windows/focus.ps1` | Traz para frente a janela da sessão (VS Code, terminal, app do Claude) |
-| `windows/terminal-focus.ps1` | Seleciona a aba do CLI no Windows Terminal (usado por `src/focus/terminal.js`) |
-| `windows/install-terminal-focus.ps1` | Empacota e instala a integração do VS Code sem dependências de npm |
-| `windows/tray/` | App de bandeja: inicia, reinicia e mostra o status e o log do servidor |
-| `ollama-proxy/` | Proxy que grava as conversas de qualquer cliente do Ollama (`proxy.js`), consulta (`sessoes.js`) e instalador do Windows |
-| `linux/ai-hud.service` | Serviço do systemd para rodar no Linux |
-| `vscode-terminal/` | Integração local do VS Code para selecionar terminais pelo processo, inclusive abas com nomes iguais |
-| `public/` | Página: `index.html`, `js/` e `css/` (pedaços do `app.js` e do `app.css`, em ES5 para o Safari 9), PWA (`manifest.json`, `sw.js`) e ícones |
-| `data/` | Gerado ao rodar, fora do git: `config.json` (token e PIN), filas, históricos e `server.log` |
-| `scripts/` | Teste nativo opcional do Windows Terminal |
-| `test/` | Testes de regressão (`node --test`) |
+| `server.js` | Inicia o servidor (porta, PIN e endereços no log); a montagem fica em `src/main.js` |
+| **`src/`** | **Servidor do HUD, por camada** |
+| `src/core/` | Regras puras: estado da sessão e formato `Session` (`session.js`), tokens por hora/dia (`usage.js`), ritmo e gráfico das cotas (`quota-pace.js`), métricas do Ollama |
+| `src/collect/` | O que está acontecendo: `collector.js` (laço único, snapshot em cache e versão para o long-polling), `sources/` (uma fonte por ferramenta: `claude.js`, `codex/`, `antigravity.js`, `ollama/`), `quotas/` (cotas ao vivo e histórico), `ollama-status.js` (Ollama local e GPU) |
+| `src/views/` | O contrato com os aparelhos e os outros PCs: `snapshot.js` e `session-detail.js` |
+| `src/actions/` | O que muda algo no PC: `reply/` (Claude, `codex queue`, Ollama), `permissions.js` (modo remoto), `focus/` (Abrir no PC: `plan.js` decide, `index.js` executa), `pending.js` (pendências em `data/pending.json`) |
+| `src/federation/` | Outros PCs: `peers.js` (segue cada um por long-polling e repassa ações), `merge.js`, `client.js` |
+| `src/api/` | HTTP: `handler.js` (rede permitida → arquivos públicos → PIN → token → rotas), `routes/` (um arquivo por recurso), `auth.js`, `static.js` |
+| `src/infra/` | `config.js` (`data/config.json`), `store.js` (JSON seguro), `paths.js`, `web-bundle.js` (junta `web/js` e `web/css` e gera a versão) |
+| **`web/`** | **App dos aparelhos (ES5, Safari 9)**: `index.html`, PWA (`manifest.json`, `sw.js`), `icons/` (+ `icon.html`, fonte dos ícones), `js/` (`core/`, `home/`, `drawers/`, `app/`) e `css/` (`home/`, `drawers/`, `screens/`) |
+| **`integrations/`** | **Código que roda dentro de outras ferramentas** |
+| `integrations/claude/` | `hook-stop.js` (entrega respostas do HUD), `hook-permission.js` (Permitir/Negar no modo remoto), `statusline.js` |
+| `integrations/vscode-terminal/` | Extensão local do VS Code que seleciona o terminal pelo processo, inclusive abas com nomes iguais |
+| `integrations/ollama-proxy/` | Proxy que grava as conversas de qualquer cliente do Ollama (`proxy.js`), consulta (`sessoes.js`) e instalador |
+| **`platform/`** | **Específico do sistema operacional** |
+| `platform/windows/` | `focus.ps1` e `terminal-focus.ps1` (Abrir no PC), `install-terminal-focus.ps1`, `tray/` (app de bandeja), `atualizar-caminhos.ps1`, `terminal-smoke.js` (teste nativo opcional) |
+| `platform/linux/ai-hud.service` | Serviço do systemd |
+| `claude/`, `windows/tray/`, `ollama-proxy/` | Pontes de uma linha para os caminhos antigos, gravados em configurações fora do repositório (veja abaixo) |
+| `docs/` | Desenho do sistema e contrato da API |
+| `data/` | Gerado ao rodar, fora do git: `config.json` (token e PIN), pendências, históricos e `server.log` |
+| `test/` | Testes (`npm test`), nas mesmas pastas de `src/`; `architecture.test.js` garante o sentido das dependências |
+
+### Caminhos antigos
+
+Hooks do Claude/Codex, o atalho da bandeja e a tarefa do ollama-proxy guardam caminhos de antes da
+reorganização. As pontes mantêm tudo funcionando. Para passar a usar os caminhos novos em um PC:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File platform\windows\atualizar-caminhos.ps1           # mostra o que muda
+powershell -ExecutionPolicy Bypass -File platform\windows\atualizar-caminhos.ps1 -Aplicar  # aplica (com .bak)
+```
+
+Depois de rodar em todos os PCs, as pontes podem ser apagadas.
 
 ## Integração com o Claude Code
 
 Em `~/.claude/settings.json`:
 
 ```json
-"statusLine": { "type": "command", "command": "node D:/Projetos/ai-hud/claude/statusline.js" },
+"statusLine": { "type": "command", "command": "node D:/Projetos/ai-hud/integrations/claude/statusline.js" },
 "hooks": {
-  "Stop": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/claude/hook-stop.js claude", "timeout": 1900 }] }],
-  "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/claude/hook-permission.js", "timeout": 660 }] }]
+  "Stop": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/integrations/claude/hook-stop.js claude", "timeout": 1900 }] }],
+  "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "node D:/Projetos/ai-hud/integrations/claude/hook-permission.js", "timeout": 660 }] }]
 }
 ```
 
@@ -232,7 +239,7 @@ No Windows, **Abrir no PC** seleciona o terminal da sessão antes de trazer a ja
 No **VS Code**, instale a integração local uma vez em cada PC que hospeda os CLIs:
 
 ```powershell
-powershell -NoProfile -File windows/install-terminal-focus.ps1
+powershell -NoProfile -File platform/windows/install-terminal-focus.ps1
 ```
 
 A integração identifica o processo de cada terminal; abas com nomes iguais continuam distintas.
@@ -246,7 +253,7 @@ precisa estar aberta no CLI para que a aba possa ser selecionada.
 
 ## Testes
 
-Execute `node --test` para rodar os testes de regressão, sem dependências externas.
+Execute `npm test` para rodar os testes, sem dependências externas.
 Eles usam dados simulados e um servidor HTTP temporário; não acionam os CLIs nem alteram as conversas locais.
-O teste nativo opcional `node scripts/windows-terminal-smoke.js` abre abas próprias no Windows Terminal,
+O teste nativo opcional `node platform/windows/terminal-smoke.js` abre abas próprias no Windows Terminal,
 verifica a troca e a recusa de títulos duplicados, e encerra apenas seus processos de teste ao terminar.

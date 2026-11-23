@@ -16,10 +16,16 @@ const CLAUDE_PRESETS = [
 ];
 const CODEX_PRESETS = [
   { id: '', label: 'Padrão' },
-  { id: 'gpt-5.4', label: 'GPT-5.4' },
-  { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
-  { id: 'o3', label: 'o3' },
 ];
+
+// Lê `model = "..."` de ~/.codex/config.toml para sugerir primeiro o modelo real da conta
+function readCodexConfigModel(codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex')) {
+  try {
+    const raw = fs.readFileSync(path.join(codexHome, 'config.toml'), 'utf8');
+    const m = /^\s*model\s*=\s*["']([^"']+)["']/m.exec(raw);
+    return m ? m[1].trim() : '';
+  } catch { return ''; }
+}
 
 // Verifica se um executável existe de fato (caminho absoluto ou no PATH)
 function hasExe(exe) {
@@ -67,7 +73,8 @@ function recentCwds(sessions) {
   const out = [];
   const seen = new Set();
   for (const s of sorted) {
-    const norm = s.cwd.replace(/[\\/]+$/, '');
+    let norm = s.cwd.replace(/^\\\\\?\\/, '').replace(/[\\/]+$/, '');
+    if (process.platform === 'win32' && /^[a-zA-Z]:/.test(norm)) norm = norm.replace(/\//g, '\\');
     const key = process.platform === 'win32' ? norm.toLowerCase() : norm;
     if (!norm || seen.has(key)) continue;
     seen.add(key);
@@ -111,6 +118,8 @@ function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = 
 
     const claudeRecent = new Set();
     const codexRecent = new Set();
+    const cfgCodexModel = hasCodex ? readCodexConfigModel() : '';
+    if (cfgCodexModel) codexRecent.add(cfgCodexModel);
     for (const s of sessions || []) {
       if (!s || s.subagent || !s.models) continue;
       if (s.tool === 'Claude Code') for (const m of s.models) claudeRecent.add(m);

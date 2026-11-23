@@ -216,3 +216,14 @@ test('Codex: detecta teste que falhou (e limpa quando passa) e lista arquivos mo
   const s2 = lib.codexData().sessions.find((s) => s.id.endsWith(CHILD));
   assert.equal(s2.testRun.ok, true);
 });
+
+test('Codex: exibe erro de task_complete quando o turno falha sem resposta do modelo', (t) => {
+  const { root, lib } = fixture(t);
+  rollout(root, ID, [
+    meta(ID),
+    message('user', 'Teste'),
+    { type: 'event_msg', payload: { type: 'task_complete', last_agent_message: null, error: { message: 'modelo não suportado' } } },
+  ]);
+  const s = lib.codexData().sessions[0];
+  assert.equal(s.lastReply, '⚠ modelo não suportado');
+});

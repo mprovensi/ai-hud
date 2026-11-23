@@ -118,6 +118,11 @@ function parseCodex(f) {
     if (p.type === 'task_complete') {
       s.lastStop = 'end_turn';
       s.completedAt = codexTime(r.timestamp);
+      if (p.error && p.error.message && !p.last_agent_message) {
+        const errMsg = `⚠ ${p.error.message}`;
+        fallbackReply = errMsg; fallbackReplyAt = r.timestamp;
+        collectReply(errMsg, 'error', r.timestamp);
+      }
       currentTurn = `after:${++turnIndex}`;
     }
     if (p.type === 'task_started') { s.lastStop = ''; currentTurn = p.turn_id || `turn:${++turnIndex}`; turnTools = []; }

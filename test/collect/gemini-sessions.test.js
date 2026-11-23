@@ -159,7 +159,27 @@ test('Antigravity lê transcript.jsonl, enriquece com conversation_summaries.db,
     display: 'pergunta antiga no CLI',
   }) + '\n');
 
+  // Conversa criada pelo CLI `agy` (~/.gemini/antigravity-cli/brain/<uuid>/.system_generated/logs/transcript.jsonl)
+  const cliConvId = '4ca8a1ac-59ec-4bd2-a7f5-49ffd3238c1b';
+  const cliLog = path.join(root, 'antigravity-cli', 'brain', cliConvId, '.system_generated', 'logs');
+  fs.mkdirSync(cliLog, { recursive: true });
+  fs.writeFileSync(path.join(cliLog, 'transcript.jsonl'), [
+    JSON.stringify({ step_index: 0, type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-23T20:06:50Z', content: '<USER_REQUEST>\nTeste CLI\n</USER_REQUEST>' }),
+    JSON.stringify({ step_index: 1, type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-11-23T20:06:55Z', model: 'gemini-4-neon-high', input_tokens: 100, output_tokens: 20, content: 'Respondido pelo agy!' }),
+  ].join('\n'));
+  fs.mkdirSync(path.join(root, 'antigravity-cli', 'cache'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'antigravity-cli', 'cache', 'conversation_metadata.json'), JSON.stringify({
+    conversations: { [cliConvId]: { summary: { Title: 'Sessão agy CLI', WorkspaceURIs: ['file:///d%3A/Projetos/ai-hud'] } } },
+  }));
+
   const all = antigravitySessions(root);
+  const cliSess = all.find((s) => s.id === cliConvId);
+  assert.ok(cliSess);
+  assert.equal(cliSess.where, 'antigravity-cli');
+  assert.equal(cliSess.title, 'Sessão agy CLI');
+  assert.equal(cliSess.cwd, 'd:/Projetos/ai-hud');
+  assert.equal(cliSess.lastReply, 'Respondido pelo agy!');
+  assert.ok(cliSess.models.has('gemini-4-neon-high'));
   const parent = all.find((s) => s.id === parentId);
   assert.ok(parent);
   assert.equal(parent.tool, 'Gemini');

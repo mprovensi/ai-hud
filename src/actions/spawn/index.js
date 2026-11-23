@@ -131,12 +131,17 @@ function createSessionLauncher({
     }
 
     if (tool === 'Gemini') {
-      // Gemini usa exclusivamente Antigravity CLI (`agy`)
+      // Gemini usa exclusivamente Antigravity CLI (`agy`), que grava em ~/.gemini/antigravity-cli/brain/
       if (!agyExe) return { status: 400, body: 'Antigravity CLI (agy) não encontrado neste PC' };
-      const brainDir = path.join(geminiHome, 'antigravity', 'brain');
-      const before = listBrainIds(brainDir);
+      const brainDirs = [
+        path.join(geminiHome, 'antigravity-cli', 'brain'),
+        path.join(geminiHome, 'antigravity', 'brain'),
+      ];
+      const before = new Set(brainDirs.flatMap((d) => [...listBrainIds(d)]));
       const detectNewBrain = () => {
-        for (const id of listBrainIds(brainDir)) if (!before.has(id)) return id;
+        for (const d of brainDirs) {
+          for (const id of listBrainIds(d)) if (!before.has(id)) return id;
+        }
         return null;
       };
       const args = [`--print=${cleanPrompt}`, '--dangerously-skip-permissions', '--output-format', 'stream-json'];

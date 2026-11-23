@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { readLines, parse, cached, emptySession, touchFile, pushHistory, clip, prompt, toolCall, touch, dbSignature, sqlite } = require('../common');
+const { readJson } = require('../../../infra/store');
 const { isTestCommand, testOutcome } = require('../../../core/tests');
 const { normalizeQuestions } = require('../../../core/questions');
 
@@ -78,6 +79,24 @@ function readSummaries(root) {
   return map;
 }
 
+// Metadados gravados pelo Antigravity CLI (`~/.gemini/antigravity-cli/cache/conversation_metadata.json`)
+function readCliMetadata(root) {
+  const doc = readJson(path.join(root, 'antigravity-cli', 'cache', 'conversation_metadata.json'), null);
+  const convs = doc && doc.conversations;
+  const map = new Map();
+  if (!convs || typeof convs !== 'object') return map;
+  for (const [id, entry] of Object.entries(convs)) {
+    const sum = entry && entry.summary;
+    if (!id || !sum) continue;
+    map.set(id, {
+      title: String(sum.Title || sum.Preview || '').trim(),
+      cwd: firstWorkspace(sum.WorkspaceURIs),
+      where: 'antigravity-cli',
+    });
+  }
+  return map;
+}
+
 function extractUserText(raw) {
   const text = String(raw || '');
   const req = /<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/.exec(text);
@@ -129,6 +148,7 @@ function parseTranscript(file, convId) {
     }
 
     if (r.type === 'PLANNER_RESPONSE') {
+      if (r.model) s.models.add(String(r.model));
       const inTok = Number(r.input_tokens || 0) || 0;
       const cacheRead = Number(r.cache_read_tokens || 0) || 0;
       const outTok = Number(r.output_tokens || 0) || 0;
@@ -152,7 +172,7 @@ function parseTranscript(file, convId) {
         }
         if (/^(write_file|edit_file|multi_edit_file|replace_file_content|multi_replace_file_content)$/i.test(tc.name) && tc.args && !tc.args.ArtifactMetadata) {
           const target = unquoteArg(tc.args.Path || tc.args.TargetFile || tc.args.file_path || tc.args.path || '');
-          if (target && !/[\\/]\.gemini[\\/]antigravity[\\/]brain[\\/]/i.test(target)) touchFile(s, target);
+          if (target && !/[\\/]\.gemini[\\/]antigravity(?:-cli)?[\\/]brain[\\/]/i.test(target)) touchFile(s, target);
         }
         if (tc.name === 'ask_question' && tc.args) {
           const rawQ = typeof tc.args.questions === 'string' ? parse(tc.args.questions) : tc.args.questions;
@@ -203,29 +223,37 @@ function antigravitySessions(rootOrHome = GEMINI_HOME) {
     : path.join(rootOrHome, '.gemini');
 
   const summaries = readSummaries(root);
+  const cliMeta = readCliMetadata(root);
   const byId = new Map();
   const parents = new Map();
 
-  const brainDir = path.join(root, 'antigravity', 'brain');
-  let convDirs = [];
-  try { convDirs = fs.readdirSync(brainDir, { withFileTypes: true }).filter((e) => e.isDirectory()); } catch {}
-
-  for (const d of convDirs) {
-    const file = path.join(brainDir, d.name, '.system_generated', 'logs', 'transcript.jsonl');
-    const parsed = cached(file, (f) => parseTranscript(f, d.name));
-    if (!parsed) continue;
-    const s = cloneSession(parsed);
-    const meta = summaries.get(d.name);
-    if (meta) {
-      if (meta.cwd && !s.cwd) s.cwd = meta.cwd;
-      if (meta.title && !s.title) s.title = clip(meta.title, 160);
-      if (meta.where) s.where = meta.where;
-      if (meta.subagent) s.subagent = true;
-      if (meta.parentId) parents.set(d.name, meta.parentId);
-      if (meta.status === 'CASCADE_RUN_STATUS_IDLE' && !s.lastStop) s.lastStop = 'end_turn';
-      if (meta.status === 'CASCADE_RUN_STATUS_RUNNING') s.lastStop = '';
+  // Lê tanto o app/IDE (`~/.gemini/antigravity/brain`) quanto o CLI `agy` (`~/.gemini/antigravity-cli/brain`)
+  const brainRoots = [
+    [path.join(root, 'antigravity', 'brain'), 'antigravity'],
+    [path.join(root, 'antigravity-cli', 'brain'), 'antigravity-cli'],
+  ];
+  for (const [brainDir, defaultWhere] of brainRoots) {
+    let convDirs = [];
+    try { convDirs = fs.readdirSync(brainDir, { withFileTypes: true }).filter((e) => e.isDirectory()); } catch {}
+    for (const d of convDirs) {
+      if (byId.has(d.name)) continue;
+      const file = path.join(brainDir, d.name, '.system_generated', 'logs', 'transcript.jsonl');
+      const parsed = cached(file, (f) => parseTranscript(f, d.name));
+      if (!parsed) continue;
+      const s = cloneSession(parsed);
+      s.where = defaultWhere;
+      const meta = summaries.get(d.name) || cliMeta.get(d.name);
+      if (meta) {
+        if (meta.cwd && !s.cwd) s.cwd = meta.cwd;
+        if (meta.title && !s.title) s.title = clip(meta.title, 160);
+        if (meta.where) s.where = meta.where;
+        if (meta.subagent) s.subagent = true;
+        if (meta.parentId) parents.set(d.name, meta.parentId);
+        if (meta.status === 'CASCADE_RUN_STATUS_IDLE' && !s.lastStop) s.lastStop = 'end_turn';
+        if (meta.status === 'CASCADE_RUN_STATUS_RUNNING') s.lastStop = '';
+      }
+      byId.set(d.name, s);
     }
-    byId.set(d.name, s);
   }
 
   // Histórico do Antigravity CLI (~/.gemini/antigravity-cli/history.jsonl):

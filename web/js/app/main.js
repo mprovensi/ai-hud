@@ -7,7 +7,7 @@
   setRemoteBtn(false);
 
   // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
-  $('remote').onclick = function () {
+  if ($('remote')) $('remote').onclick = function () {
     var on = !(snap && snap.remoteMode);
     if (on && !confirm('Ligar o modo remoto?\n\nPedidos de permissão do Claude vão esperar sua resposta aqui (até 10 min) em vez de aparecer no PC. Use quando estiver longe do computador.')) return;
     request('POST', '/api/remote', function (err, r) {

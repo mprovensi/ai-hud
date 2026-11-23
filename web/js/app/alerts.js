@@ -65,8 +65,10 @@
   }
 
   function setRemoteBtn(on) {
-    $('remote').className = 'btn' + (on ? ' on' : '');
-    $('remote').innerHTML = icon('remote') + '<span class="lbl"> ' + (on ? 'Remoto ligado' : 'Remoto') + '</span>';
+    var b = $('remote');
+    if (!b) return;
+    b.className = 'btn' + (on ? ' on' : '');
+    b.innerHTML = icon('remote') + '<span class="lbl"> ' + (on ? 'Remoto ligado' : 'Remoto') + '</span>';
   }
 
   function setSound(on) {

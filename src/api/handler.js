@@ -1,8 +1,10 @@
 // Atendimento de cada requisição: rede permitida → arquivos públicos → login por PIN → token → rotas.
+const fs = require('fs');
+const path = require('path');
 const { authorized, readJson, handleRequest } = require('./utils');
 const { allowed, createLoginGuard, loginPage } = require('./auth');
 
-function createHandler({ config, send, serveStatic, webAssets, routes, log = console.log }) {
+function createHandler({ config, send, serveStatic, webAssets, workspaceDistDir = '', routes, log = console.log }) {
   const guard = createLoginGuard();
   const html = (res, status, body, headers) => send(res, status, 'text/html; charset=utf-8', body, headers);
 
@@ -32,11 +34,21 @@ function createHandler({ config, send, serveStatic, webAssets, routes, log = con
     if (serveStatic(res, url)) return;
     if (url.pathname === '/login' && req.method === 'POST') return login(req, res, ip);
     if (!authorized(req, url, config.token)) {
-      if (url.pathname === '/') return html(res, 200, loginPage(''));
+      if (url.pathname === '/' || url.pathname === '/workspace' || url.pathname.startsWith('/workspace/')) {
+        return html(res, 200, loginPage(''));
+      }
       return send(res, 401, 'text/plain; charset=utf-8', 'acesso negado');
     }
+    const cookie = { 'Set-Cookie': `hud=${config.token}; Max-Age=31536000; Path=/; HttpOnly; SameSite=Lax` };
     if (url.pathname === '/') {
-      return html(res, 200, webAssets.html, { 'Set-Cookie': `hud=${config.token}; Max-Age=31536000; Path=/; HttpOnly; SameSite=Lax` });
+      return html(res, 200, webAssets.html, cookie);
+    }
+    if (url.pathname === '/workspace' || url.pathname.startsWith('/workspace/')) {
+      const idx = workspaceDistDir ? path.join(workspaceDistDir, 'index.html') : '';
+      if (idx && fs.existsSync(idx)) {
+        return html(res, 200, fs.readFileSync(idx, 'utf8'), cookie);
+      }
+      return html(res, 503, '<!doctype html><meta charset="utf-8"><body style="background:#121211;color:#ecece8;font:16px sans-serif;padding:40px"><h2>AI Workspace ainda não compilado</h2><p>Rode <code>npm --prefix workspace-app run build</code>.</p><p><a href="/" style="color:#5fb8a4">Voltar ao AI HUD</a></p></body>');
     }
     const route = routes.find((r) => r.path === url.pathname && (!r.method || r.method === req.method));
     if (!route) return send(res, 404, 'text/plain', 'não encontrado');

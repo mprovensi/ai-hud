@@ -206,6 +206,14 @@ test('Fase 1 end-to-end: Workspace file-first (409 + backup + media + docs) e Me
     const listed = await reqJson(port, 'GET', `/api/fs/list?cwd=${encodeURIComponent(projDir)}`, tok);
     assert.equal(listed.status, 200);
     assert.ok(listed.json.entries.some((e) => e.name === 'index.js'));
+
+    // 8. Servindo o bundle compilado do AI Workspace em /workspace (com auth) e /workspace/manifest.json
+    const wsHtml = await reqJson(port, 'GET', '/workspace', tok);
+    assert.equal(wsHtml.status, 200);
+    assert.match(wsHtml.text, /AI Workspace/);
+    const wsManifest = await reqJson(port, 'GET', '/workspace/manifest.json', tok);
+    assert.equal(wsManifest.status, 200);
+    assert.equal(wsManifest.json.short_name, 'AI Workspace');
   } finally {
     app.server.close();
   }

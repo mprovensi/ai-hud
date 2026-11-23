@@ -3,6 +3,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { iconFile } = require('../infra/web-bundle');
+const { isWithinRoot, isSafeRelativePath } = require('../core/path-guard');
+
+const WS_MIME = {
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/manifest+json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
 
 // Ícones oficiais que as extensões do VS Code já trazem, pintados nas cores do HUD (só para esta rede)
 function extensionIcon(prefix, file, color) {
@@ -49,7 +60,7 @@ function savedBrand(dataDir, name, asUtf8 = true) {
 }
 
 // Devolve um handler (res, url) => true se respondeu
-function createStatic({ webDir, webAssets, send, brands = true, dataDir }) {
+function createStatic({ webDir, webAssets, workspaceDistDir = '', send, brands = true, dataDir }) {
   const ollama = brands ? (ollamaIcon() || savedBrand(dataDir, 'brand-ollama.png', false)) : null;
   const svgs = brands ? {
     '/brand-claude.svg': extensionIcon('anthropic.claude-code-', 'claude-logo.svg', '#e08a66') || savedBrand(dataDir, 'brand-claude.svg') || CLAUDE_SVG,
@@ -74,6 +85,19 @@ function createStatic({ webDir, webAssets, send, brands = true, dataDir }) {
     if (p === '/apple-touch-icon.png' || p === '/apple-touch-icon-precomposed.png' || p === '/favicon.ico') {
       send(res, 200, 'image/png', fs.readFileSync(iconFile(webDir, 'icon-180.png')));
       return true;
+    }
+    // Estáticos compilados do AI Workspace (`/workspace/assets/*`, `/workspace/manifest.json`)
+    if (workspaceDistDir && (p === '/workspace/manifest.json' || p.startsWith('/workspace/assets/'))) {
+      const rel = p.slice('/workspace/'.length);
+      if (isSafeRelativePath(rel)) {
+        const file = path.resolve(workspaceDistDir, rel);
+        if (isWithinRoot(workspaceDistDir, file) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+          const ext = path.extname(file).toLowerCase();
+          const headers = p.startsWith('/workspace/assets/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};
+          send(res, 200, WS_MIME[ext] || 'application/octet-stream', fs.readFileSync(file), headers);
+          return true;
+        }
+      }
     }
     const type = PUBLIC_ASSETS[p];
     if (!type) return false;

@@ -4,7 +4,7 @@
 const http = require('http');
 const os = require('os');
 const path = require('path');
-const { WEB } = require('./infra/paths');
+const { WEB, WORKSPACE_DIST } = require('./infra/paths');
 const { loadConfig } = require('./infra/config');
 const { createWebAssets } = require('./infra/web-bundle');
 const { createSources } = require('./collect/sources');
@@ -39,6 +39,7 @@ const QUOTA_BUSY_MS = 60 * 1000;
 function createApp({
   dataDir,
   webDir = WEB,
+  workspaceDistDir = WORKSPACE_DIST,
   sources = createSources({ dataDir }),
   quotaFetchers,
   focus = createFocus(),
@@ -126,8 +127,8 @@ function createApp({
     reply, launch, handoff, setProjectPin, workspace, memory, filePreview, fileList, projectGit,
     dataDir, config, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName,
   });
-  const serveStatic = createStatic({ webDir, webAssets, send, brands, dataDir });
-  const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, routes, log }));
+  const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
+  const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)
   server.keepAliveTimeout = 65e3;

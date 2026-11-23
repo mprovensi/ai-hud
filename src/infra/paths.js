@@ -3,4 +3,9 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-module.exports = { ROOT, DATA: path.join(ROOT, 'data'), WEB: path.join(ROOT, 'web') };
+module.exports = {
+  ROOT,
+  DATA: path.join(ROOT, 'data'),
+  WEB: path.join(ROOT, 'web'),
+  WORKSPACE_DIST: path.join(ROOT, 'workspace-app', 'dist'),
+};

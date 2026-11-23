@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/components/cardeditor.tsx","./src/components/commandpalette.tsx","./src/components/filesandgit.tsx","./src/components/livehudpane.tsx","./src/components/memorypanel.tsx","./src/components/notesandreports.tsx"],"version":"5.9.3"}

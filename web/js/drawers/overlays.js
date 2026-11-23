@@ -185,6 +185,7 @@
   });
   window.addEventListener('hashchange', syncHash);
   $('openNew').onclick = function () { location.hash = 'nova'; };
+  if ($('openWorkspace')) $('openWorkspace').onclick = function () { location.href = '/workspace' + (token ? '?t=' + encodeURIComponent(token) : ''); };
   $('openRecent').onclick = function () { location.hash = 'recentes'; };
   $('openStats').onclick = function () { location.hash = 'estatisticas'; };
   $('q-ollama').onclick = function () { location.hash = 'ollama'; };

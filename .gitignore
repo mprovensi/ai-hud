@@ -8,3 +8,7 @@ data/*
 
 # Imagens geradas por npm run imagens
 /test-output/
+
+# Dependências do frontend moderno do AI Workspace (apenas dist/ compilado é servido na VPS)
+workspace-app/node_modules/
+workspace-desktop/target/

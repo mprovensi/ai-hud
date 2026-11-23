@@ -16,6 +16,7 @@
   .top-actions { -webkit-flex-basis: 100%; flex-basis: 100%; margin: 8px 0 0; -webkit-justify-content: space-between; justify-content: space-between; }
   /* Botões têm 44px de alvo de toque: o ícone acompanha (com .9em ficava minúsculo no meio) */
   .top-actions .btn { margin-left: 0; min-width: 48px; padding: .15em .5em; font-size: 1.1em; }
+  .top-actions .ws-link { display: none; }
   .reading-options .btn { margin: 4px 2px; padding-left: .5em; padding-right: .5em; }
   body.read-large .rform textarea, body.read-larger .rform textarea { font-size: 1em; }
   .stat { width: 50%; }

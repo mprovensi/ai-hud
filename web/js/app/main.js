@@ -49,14 +49,36 @@
   if (isIOS) {
     var vp = document.querySelector && document.querySelector('meta[name="viewport"]');
     if (vp) vp.setAttribute('content', 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no');
-    var lastTap = 0;
+    var lastTap = 0, lastEl = null, tapX = 0, tapY = 0, moved = false;
+    document.addEventListener('touchstart', function (e) {
+      if (e.touches && e.touches.length === 1) {
+        tapX = e.touches[0].clientX;
+        tapY = e.touches[0].clientY;
+        moved = false;
+      }
+    }, false);
+    document.addEventListener('touchmove', function (e) {
+      if (!moved && e.touches && e.touches.length === 1) {
+        if (Math.abs(e.touches[0].clientX - tapX) > 10 || Math.abs(e.touches[0].clientY - tapY) > 10) moved = true;
+      }
+    }, false);
     document.addEventListener('touchend', function (e) {
-      if (e.touches && e.touches.length) return;
-      var tag = e.target && e.target.tagName ? e.target.tagName.toUpperCase() : '';
+      if (moved || (e.touches && e.touches.length)) return;
+      var el = e.target;
+      var tag = el && el.tagName ? el.tagName.toUpperCase() : '';
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var now = new Date().getTime();
-      if (now - lastTap <= 320) e.preventDefault();
+      if (now - lastTap <= 320) {
+        e.preventDefault();
+        // Mesmo elemento: duplo toque age como 1 único clique (sem zoom nem ação duplicada).
+        // Elemento diferente: evita zoom mas executa o clique no segundo botão/card.
+        if (el !== lastEl && el && el.click) el.click();
+        lastTap = 0;
+        lastEl = null;
+        return;
+      }
       lastTap = now;
+      lastEl = el;
     }, false);
   }
 

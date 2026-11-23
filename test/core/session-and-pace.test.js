@@ -29,13 +29,18 @@ test('ritmo da cota: projeta pelo uso da última hora e diz quando acaba', () =>
   assert.equal(expired({ claude: { windows: { five_hour: w } } }, w.resetsAt + 1), true);
 });
 
-test('tokens de hoje e por hora somam só o que é novo (sem leitura de cache)', () => {
+test('tokens de hoje e por hora somam só o que é novo (sem leitura de cache), incluindo Gemini', () => {
   const now = Date.now();
   const ts = new Date(now - 60e3).toISOString();
-  const s = { tool: 'Codex', end: ts, subagent: false, events: [{ ts, fresh: 100, cacheRead: 900 }] };
-  const u = usage([s], now);
+  const codex = { tool: 'Codex', end: ts, subagent: false, events: [{ ts, fresh: 100, cacheRead: 900 }] };
+  const gemini = { tool: 'Gemini', end: ts, subagent: false, events: [{ ts, fresh: 250, cacheRead: 1200 }] };
+  const u = usage([codex, gemini], now);
   assert.equal(u.today.Codex.fresh, 100);
   assert.equal(u.today.Codex.cacheRead, 900);
   assert.equal(u.hours[23].Codex, 100);
   assert.equal(u.sessionsToday.Codex, 1);
+  assert.equal(u.today.Gemini.fresh, 250);
+  assert.equal(u.today.Gemini.cacheRead, 1200);
+  assert.equal(u.hours[23].Gemini, 250);
+  assert.equal(u.sessionsToday.Gemini, 1);
 });

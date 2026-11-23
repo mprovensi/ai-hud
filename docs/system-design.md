@@ -18,7 +18,7 @@
         │ lê                         │ pergunta                │ executa
         ▼                            ▼                         ▼
    ~/.claude/projects, ~/.codex,   claude -p get_usage,      codex queue, platform/windows/*.ps1,
-   ~/.gemini, Ollama (app, proxy)  codex app-server          vscode://, codex://, claude://
+   ~/.gemini, Ollama (app, proxy)  codex app-server, Gemini  vscode://, codex://, claude://
         ▲
    integrations/claude (hooks Stop e PermissionRequest, statusline) ──► /hook/* (mesmo PC)
    integrations/ollama-proxy: clientes → :11434 (proxy, grava em data/) → ollama serve :11435

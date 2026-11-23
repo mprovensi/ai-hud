@@ -2,8 +2,10 @@
 
   function render(s) {
     setRemoteBtn(s.remoteMode);
-    quotaPanel('q-claude', 'Claude', 0, s.quotas.claude, s.now, s.today['Claude Code'].fresh);
-    quotaPanel('q-codex', 'Codex', 1, s.quotas.codex, s.now, s.today.Codex.fresh);
+    var td = s.today || {}, qs = s.quotas || {};
+    quotaPanel('q-claude', 'Claude', 0, qs.claude, s.now, td['Claude Code'] ? td['Claude Code'].fresh : 0);
+    quotaPanel('q-codex', 'Codex', 1, qs.codex, s.now, td.Codex ? td.Codex.fresh : 0);
+    quotaPanel('q-gemini', 'Gemini', 2, qs.gemini, s.now, td.Gemini ? td.Gemini.fresh : 0);
     ollamaPanel(s);
     // O servidor prioriza permissões e depois a última atividade, inclusive no hub.
     // Mantém a mesma ordem no navegador e no atalho, independentemente dos cards vistos.

@@ -1,7 +1,7 @@
 {
   "name": "AI HUD",
   "short_name": "AI HUD",
-  "description": "Sessões e cotas do Claude, Codex e Antigravity",
+  "description": "Sessões e cotas do Claude, Codex e Gemini",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

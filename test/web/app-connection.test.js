@@ -14,12 +14,18 @@ function client() {
     open(method, url) { this.method = method; this.url = url; }
     setRequestHeader() {}
     send() {}
+    abort() { this.aborted = true; }
     answer(status, value) { this.status = status; this.readyState = 4; this.responseText = typeof value === 'string' ? value : JSON.stringify(value); this.onreadystatechange(); }
   }
-  const context = { $: node, XMLHttpRequest: XHR, token: '', lastOk: 0, snap: null, view: null, skew: 0, tzMs: null,
+  // Relógio falso: run() dispara os prazos vencidos
+  const timers = [];
+  let clock = 0;
+  const run = (ms) => { clock += ms; for (const t of timers.splice(0)) { if (t.at <= clock) t.fn(); else timers.push(t); } };
+  const context = { setTimeout: (fn, ms) => { timers.push({ fn, at: clock + (ms || 0) }); return timers.length; }, clearTimeout: () => {},
+    $: node, XMLHttpRequest: XHR, token: '', lastOk: 0, snap: null, view: null, skew: 0, tzMs: null,
     APP_VERSION: 'current', esc: String, hm: () => '09:30', checkAlerts: () => {}, render: () => {}, loadDetail: () => {} };
   vm.runInNewContext(network, context);
-  return { c: context, nodes, requests };
+  return { c: context, nodes, requests, run };
 }
 const snapshot = (overrides = {}) => ({ now: Date.now(), active: [], recent: [], quotas: {}, today: {}, ...overrides });
 function failure(message, props = {}) { return Object.assign(new Error(message), props); }
@@ -132,4 +138,32 @@ test('com a versão do snapshot, a próxima consulta espera a mudança; depois d
   c.lastAttempt = 0;
   c.tick();
   assert.equal(requests[3].url, '/api/snapshot', 'servidor antigo, sem versão: consulta a cada 10 s');
+});
+
+test('consulta que o Safari encerra sem nenhum evento (rede caiu) não trava as próximas tentativas', () => {
+  const { c, requests, run } = client();
+  c.apply(null, snapshot(), 'same');
+  c.lastAttempt = 0;
+  c.tick();
+  assert.equal(requests.length, 1);
+  assert.equal(c.inFlight, true);
+  run(8000 + 5000); // passou o prazo da consulta e nenhum evento chegou
+  assert.equal(requests[0].aborted, true);
+  assert.equal(c.inFlight, false);
+  assert.equal(c.connection.kind, 'network');
+  c.lastAttempt = 0;
+  c.tick();
+  assert.equal(requests.length, 2, 'tentou de novo');
+  requests[1].answer(200, snapshot());
+  assert.equal(c.connection.kind, 'live');
+});
+
+test('conexão encerrada sem resposta (status 0) conta como falha de rede', () => {
+  const { c, requests, run } = client();
+  c.lastAttempt = 0;
+  c.tick();
+  requests[0].answer(0, '');
+  run(0);
+  assert.equal(c.inFlight, false);
+  assert.equal(c.connection.kind, 'network');
 });

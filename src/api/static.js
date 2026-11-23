@@ -36,13 +36,18 @@ const PUBLIC_ASSETS = {
   '/app.css': 'text/css; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8',
 };
 
+const GEMINI_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#7d9bf0"><path d="M12 2C12.7 7.2 16.8 11.3 22 12c-5.2.7-9.3 4.8-10 10-.7-5.2-4.8-9.3-10-10 5.2-.7 9.3-4.8 10-10z"/></svg>';
+
 // Devolve um handler (res, url) => true se respondeu
 function createStatic({ webDir, webAssets, send, brands = true }) {
   const ollama = brands ? ollamaIcon() : null;
   const svgs = brands ? {
     '/brand-claude.svg': extensionIcon('anthropic.claude-code-', 'claude-logo.svg', '#e08a66'),
     '/brand-codex.svg': extensionIcon('openai.chatgpt-', 'blossom-white.svg', '#5fb8a4'),
-  } : {};
+    '/brand-gemini.svg': GEMINI_SVG,
+  } : {
+    '/brand-gemini.svg': GEMINI_SVG,
+  };
   const day = { 'Cache-Control': 'max-age=86400' };
 
   return function serveStatic(res, url) {

@@ -50,7 +50,7 @@
     var h = location.hash;
     var nextSession = /^#s=(.+)$/.exec(h);
     if (viewedSession && (!nextSession || decodeURIComponent(nextSession[1]) !== viewedSession.id)) acknowledgeViewed();
-    var usage = /^#uso=(claude|codex)$/.exec(h);
+    var usage = /^#uso=(claude|codex|gemini)$/.exec(h);
     usageName = usage ? usage[1] : null;
     view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : usage ? 'usage' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
@@ -78,7 +78,8 @@
   $('q-ollama').onclick = function () { location.hash = 'ollama'; };
   $('q-claude').onclick = function () { location.hash = 'uso=claude'; };
   $('q-codex').onclick = function () { location.hash = 'uso=codex'; };
+  $('q-gemini').onclick = function () { location.hash = 'uso=gemini'; };
   function panelKey(e) { if (e.keyCode === 13 || e.keyCode === 32) { e.preventDefault(); this.onclick(); } }
-  $('q-claude').onkeydown = $('q-codex').onkeydown = $('q-ollama').onkeydown = panelKey;
+  $('q-claude').onkeydown = $('q-codex').onkeydown = $('q-gemini').onkeydown = $('q-ollama').onkeydown = panelKey;
   $('backdrop').onclick = closeOverlay;
 

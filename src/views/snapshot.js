@@ -8,7 +8,7 @@ const { usage } = require('../core/usage');
 // permissão aberta; ollamaState(): cartão do Ollama deste PC (null = não mostrar)
 function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remoteMode }) {
   const card = (s) => ({
-    tool: s.tool, id: s.id, project: s.project || base(s.cwd) || '—', title: s.title || s.firstPrompt,
+    tool: s.tool, id: s.id, where: s.where || '', project: s.project || base(s.cwd) || '—', title: s.title || s.firstPrompt,
     start: Date.parse(s.start), end: Date.parse(s.end), state: sessionState(s, now), lastTool: s.lastTool,
     completedAt: s.completedAt || 0,
     tokens: s.input + s.output + s.cacheWrite + (s.subTokens || 0), prompts: s.prompts,
@@ -17,6 +17,8 @@ function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remote
     lastReply: (s.lastReply || '').slice(0, 400).replace(/[#*`]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 160),
     lastReplyAt: s.lastReply ? s.lastReplyAt || s.completedAt || 0 : 0,
     context: s.context, contextWindow: s.contextWindow, ...pendingInfo(s, now),
+    // O último teste rodado na sessão falhou: o cartão fica vermelho até um teste passar
+    testFailed: !!(s.testRun && !s.testRun.ok),
   });
   const cards = sessions.filter((s) => !s.subagent).map(card).sort((a, b) => b.end - a.end);
   // Uma sessão ouvindo respostas está parada esperando o usuário, mesmo que o log pareça antigo

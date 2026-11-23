@@ -2,7 +2,14 @@
 // A taxa vem das leituras da última hora; sem amostras suficientes, da média desde o início da janela.
 // history: { "<ia>.<janela>": { resetsAt, samples: [[ms, %], ...] } }
 
-const WINDOW_MS = { five_hour: 5 * 3600e3, seven_day: 7 * 86400e3 };
+const WINDOW_MS = {
+  five_hour: 5 * 3600e3,
+  seven_day: 7 * 86400e3,
+  pro: 24 * 3600e3,
+  flash: 24 * 3600e3,
+  daily: 24 * 3600e3,
+};
+const RECENT_PACE_KEYS = new Set(['five_hour', 'pro', 'flash', 'daily']);
 
 function pace(history, name, key, w, now) {
   const dur = WINDOW_MS[key];
@@ -11,7 +18,7 @@ function pace(history, name, key, w, now) {
   const elapsed = Math.min(1, Math.max(0, 1 - left / dur));
   const samples = ((history[`${name}.${key}`] || {}).samples || []).filter((s) => now - s[0] <= 3600e3);
   let rate = null, basis = 'average'; // % por ms
-  if (key === 'five_hour' && samples.length >= 2 && samples[samples.length - 1][0] - samples[0][0] >= 15 * 60e3) {
+  if (RECENT_PACE_KEYS.has(key) && samples.length >= 2 && samples[samples.length - 1][0] - samples[0][0] >= 15 * 60e3) {
     const [t0, u0] = samples[0], [t1, u1] = samples[samples.length - 1];
     rate = Math.max(0, (u1 - u0) / (t1 - t0));
     basis = 'recent';
@@ -23,15 +30,23 @@ function pace(history, name, key, w, now) {
   return { expected: Math.round(elapsed * 100), projected, runsOutIn, basis };
 }
 
-// Burn-up da janela de 5h: % usado ao longo da janela, para o gráfico com projeção até o reset.
+// Burn-up da janela principal: 5h no Claude/Codex, 24h (pro/daily/flash) no Gemini.
 // O Codex grava a cota a cada chamada (limitSamples): histórico gratuito para o desenho.
-function burn(quotas, history, now, codexSessions) {
+function burn(quotas, history, now, codexSessions = []) {
   const out = {};
-  for (const name of ['claude', 'codex']) {
-    const w = quotas[name] && quotas[name].windows && quotas[name].windows.five_hour;
-    if (!w || !w.resetsAt) continue;
-    const start = w.resetsAt - WINDOW_MS.five_hour;
-    let points = ((history[`${name}.five_hour`] || {}).samples || []).filter((s) => s[0] >= start);
+  const specs = [
+    ['claude', ['five_hour']],
+    ['codex', ['five_hour']],
+    ['gemini', ['five_hour', 'pro', 'daily', 'flash']],
+  ];
+  for (const [name, keys] of specs) {
+    const windows = quotas[name] && quotas[name].windows;
+    const key = windows && keys.find((k) => windows[k] && windows[k].resetsAt);
+    const w = key && windows[key];
+    if (!w) continue;
+    const dur = WINDOW_MS[key];
+    const start = w.resetsAt - dur;
+    let points = ((history[`${name}.${key}`] || {}).samples || []).filter((s) => s[0] >= start);
     if (name === 'codex') {
       for (const s of codexSessions) {
         for (const [t, used, resetsAt] of s.limitSamples || []) {
@@ -44,8 +59,8 @@ function burn(quotas, history, now, codexSessions) {
     const thin = [];
     for (const p of points) if (!thin.length || p[0] - thin[thin.length - 1][0] >= 180e3) thin.push(p);
     thin.push([Math.min(now, w.resetsAt), w.used]);
-    const p = pace(history, name, 'five_hour', w, now);
-    out[name] = { start, end: w.resetsAt, used: w.used, points: thin, projected: p && p.projected, runsOutIn: p && p.runsOutIn };
+    const p = pace(history, name, key, w, now);
+    out[name] = { start, end: w.resetsAt, used: w.used, window: key, points: thin, projected: p && p.projected, runsOutIn: p && p.runsOutIn };
   }
   return out;
 }

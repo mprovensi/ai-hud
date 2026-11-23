@@ -37,18 +37,21 @@ test('equal timestamps have deterministic order regardless of input order', () =
   assert.deepEqual([a, b].sort(compareSessions).map((s) => s.id), ['a', 'b']);
 });
 
-test('hub merges hours and days by timestamp across window boundaries', () => {
-  const row = (t, value) => ({ t, Codex: value, 'Claude Code': value });
+test('hub merges hours, days and Gemini quota across peers', () => {
+  const row = (t, value) => ({ t, Codex: value, 'Claude Code': value, Gemini: value * 2 });
   const local = snapshot();
   local.hours = [row(3600000, 1), row(7200000, 2)];
   local.days = [row(86400000, 3), row(172800000, 4)];
+  local.quotas = { gemini: { plan: null, windows: {}, error: 'expirado', at: 100 } };
   const before = JSON.stringify(local);
   const remote = snapshot();
   remote.hours = [row(0, 100), row(3600000, 10)];
   remote.days = [row(0, 200), row(86400000, 20)];
+  remote.quotas = { gemini: { plan: 'Gemini Pro', at: 200, windows: { pro: { used: 30, resetsAt: 999999000 } } } };
   const result = hub(remote).merge(local, 'local');
   assert.deepEqual(result.hours, [row(3600000, 11), row(7200000, 2)]);
   assert.deepEqual(result.days, [row(86400000, 23), row(172800000, 4)]);
+  assert.equal(result.quotas.gemini.windows.pro.used, 30);
   assert.equal(JSON.stringify(local), before);
 });
 

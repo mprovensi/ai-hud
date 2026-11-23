@@ -9,20 +9,25 @@
 .qhead .tokens { font-weight: 400; font-size: .9em; color: #b5b5ae; white-space: nowrap; }
 .qhead .tokens small { text-transform: none; font-weight: 400; margin-left: .2em; }
 .gauge + .gauge { margin-top: 8px; }
-/* Rótulo e % com largura fixa: as barras das duas janelas ficam alinhadas */
-.gauge .lbl { width: 1.9em; font-size: .8em; color: #8d8d87; -webkit-flex-shrink: 0; flex-shrink: 0; }
+/* Rótulo e % com largura fixa: as barras das janelas ficam alinhadas */
+.gauge .lbl { width: 2.2em; font-size: .8em; color: #8d8d87; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .gauge .pct { width: 2.6em; text-align: right; font-size: 1.15em; font-weight: 700; line-height: 1.1; -webkit-flex-shrink: 0; flex-shrink: 0; }
-.track { position: relative; height: 10px; background: #2c2c29; border-radius: 5px; margin: 4px 0 4px; }
+/* Barra de uso como um tubo de vidro vazio que vai enchendo de líquido (cor em levelFill) */
+.track { position: relative; height: 10px; background: rgba(255, 255, 255, .025); border: 1px solid #34342f; border-radius: 6px; margin: 4px 0 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45); }
 .gauge .track { margin: 0 0 0 6px; }
-.gauge .foot { padding-left: 2.1em; margin-top: 2px; }
+.gauge .foot { padding-left: 2.4em; margin-top: 2px; }
 /* Avisos nos cartões de uso e estado do Ollama: menores e em vermelho/âmbar suaves (o % e a
    barra já chamam a atenção; o texto só explica) */
-.gauge .foot .hi, .gauge .foot .warn { font-size: .88em; }
+.gauge .foot .hi, .gauge .foot .warn { font-size: .88em; margin-left: 6px; }
 .gauge .foot .hi, .ostat .hi { color: #c98a85; }
 .gauge .foot .warn { color: #c9a66a; }
 .ostat .lo, .ostat .hi { font-size: .78em; }
-.track .fill { height: 100%; border-radius: 5px; }
+.track .fill, .ctx .fill { position: relative; height: 100%; border-radius: 5px; max-width: 100%; }
+/* Brilho na parte de cima do líquido */
+.track .fill:after, .ctx .fill:after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 45%; border-radius: 5px 5px 0 0;
+  background: linear-gradient(rgba(255, 255, 255, .22), rgba(255, 255, 255, 0)); }
 .track .mark { position: absolute; top: -3px; width: 2px; height: 16px; background: #ecece8; opacity: .7; border-radius: 1px; }
 .gauge .foot { font-size: .76em; }
-.qerr { font-size: .8em; color: #e0b45a; margin-top: 6px; }
+.qerr { font-size: .8em; color: #ecd13a; margin-top: 6px; }
 

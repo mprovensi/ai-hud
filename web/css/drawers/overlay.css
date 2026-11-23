@@ -13,6 +13,9 @@
 .perm { background: #4d3f22; color: #f0cf8a; }
 .card.perm-card .in { border-left-color: #8a6a2a; border-right-color: #8a6a2a; border-bottom-color: #8a6a2a; box-shadow: 0 1px 0 1px #8a6a2a; }
 .permbox { border-color: #8a6a2a; }
+.testbox { border-color: #e82e3c; }
+.testbox h2 { color: #e82e3c; }
+.testbox .quote { font-family: Menlo, monospace; font-size: .78em; white-space: pre-wrap; }
 .permcmd { font-family: Menlo, monospace; font-size: .8em; background: #121211; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;
   white-space: pre-wrap; word-wrap: break-word; max-height: 20vh; overflow-y: auto; }
 .pbtn { -webkit-flex: 1; flex: 1; text-align: center; padding: .55em; border-radius: 10px; font-weight: 700; }
@@ -32,7 +35,7 @@
 @-webkit-keyframes pulse { 50% { opacity: .35; } }
 @keyframes pulse { 50% { opacity: .35; } }
 /* Barra de contexto na gaveta da sessão */
-.ctx { height: 5px; background: #2c2c29; border-radius: 3px; overflow: hidden; }
+.ctx { height: 7px; background: rgba(255, 255, 255, .025); border: 1px solid #34342f; border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45); }
 .ctx div { height: 100%; }
 .empty { color: #8d8d87; font-size: .9em; padding: 6px 0; }
 
@@ -43,7 +46,8 @@
 .legend { font-size: .78em; color: #8d8d87; margin-top: 6px; }
 .legend span { margin-right: 14px; white-space: nowrap; }
 .today { display: -webkit-flex; display: flex; }
-.tday { -webkit-flex: 1; flex: 1; }
+.tday { -webkit-flex: 1; flex: 1; min-width: 0; padding-right: 8px; }
+.tday:last-child { padding-right: 0; }
 .tday small { display: block; font-size: .75em; color: #8d8d87; }
 .big { font-size: 1.4em; font-weight: 700; line-height: 1.15; }
 .chart { display: -webkit-flex; display: flex; -webkit-align-items: flex-end; align-items: flex-end; height: 90px; margin-top: 6px; }
@@ -51,6 +55,8 @@
 .bar .val { font-size: .62em; color: #8d8d87; text-align: center; white-space: nowrap; }
 .bar { -webkit-flex: 1; flex: 1; margin: 0 1px; height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column-reverse; flex-direction: column-reverse; }
 .bar div { width: 100%; border-radius: 1px; }
+/* Vão de 2px entre as cores empilhadas (Claude embaixo, Codex em cima) */
+.bar div + div { margin-bottom: 2px; }
 .axis { display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; font-size: .64em; color: #8d8d87; margin-top: 3px; }
 
 /* Gaveta lateral (detalhe e recentes); toque no fundo escurecido fecha.
@@ -76,6 +82,6 @@
 .dl { display: -webkit-flex; display: flex; font-size: .9em; padding: 5px 0; border-bottom: 1px solid #2c2c29; }
 .dl span:first-child { -webkit-flex: 1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px; }
 .hbar { height: 6px; background: #2c2c29; border-radius: 3px; margin: 3px 0 2px; overflow: hidden; }
-.hbar div { height: 100%; background: #7d9bf0; }
+.hbar div { height: 100%; background: #8d8d87; } /* só quantidade: neutro, não cor de IA */
 .path { font-family: Menlo, monospace; font-size: .8em; color: #b5b5ae; word-wrap: break-word; }
 

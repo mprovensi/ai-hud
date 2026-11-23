@@ -1,8 +1,8 @@
 # AI HUD
 
 Painel para acompanhar, de um iPad ou celular na rede de casa, as sessões e o uso de tokens do
-Claude Code, do Codex e do Antigravity que rodam no PC: cotas do plano com projeção, sessões
-ativas, respostas rápidas, permissões e um botão para trazer a sessão para frente no PC.
+Claude Code, do Codex e do Gemini (Gemini CLI e Antigravity) que rodam no PC: cotas do plano com
+projeção, sessões ativas, respostas rápidas, permissões e um botão para trazer a sessão para frente no PC.
 
 Tudo roda localmente com Node.js, sem dependências: o servidor lê os logs que os próprios CLIs
 gravam e serve uma página leve (ES5, funciona até no Safari 9 do iPad mini 1).
@@ -177,7 +177,7 @@ e o contrato da API em [docs/api.md](docs/api.md).
 | `server.js` | Inicia o servidor (porta, PIN e endereços no log); a montagem fica em `src/main.js` |
 | **`src/`** | **Servidor do HUD, por camada** |
 | `src/core/` | Regras puras: estado da sessão e formato `Session` (`session.js`), tokens por hora/dia (`usage.js`), ritmo e gráfico das cotas (`quota-pace.js`), métricas do Ollama |
-| `src/collect/` | O que está acontecendo: `collector.js` (laço único, snapshot em cache e versão para o long-polling), `sources/` (uma fonte por ferramenta: `claude.js`, `codex/`, `antigravity.js`, `ollama/`), `quotas/` (cotas ao vivo e histórico), `ollama-status.js` (Ollama local e GPU) |
+| `src/collect/` | O que está acontecendo: `collector.js` (laço único, snapshot em cache e versão para o long-polling), `sources/` (uma fonte por ferramenta: `claude.js`, `codex/`, `gemini/`, `ollama/`), `quotas/` (cotas ao vivo e histórico), `ollama-status.js` (Ollama local e GPU) |
 | `src/views/` | O contrato com os aparelhos e os outros PCs: `snapshot.js` e `session-detail.js` |
 | `src/actions/` | O que muda algo no PC: `reply/` (Claude, `codex queue`, Ollama), `permissions.js` (modo remoto), `focus/` (Abrir no PC: `plan.js` decide, `index.js` executa), `pending.js` (pendências em `data/pending.json`) |
 | `src/federation/` | Outros PCs: `peers.js` (segue cada um por long-polling e repassa ações), `merge.js`, `client.js` |

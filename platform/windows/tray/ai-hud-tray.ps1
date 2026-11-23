@@ -14,6 +14,7 @@ $script:TailscaleHelper = Join-Path $PSScriptRoot 'tailscale-serve.ps1'
 . $script:TailscaleHelper
 $script:DiagnosticHelper = Join-Path $PSScriptRoot 'diagnostics.ps1'
 . $script:DiagnosticHelper
+$script:serverPid = $null
 $script:localJob = $null
 $script:localJobPid = $null
 $script:localState = $null
@@ -111,11 +112,24 @@ function Update-HudHttps([switch]$Force) {
 
 # ---- Servidor ---------------------------------------------------------------
 
-# PID do processo que escuta na porta (o servidor pode ter sido iniciado por fora)
+# A porta aceita conexão local? (resposta direta, sem depender do netstat)
+function Test-ServerPort {
+  $client = New-Object System.Net.Sockets.TcpClient
+  try { return $client.ConnectAsync('127.0.0.1', $Port).Wait(500) } catch { return $false } finally { $client.Close() }
+}
+
+# PID do servidor (pode ter sido iniciado por fora). O netstat às vezes omite o socket que escuta
+# ou o mostra como CLOSED com o servidor no ar; então a porta decide e o PID vem do processo.
 function Get-ServerPid {
   foreach ($line in (netstat -ano -p tcp)) {
-    if ($line -match "^\s*TCP\s+\S+:$Port\s+\S+\s+LISTENING\s+(\d+)") { return [int]$Matches[1] }
+    if ($line -match "^\s*TCP\s+\S+:$Port\s+\S+\s+LISTENING\s+(\d+)") { return ($script:serverPid = [int]$Matches[1]) }
   }
+  if (-not (Test-ServerPort)) { return ($script:serverPid = $null) }
+  if ($script:serverPid -and (Get-Process -Id $script:serverPid -ErrorAction SilentlyContinue)) { return $script:serverPid }
+  $nodes = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match '\bserver\.js\b' })
+  $ours = @(Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Where-Object { $_.CommandLine -like "*$LogFile*" } | ForEach-Object { $_.ProcessId })
+  $node = @($nodes | Where-Object { $ours -contains $_.ParentProcessId }) + $nodes | Select-Object -First 1
+  if ($node) { return ($script:serverPid = [int]$node.ProcessId) }
   return $null
 }
 

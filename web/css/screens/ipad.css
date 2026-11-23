@@ -11,19 +11,35 @@
   .panel h2 { font-size: .75em; margin-bottom: 6px; }
   .qhead { margin-bottom: 2px; }
   .qhead small { font-size: .75em; }
-  /* Cotas usam a sobra de altura do iPad: cartão mais alto, barras mais grossas e % maior */
-  .quotas .panel { padding: 12px 16px 14px; }
-  .quotas .qhead { margin-bottom: 14px; }
-  .gauge + .gauge { margin-top: 18px; }
-  .gauge .lbl { font-size: .85em; }
-  .gauge .pct { width: 2.4em; font-size: 1.35em; }
+  /* Cotas na mesma linha (4 cartões): Claude, Codex e Gemini com largura igual; Ollama minimalista */
+  .quotas .panel { padding: 11px 12px 12px; }
+  .quotas .panel + .panel { margin-left: 8px; }
+  .quotas .olla { -webkit-flex: 0 0 5.4em; flex: 0 0 5.4em; width: 5.4em; padding: 11px 9px 12px; }
+  .quotas .olla .qhead { margin-bottom: 8px; }
+  .quotas .olla .qhead .name { font-size: .86em; }
+  .quotas .olla .qhead .brand { width: .95em; height: .95em; margin-right: .25em; }
+  .quotas .olla .qhead .chev { margin-left: 2px; font-size: 1.05em; }
+  .quotas .olla .ostat { margin-top: 4px; }
+  .quotas .olla .omach { font-size: .68em; }
+  .quotas .olla .ostate { font-size: .84em; }
+  .quotas .olla .omodel { font-size: .74em; margin-top: 3px; }
+  .quotas .olla .osmall2 { font-size: .64em; }
+  .quotas .olla .empty { font-size: .68em; }
+  .quotas .qhead { margin-bottom: 12px; }
+  .quotas .qhead .name { font-size: .98em; }
+  .quotas .qhead .brand { width: 1em; height: 1em; margin-right: .32em; }
+  .quotas .qhead .tokens { font-size: .78em; }
+  .quotas .qhead .chev { font-size: 1.1em; margin-left: 4px; }
+  .gauge + .gauge { margin-top: 14px; }
+  .gauge .lbl { width: 1.65em; font-size: .78em; }
+  .gauge .pct { width: 2.25em; font-size: 1.18em; }
   .track { height: 10px; margin: 2px 0; }
-  .gauge .track { height: 16px; border-radius: 8px; margin: 0 0 0 8px; }
-  .gauge .track .fill { border-radius: 8px; }
+  .gauge .track { height: 15px; border-radius: 8px; margin: 0 0 0 6px; }
+  .gauge .track .fill, .gauge .track .fill:after { border-radius: 7px; }
   .track .mark { height: 18px; }
-  .gauge .track .mark { top: -4px; height: 24px; width: 3px; }
-  .gauge .foot { font-size: .82em; margin-top: 4px; }
-  .quotas .ostat { margin-top: 6px; }
+  .gauge .track .mark { top: -4px; height: 23px; width: 3px; }
+  .gauge .foot { padding-left: 1.85em; font-size: .74em; margin-top: 4px; }
+  .gauge .foot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sess { padding: 8px 0 8px 12px; }
   .sess .tool { font-size: .78em; }
   .sess .ttl { font-size: .9em; }

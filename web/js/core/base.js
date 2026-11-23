@@ -2,7 +2,7 @@
   // de uma única função (as variáveis de um pedaço valem nos outros). ES5: roda no Safari 9 do iPad mini 1.
 
   var APP_VERSION = '__HUD_VERSION__';
-  var TOOLS = ['Claude Code', 'Codex', 'Antigravity', 'Ollama'];
+  var TOOLS = ['Claude Code', 'Codex', 'Gemini', 'Ollama'];
   var COLORS = ['#e08a66', '#5fb8a4', '#7d9bf0', '#b39ddb'];
   var token = (/[?&]t=([a-f0-9]+)/.exec(location.search) || [])[1] || '';
   var lastOk = 0, snap = null, view = null;
@@ -45,7 +45,27 @@
     var h = Math.floor(m / 60);
     return h < 24 ? h + 'h' + pad(m % 60) : Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
   }
-  function levelColor(p) { return p >= 80 ? '#e87070' : p >= 50 ? '#e0b45a' : '#5fb8a4'; }
+  // Cores de estado: nenhuma é cor de IA (COLORS). O azul do normal é menos saturado que o do Antigravity
+  var STATUS = { ok: '#5d86bd', warn: '#ecd13a', crit: '#e82e3c' };
+  // Azul até metade da cota; de 50% em diante vai virando vermelho aos poucos, cheio a partir de 80%
+  var LEVEL_STOPS = [[0, STATUS.ok], [50, STATUS.ok], [80, STATUS.crit]];
+  function levelColor(p) {
+    var s = LEVEL_STOPS, i = 1;
+    p = Math.max(0, Math.min(100, p || 0));
+    while (i < s.length - 1 && p > s[i][0]) i++;
+    var t = Math.max(0, Math.min(1, (p - s[i - 1][0]) / (s[i][0] - s[i - 1][0])));
+    var a = parseInt(s[i - 1][1].slice(1), 16), b = parseInt(s[i][1].slice(1), 16), out = '#';
+    for (var sh = 16; sh >= 0; sh -= 8) {
+      var c = Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * t);
+      out += (c < 16 ? '0' : '') + c.toString(16);
+    }
+    return out;
+  }
+  // Barra que enche como líquido: transparente no começo e com a cor do nível na ponta
+  function levelFill(p) {
+    var n = parseInt(levelColor(p).slice(1), 16), rgb = (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
+    return 'linear-gradient(90deg, rgba(' + rgb + ',0.08), rgba(' + rgb + ',0.55) 55%, rgb(' + rgb + '))';
+  }
   // Preferências do aparelho; localStorage pode falhar (aba privada no iOS)
   function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) {} }
   // Só classes e ES5: funciona também no Safari 9, sem service worker ou APIs modernas.
@@ -66,5 +86,5 @@
   $('textNormal').onclick = function () { setReading('normal'); };
   $('textLarge').onclick = function () { setReading('large'); };
   $('textLarger').onclick = function () { setReading('larger'); };
-  function toolIndex(t) { for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i] === t) return i; return 0; }
+  function toolIndex(t) { if (t === 'Antigravity') return 2; for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i] === t) return i; return 0; }
 

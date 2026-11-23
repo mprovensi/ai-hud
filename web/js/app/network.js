@@ -1,14 +1,19 @@
   // ---- Rede ----------------------------------------------------------------
   function request(method, url, done, body, timeout) {
-    var x = new XMLHttpRequest(), finished = false;
-    function finish(err, data, text) { if (finished) return; finished = true; done(err, data, text); }
+    var x = new XMLHttpRequest(), finished = false, guard = null;
+    function finish(err, data, text) { if (finished) return; finished = true; if (guard) clearTimeout(guard); done(err, data, text); }
     function networkError(message) {
       var err = new Error(message); err.offline = true; err.status = 0; finish(err);
     }
     x.open(method, url + (token ? (url.indexOf('?') < 0 ? '?' : '&') + 't=' + token : ''), true);
     x.timeout = timeout || 60000;
+    // Quando a rede cai, o Safari antigo (iPad mini) às vezes encerra a conexão sem onerror nem ontimeout:
+    // a consulta ficaria "em andamento" para sempre e o app nunca mais tentaria reconectar. Prazo próprio.
+    guard = setTimeout(function () { try { x.abort(); } catch (e) {} networkError('o servidor não respondeu a tempo'); }, x.timeout + 5000);
     x.onreadystatechange = function () {
-      if (x.readyState !== 4 || x.status === 0) return;
+      if (x.readyState !== 4) return;
+      // Encerrada sem resposta (rede caiu): falha de rede, mesmo que nenhum outro evento chegue
+      if (x.status === 0) { setTimeout(function () { networkError('sem conexão com o servidor'); }, 0); return; }
       if (x.status === 200) {
         var data;
         try { data = JSON.parse(x.responseText); } catch (e) { var invalid = new Error('resposta inválida do servidor'); invalid.status = 200; finish(invalid); return; }

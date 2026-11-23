@@ -1,7 +1,7 @@
 @media (max-width: 760px) {
   .quotas { display: block; }
   .quotas .panel + .panel { margin-left: 0; }
-  .quotas .olla { width: 100%; }
+  .quotas .olla { -webkit-flex: none; flex: none; width: 100%; }
   .card { width: 100%; }
   .top .clock { display: inline-block; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
   .top .btn { margin-left: 6px; }

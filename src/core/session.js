@@ -3,16 +3,17 @@
 // Toda fonte (collect/sources) devolve sessões neste formato:
 /**
  * @typedef {object} Session
- * @property {string} tool          'Claude Code' | 'Codex' | 'Antigravity' | 'Ollama'
+ * @property {string} tool          'Claude Code' | 'Codex' | 'Gemini' | 'Ollama'
  * @property {string} id
  * @property {string} file          arquivo de origem ('' se não houver)
  * @property {string} cwd
- * @property {string} [where]       'vscode' | 'terminal' | 'claude-desktop' | 'codex-desktop' | 'ollama-app' | 'ollama-run' | 'ollama-api'
+ * @property {string} [where]       'vscode' | 'terminal' | 'claude-desktop' | 'codex-desktop' | 'gemini-cli' | 'antigravity' | 'antigravity-cli' | 'ollama-app' | 'ollama-run' | 'ollama-api'
  * @property {string} start         ISO
  * @property {string} end           ISO
  * @property {number} [mtime]       ms; última atividade conhecida
  * @property {string} lastStop      'end_turn' quando o turno terminou
  * @property {number} [completedAt]
+ * @property {{ok: boolean, at: number, command: string, summary: string}} [testRun]  último teste rodado na sessão
  * @property {number} [endedAt]     ms; quando o HUD encerrou o processo da sessão
  * @property {string} title
  * @property {string} [project]

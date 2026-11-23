@@ -15,19 +15,19 @@
     if (!el) return;
     el.style.display = '';
     var multi = s.machines && s.machines.length > 1;
-    html += '<div class="qhead row">' + ollamaIcon() + '<span class="name">Ollama</span><span class="grow"></span><span class="chev">›</span></div>';
-    if (!list.length) html += '<div class="empty">Aguardando informações dos PCs com Ollama.</div>';
+    html += '<div class="qhead row">' + ollamaIcon() + '<span class="name ell grow">Ollama</span><span class="chev">›</span></div>';
+    if (!list.length) html += '<div class="empty ell" title="Aguardando informações dos PCs com Ollama.">Aguardando informações dos PCs com Ollama.</div>';
     // Só o essencial: está no ar? qual modelo está carregado? (o resto fica na gaveta)
     for (i = 0; i < list.length; i++) {
       var o = list[i];
-      html += '<div class="ostat">' + (multi && o.machine ? '<div class="omach">🖥 ' + esc(o.machine) + '</div>' : '') +
-        ollamaState(o);
-      if (o.online && !o.models.length) html += '<div class="muted omodel">ocioso</div>';
+      html += '<div class="ostat">' + (multi && o.machine ? '<div class="omach ell" title="' + esc(o.machine) + '">🖥 ' + esc(o.machine) + '</div>' : '') +
+        '<div class="ostate ell">' + ollamaState(o) + '</div>';
+      if (o.online && !o.models.length) html += '<div class="muted omodel ell">ocioso</div>';
       for (j = 0; o.online && j < o.models.length; j++) {
         var m = o.models[j];
         // % na GPU (velocidade) e até quando fica carregado
-        html += '<div class="omodel ell"><b>' + esc(m.name) + '</b></div>' +
-          '<div class="osmall2 muted">' + m.gpuPct + '% GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</div>';
+        html += '<div class="omodel ell" title="' + esc(m.name) + '"><b>' + esc(m.name) + '</b></div>' +
+          '<div class="osmall2 muted ell">' + m.gpuPct + '% GPU' + (m.expiresAt ? ' · até ' + hm(m.expiresAt) : '') + '</div>';
       }
       // Uso: sessões do Ollama ativas neste PC (app ou terminal) e a última atividade
       var act = 0, last = 0, all = s.active.concat(s.recent), k2;
@@ -40,7 +40,7 @@
       var use = [];
       if (act) use.push(act + (act === 1 ? ' sessão ativa' : ' sessões ativas'));
       if (last) use.push('último uso ' + when(last).replace(/^às /, ''));
-      if (use.length) html += '<div class="osmall2 muted ouse">' + use.join(' · ') + '</div>';
+      if (use.length) html += '<div class="osmall2 muted ouse ell" title="' + esc(use.join(' · ')) + '">' + use.join(' · ') + '</div>';
       html += '</div>';
     }
     el.innerHTML = html;

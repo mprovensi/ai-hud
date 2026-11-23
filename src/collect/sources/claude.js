@@ -3,10 +3,15 @@ const path = require('path');
 const os = require('os');
 const { walk, readLines, parse, cached, emptySession, clip, prompt, toolCall, touch } = require('./common');
 const { readJson } = require('../../infra/store');
+const { isTestCommand, testOutcome } = require('../../core/tests');
+
+// Resultado de uma ferramenta: texto puro ou lista de blocos de texto
+const resultText = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.filter((b) => b.type === 'text').map((b) => b.text).join('\n') : '');
 
 // Cada resposta do assistente traz message.usage (repetida por bloco; deduplicar por id)
 function parseClaude(f) {
   const seen = new Set();
+  const tests = new Map(); // id da chamada → comando de teste, até chegar o resultado
   const s = emptySession('Claude Code', path.basename(f, '.jsonl'), f);
   s.subagent = f.includes('subagents');
   for (const line of readLines(f)) {
@@ -26,11 +31,22 @@ function parseClaude(f) {
         : Array.isArray(c) && !c.some((b) => b.type === 'tool_result') ? c.filter((b) => b.type === 'text').map((b) => b.text).join(' ') : '';
       // "[Request interrupted by user]" é aviso do Claude Code, não pedido
       if (text && !text.startsWith('<') && !text.startsWith('[Request interrupted')) prompt(s, text);
+      // Resultado de um comando de teste: o último decide se a sessão está com teste falhando
+      for (const b of Array.isArray(c) ? c : []) {
+        if (b.type !== 'tool_result' || !tests.has(b.tool_use_id)) continue;
+        s.testRun = { command: tests.get(b.tool_use_id), at: Date.parse(r.timestamp) || 0, ...testOutcome(resultText(b.content), b.is_error) };
+        tests.delete(b.tool_use_id);
+      }
     }
+    // Resposta enviada pelo HUD: o hook Stop (hook-stop.js) a entrega como "erro de bloqueio", não como pedido
+    const a = r.type === 'attachment' && r.attachment;
+    if (a && a.type === 'hook_blocking_error' && a.hookEvent === 'Stop' && a.blockingError
+      && /hook-stop\.js/.test(a.blockingError.command || '') && a.blockingError.blockingError) prompt(s, a.blockingError.blockingError);
     if (r.type !== 'assistant' || !m || !m.usage) continue;
     for (const b of m.content || []) {
       if (b.type === 'text' && b.text) { s.lastReply = clip(b.text, 4000); s.lastReplyAt = Date.parse(r.timestamp) || 0; }
       if (b.type === 'tool_use') toolCall(s, b.name);
+      if (b.type === 'tool_use' && b.input && isTestCommand(b.input.command)) tests.set(b.id, clip(b.input.command, 200));
     }
     if (m.stop_reason) s.lastStop = m.stop_reason;
     const key = `${m.id}:${r.requestId || ''}`;

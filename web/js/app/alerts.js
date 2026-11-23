@@ -48,15 +48,17 @@
     }
     prevStates = states;
     prevCompleted = completed;
-    var names = [['claude', 'Claude'], ['codex', 'Codex']];
+    var names = [['claude', 'Claude'], ['codex', 'Codex'], ['gemini', 'Gemini']];
     for (i = 0; i < names.length; i++) {
-      var q = s.quotas[names[i][0]], w = q && q.windows && q.windows.five_hour;
+      var q = s.quotas[names[i][0]], ws = q && q.windows;
+      var w = ws && (ws.five_hour || ws.pro || ws.daily || ws.flash);
+      var wlbl = ws && ws.five_hour ? '5h' : '24h';
       if (!w || !w.pace) continue;
       var key = names[i][0] + w.resetsAt;
       var soon = w.used >= 90 || (w.pace.runsOutIn != null && w.pace.runsOutIn < 30 * 60e3);
       if (soon && !quotaAlerted[key]) {
         quotaAlerted[key] = true;
-        msgs.push('Cota de 5h do ' + names[i][1] + (w.used >= 90 ? ' em ' + Math.round(w.used) + '%' : ' acaba em ' + dur(w.pace.runsOutIn)));
+        msgs.push('Cota de ' + wlbl + ' do ' + names[i][1] + (w.used >= 90 ? ' em ' + Math.round(w.used) + '%' : ' acaba em ' + dur(w.pace.runsOutIn)));
       }
     }
     if (msgs.length) { beep(); flash(msgs.join(' · ')); }

@@ -44,10 +44,11 @@
 
   function sessRow(x, now) {
     var i = toolIndex(x.tool), meta = [];
-    meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
+    meta.push(x.tool === 'Ollama' || (!x.tokens && (x.tool === 'Gemini' || x.tool === 'Antigravity')) ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
     meta.push(dur(now - x.start));
     return '<button class="sess b' + i + '" data-id="' + esc(x.id) + '">' +
       '<div class="row"><span class="proj ell">' + esc(x.project) + '</span><span class="tool">' + esc(x.tool) + '</span>' +
+      (x.testFailed ? '<span class="rflag fail">✗ teste falhou</span>' : '') +
       '<span class="grow"></span>' + badge(x, now) + '<span class="chev">›</span></div>' +
       (x.title ? '<div class="ttl ell">' + esc(x.title) + '</div>' : '') +
       '<div class="l3 row"><span class="grow">' + meta.join(' · ') + '</span>' + ctxPie(x) + '</div></button>';
@@ -57,16 +58,18 @@
   // IA + projeto + contexto, estado + PC, assunto e uso; o último pedido e o resto ficam na gaveta.
   function sessCard(x, now) {
     var i = toolIndex(x.tool), meta = [];
-    meta.push(x.tool === 'Antigravity' || x.tool === 'Ollama' ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
+    meta.push(x.tool === 'Ollama' || (!x.tokens && (x.tool === 'Gemini' || x.tool === 'Antigravity')) ? x.prompts + ' pedidos' : k(x.tokens) + ' tokens');
     meta.push(dur(now - x.start));
     var ping = pings[x.id] && now - pings[x.id] < 3000 ? ' ping' : '';
     // Cada aviso anima uma vez; redesenhar o painel não reinicia o destaque.
     delete pings[x.id];
-    return '<button class="card t' + i + (x.state === 'waiting' && !isSeen(x) ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
+    return '<button class="card t' + i + (x.state === 'waiting' && !isSeen(x) ? ' waiting-card' : x.state === 'permission' ? ' perm-card' : x.state === 'closed' ? ' old-card' : '') + (x.testFailed ? ' test-card' : '') + ping + '" data-id="' + esc(x.id) + '"><div class="in">' +
       // Ícone da IA antes do nome da sessão; à direita, o anel do contexto
       '<div class="row">' + toolIcon(i) + '<span class="proj ell grow">' + esc(x.project) + '</span>' + ctxPie(x) + '</div>' +
       // Estado; o PC onde a sessão roda fica só na gaveta
       '<div class="sub row">' + badge(x, now) + '<span class="grow"></span>' +
+      // Último teste da sessão falhou: confira a resposta da sessão
+      (x.testFailed ? '<span class="rflag fail" title="O último teste rodado nesta sessão falhou">✗ teste falhou</span>' : '') +
       // Só o símbolo: ✉ resposta na fila, ↩ dá para responder ao vivo
       (x.queued ? '<span class="rflag queued" title="Resposta na fila">✉</span>' : x.listening ? '<span class="rflag" title="Pode responder ao vivo">↩</span>' : '') + '</div>' +
       // Assunto: o título da sessão ou, sem título, o último pedido

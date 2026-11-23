@@ -13,6 +13,7 @@ function buildSessionDetail(s, now, pendingInfo) {
     lastTool: s.lastTool, tools, lastPrompt: s.lastPrompt, lastReply: s.lastReply,
     // Hora da última resposta; sem ela (Codex só no SQLite), o fim do último turno
     lastReplyAt: s.lastReply ? s.lastReplyAt || s.completedAt || 0 : 0,
+    testRun: s.testRun || null,
     subagents: s.subagents || 0, subTokens: s.subTokens || 0, ...pendingInfo(s, now), where: s.where || '',
     turns: s.events.slice(-10).reverse().map((e) => ({ t: Date.parse(e.ts), fresh: e.fresh, cacheRead: e.cacheRead })),
     // Ollama: últimas mensagens da conversa (app) ou comandos digitados (terminal) para a gaveta

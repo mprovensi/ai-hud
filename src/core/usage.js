@@ -3,16 +3,21 @@
 function usage(all, now) {
   const hourMs = 3600e3;
   const firstHour = Math.floor(now / hourMs) * hourMs - 23 * hourMs;
-  const hours = Array.from({ length: 24 }, (_, i) => ({ t: firstHour + i * hourMs, 'Claude Code': 0, Codex: 0 }));
-  const today = { 'Claude Code': { fresh: 0, cacheRead: 0 }, Codex: { fresh: 0, cacheRead: 0 } };
+  const hours = Array.from({ length: 24 }, (_, i) => ({ t: firstHour + i * hourMs, 'Claude Code': 0, Codex: 0, Gemini: 0 }));
+  const today = {
+    'Claude Code': { fresh: 0, cacheRead: 0 },
+    Codex: { fresh: 0, cacheRead: 0 },
+    Gemini: { fresh: 0, cacheRead: 0 },
+  };
   const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(midnight); d.setDate(d.getDate() - 6 + i);
-    return { t: d.getTime(), 'Claude Code': 0, Codex: 0 };
+    return { t: d.getTime(), 'Claude Code': 0, Codex: 0, Gemini: 0 };
   });
-  const sessionsToday = { 'Claude Code': 0, Codex: 0, Antigravity: 0, Ollama: 0 };
+  const sessionsToday = { 'Claude Code': 0, Codex: 0, Gemini: 0, Antigravity: 0, Ollama: 0 };
   for (const s of all) {
-    if (!s.subagent && Date.parse(s.end) >= midnight.getTime()) sessionsToday[s.tool]++;
+    if (!s.subagent && Date.parse(s.end) >= midnight.getTime() && s.tool in sessionsToday) sessionsToday[s.tool]++;
+    if (!today[s.tool]) continue;
     for (const e of s.events) {
       const t = Date.parse(e.ts);
       const i = Math.floor((t - firstHour) / hourMs);

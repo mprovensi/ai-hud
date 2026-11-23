@@ -105,7 +105,7 @@ function createApp({
     }, 30e3);
   }
 
-  return { server, config, start, warm: () => collector.current(), collector };
+  return { server, config, start, warm: () => collector.current(), collector, quotas };
 }
 
 module.exports = { createApp };

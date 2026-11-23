@@ -19,11 +19,11 @@ Sem `desde`, responde na hora. Uma versão de outro processo do servidor também
   version,                 muda quando o conteúdo muda (desde 2026-10)
   appVersion,              versão do app web: diferente da do aparelho = mostrar "Atualizar app"
   remoteMode,
-  quotas: { claude, codex: { plan, at, error, windows: { five_hour, seven_day: { used, resetsAt, pace } } } },
-  hours[24], days[7]:      { t, 'Claude Code', Codex }   tokens novos por hora/dia
-  today:                   { 'Claude Code'|Codex: { fresh, cacheRead } }
-  sessionsToday:           { 'Claude Code', Codex, Antigravity, Ollama }
-  burn:                    { claude, codex: { start, end, used, points, projected, runsOutIn } }
+  quotas: { claude, codex, gemini: { plan, at, error, windows: { five_hour, seven_day, pro, flash, daily: { used, resetsAt, pace } } } },
+  hours[24], days[7]:      { t, 'Claude Code', Codex, Gemini }   tokens novos por hora/dia
+  today:                   { 'Claude Code'|Codex|Gemini: { fresh, cacheRead } }
+  sessionsToday:           { 'Claude Code', Codex, Gemini, Antigravity, Ollama }
+  burn:                    { claude, codex, gemini: { start, end, used, window, points, projected, runsOutIn } }
   active[], recent[]:      cartões (abaixo); active ordenado com permissões primeiro
   machines[]:              { name, ok, error }          (hub)
   ollamas[]:               estado do Ollama de cada PC  (hub; o PC sozinho manda "ollama")

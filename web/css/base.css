@@ -7,7 +7,8 @@ button { -webkit-tap-highlight-color: transparent; }
 body { font: 15px/1.35 -apple-system, "Helvetica Neue", Roboto, sans-serif; padding: 12px 14px 20px; -webkit-text-size-adjust: 100%; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
 .muted { color: #8d8d87; }
-.lo { color: #5fb8a4; } .warn { color: #e0b45a; } .hi { color: #e87070; }
+/* Estado (texto sempre com palavra ao lado): cores que nenhuma IA usa; as das IAs são .c0–.c3 */
+.lo { color: #9ad65c; } .warn { color: #ecd13a; } .hi { color: #e82e3c; }
 .dot { display: inline-block; width: .6em; height: .6em; border-radius: 50%; margin-right: .4em; vertical-align: .05em; }
 .c0 { background: #e08a66; } .c1 { background: #5fb8a4; } .c2 { background: #7d9bf0; }
 .row { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
@@ -51,5 +52,5 @@ body.read-larger { font-size: 19px; }
 /* Horário ao lado do título de um painel (ex.: Última resposta · às 09:12) */
 .htime { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .quotas { display: -webkit-flex; display: flex; }
-.quotas .panel { -webkit-flex: 1; flex: 1; min-width: 0; }
+.quotas .panel { -webkit-flex: 1 1 0%; flex: 1 1 0%; min-width: 0; }
 .quotas .panel + .panel { margin-left: 10px; }

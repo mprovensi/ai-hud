@@ -8,8 +8,9 @@
   }
   function sessHead(x) {
     var idx = toolIndex(x.tool);
-    // Claude e Codex com o ícone da página inicial; Antigravity (sem ícone) continua com a bolinha
-    return head(toolIcon(idx) + esc(x.project) + ' <small class="muted">' + esc(x.tool) + machineTag(x) + '</small>',
+    var origins = { 'gemini-cli': 'Gemini CLI', antigravity: 'Antigravity', 'antigravity-cli': 'Antigravity CLI' };
+    var origin = x.tool === 'Gemini' && origins[x.where] ? ' · ' + origins[x.where] : '';
+    return head(toolIcon(idx) + esc(x.project) + ' <small class="muted">' + esc(x.tool) + origin + machineTag(x) + '</small>',
       x.title ? esc(x.title) : '');
   }
 
@@ -100,6 +101,12 @@
         '<div class="permcmd">' + esc(d.permission.summary) + '</div><div class="row">' +
         '<button class="pbtn allow" id="permAllow">Permitir</button><button class="pbtn deny" id="permDeny">Negar</button></div></div>';
     }
+    // Último teste rodado na sessão falhou: o comando e as linhas do erro, para conferir a resposta
+    if (d.testRun && !d.testRun.ok) {
+      html += '<div class="panel testbox"><h2>✗ Teste falhou' + (d.testRun.at ? ' <span class="htime">· ' + when(d.testRun.at) + '</span>' : '') + '</h2>' +
+        '<div class="permcmd">' + esc(d.testRun.command) + '</div>' +
+        (d.testRun.summary ? '<div class="quote">' + esc(d.testRun.summary) + '</div>' : '') + '</div>';
+    }
     var places = { vscode: 'no VS Code', terminal: 'no terminal', 'claude-desktop': 'no app do Claude', 'codex-desktop': 'no app do Codex', 'ollama-app': 'no app do Ollama', 'ollama-run': 'no terminal' };
     if (places[d.where]) {
       html += '<button class="pcaction" id="focusPc">🖥 Abrir no PC <small>' + places[d.where] + '</small></button>';
@@ -116,8 +123,8 @@
       html += '<div class="panel"><h2>' + (d.where === 'ollama-run' && !d.lastReply ? 'Últimos comandos no terminal' : 'Últimas mensagens') + '</h2>' +
         '<div class="convo lastreply" id="lastReply">' + conv + '</div></div>';
     } else if (d.lastReply) html += '<div class="panel"><h2>Última resposta' + replyTime(d) + '</h2><div class="quote lastreply" id="lastReply">' + esc(d.lastReply) + '</div></div>';
-    // ollama run no terminal: não há como escrever na conversa
-    if (d.tool !== 'Antigravity' && d.where !== 'ollama-run') html += replyBox(d);
+    // ollama run no terminal e Gemini: não há resposta rápida pelo HUD
+    if (d.tool !== 'Antigravity' && d.tool !== 'Gemini' && d.where !== 'ollama-run') html += replyBox(d);
     if (d.where === 'ollama-run' && !d.lastReply) html += '<div class="panel"><div class="muted" style="font-size:.85em">Conversa no terminal (ollama run): o Ollama não grava essas conversas, então não dá para ler as respostas nem responder por aqui. Use Abrir no PC.</div></div>';
 
     html += '<div class="panel more' + (moreOpen ? ' open' : '') + '" id="more"><button class="mhead row" id="moreToggle">' +
@@ -132,7 +139,7 @@
       stat(d.context ? k(d.context) + (pct ? ' <small class="muted">' + pct + '%</small>' : '') : '—', 'contexto atual') +
       stat(d.prompts, 'pedidos seus') + stat(d.toolCalls, 'ferramentas usadas') +
       stat(d.subagents ? d.subagents + ' <small class="muted">' + k(d.subTokens) + '</small>' : '0', 'subagentes') +
-      '</div>' + (pct ? '<div class="ctx" style="margin-bottom:12px"><div style="width:' + Math.min(100, pct) + '%;background:' + levelColor(pct) + '"></div></div>' : '');
+      '</div>' + (pct ? '<div class="ctx" style="margin-bottom:12px"><div class="fill" style="width:' + Math.min(100, pct) + '%;background:' + levelFill(pct) + '"></div></div>' : '');
     if (d.tools.length) {
       html += '<h2>Ferramentas mais usadas</h2>';
       for (var t = 0; t < d.tools.length; t++) {
@@ -146,7 +153,9 @@
         html += '<div class="dl"><span>' + hm(d.turns[j].t) + '</span><span>' + k(d.turns[j].fresh) + ' novos · ' + k(d.turns[j].cacheRead) + ' cache</span></div>';
       }
     }
-    html += '<div class="dl" style="margin-top:12px"><span>Modelo</span><span>' + esc(d.models.join(', ') || '—') + '</span></div>' +
+    var origins = { 'gemini-cli': 'Gemini CLI', antigravity: 'Antigravity', 'antigravity-cli': 'Antigravity CLI' };
+    if (origins[d.where]) html += '<div class="dl" style="margin-top:12px"><span>Origem</span><span>' + esc(origins[d.where]) + '</span></div>';
+    html += '<div class="dl"' + (origins[d.where] ? '' : ' style="margin-top:12px"') + '><span>Modelo</span><span>' + esc(d.models.join(', ') || '—') + '</span></div>' +
       '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
     }
     html += '</div></div>';

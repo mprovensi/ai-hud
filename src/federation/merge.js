@@ -6,7 +6,9 @@ function mergeSeries(target, source) {
   for (const row of source || []) {
     const match = byTime.get(row.t);
     if (!match) continue;
-    for (const tool of ['Claude Code', 'Codex']) match[tool] += row[tool] || 0;
+    for (const tool of ['Claude Code', 'Codex', 'Gemini']) {
+      if (tool in match || tool in row) match[tool] = (match[tool] || 0) + (row[tool] || 0);
+    }
   }
 }
 
@@ -56,16 +58,21 @@ function mergeSnapshots({ local, localName, list, live, ollamasFor }) {
 
   // Cotas: mesma conta nos dois PCs = mesma janela (reset igual) → vale a leitura mais recente
   out.quotas = { ...local.quotas };
-  for (const name of ['claude', 'codex']) {
-    const reset = (q) => q && q.windows && q.windows.seven_day && q.windows.seven_day.resetsAt;
+  const quotaReset = (q) => {
+    const w = q && q.windows;
+    if (!w) return 0;
+    const picked = w.seven_day || w.five_hour || w.pro || w.daily || w.flash;
+    return (picked && picked.resetsAt) || 0;
+  };
+  for (const name of ['claude', 'codex', 'gemini']) {
     let best = local.quotas[name];
     for (const p of live) {
       const q = p.snap.quotas && p.snap.quotas[name];
-      if (!q || !reset(q)) continue;
-      const same = !reset(best) || Math.abs(reset(q) - reset(best)) < 120e3;
-      if (same && (!best || !best.at || (q.at || 0) > best.at)) best = q;
+      if (!q || !quotaReset(q)) continue;
+      const same = !quotaReset(best) || Math.abs(quotaReset(q) - quotaReset(best)) < 120e3;
+      if (same && (!best || !quotaReset(best) || !best.at || (q.at || 0) > best.at)) best = q;
     }
-    out.quotas[name] = best;
+    if (best !== undefined) out.quotas[name] = best;
   }
   return out;
 }

@@ -1,7 +1,7 @@
-/* Ollama: meia largura na linha das cotas, clicável */
-.quotas .olla { -webkit-flex: .5; flex: .5; display: block; text-align: left; overflow: hidden; cursor: pointer; }
-/* Cartões de uso do Claude e do Codex: toque abre a gaveta de uso */
-#q-claude, #q-codex { cursor: pointer; }
+/* Ollama: largura mínima na linha das cotas para dar espaço igual a Claude, Codex e Gemini */
+.quotas .olla { -webkit-flex: 0 0 7.4em; flex: 0 0 7.4em; width: 7.4em; display: block; text-align: left; overflow: hidden; cursor: pointer; }
+/* Cartões de uso do Claude, Codex e Gemini: toque abre a gaveta de uso */
+#q-claude, #q-codex, #q-gemini { cursor: pointer; }
 /* Gaveta de uso: barra maior e frase-resumo do ritmo */
 .utrack { height: 12px; margin: 8px 0 8px; }
 .usum { font-size: .9em; margin-bottom: 6px; }
@@ -11,9 +11,10 @@
 .ollama-ico { -webkit-filter: invert(1) sepia(1) saturate(2.2) hue-rotate(215deg) brightness(.95); filter: invert(1) sepia(1) saturate(2.2) hue-rotate(215deg) brightness(.95); }
 .ostat + .ostat { border-top: 1px solid #2c2c29; margin-top: 6px; padding-top: 6px; }
 .omach { font-size: .78em; color: #8d8d87; }
-.omodel { margin-top: 6px; font-size: .9em; }
-.osmall2 { font-size: .74em; }
-.ouse { margin-top: 6px; }
+.ostate { white-space: nowrap; }
+.omodel { margin-top: 4px; font-size: .86em; }
+.osmall2 { font-size: .72em; }
+.ouse { margin-top: 4px; }
 
 .card .llama { margin-right: .3em; }
 .llm { background: #3a2f52; color: #d8cbf2; }

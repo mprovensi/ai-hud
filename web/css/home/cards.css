@@ -55,5 +55,8 @@
   font-size: .6em; font-weight: 700; color: #d5d5cf; }
 .sess .pie { width: 1.5em; height: 1.5em; }
 .rflag { font-size: .7em; color: #b3c6ff; white-space: nowrap; margin-left: 6px; }
-.rflag.queued { color: #e0b45a; }
+.rflag.queued { color: #ecd13a; }
+/* Último teste da sessão falhou: vermelho de estado (o mesmo do fim da cota) */
+.rflag.fail { color: #e82e3c; font-weight: 700; }
+.card.test-card .in { border-color: #e82e3c; box-shadow: 0 0 0 1px #e82e3c; }
 

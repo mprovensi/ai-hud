@@ -5,3 +5,6 @@ data/*
 # Logs de instalações antigas que ainda estão na raiz.
 /server.log
 /server.old.log
+
+# Imagens geradas por npm run imagens
+/test-output/

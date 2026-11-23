@@ -12,9 +12,9 @@
 .rhead { margin-bottom: 8px; }
 .rhead h2 { margin: 0; }
 .rtag { font-size: .72em; color: #8d8d87; white-space: nowrap; }
-.rtag.lo { color: #5fb8a4; }
+.rtag.lo { color: #9ad65c; }
 .rnote { font-size: .72em; color: #8d8d87; margin: -4px 0 8px; }
-.rqueued { font-size: .85em; color: #e0b45a; margin-bottom: 8px; word-wrap: break-word; }
+.rqueued { font-size: .85em; color: #ecd13a; margin-bottom: 8px; word-wrap: break-word; }
 .link { color: #5fb8a4; text-decoration: underline; font-size: inherit; }
 .chips { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -4px 6px; }
 .chip { margin: 0 4px 8px; padding: .3em .8em; border-radius: 16px; background: #262624; border: 1px solid #3a3a36; font-size: .85em; }
@@ -37,7 +37,7 @@
 .oicon { font-size: 3em; margin-bottom: 8px; }
 .obox h2 { font-size: 1.3em; margin-bottom: 8px; }
 .obox p { margin-bottom: 10px; }
-.oretry { color: #e0b45a; font-weight: 700; }
+.oretry { color: #ecd13a; font-weight: 700; }
 .osmall { font-size: .85em; }
 .obox .btn { margin: 6px 0 0; padding: .5em 1.4em; }
 

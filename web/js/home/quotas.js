@@ -14,7 +14,7 @@
     if (!w) return '';
     var used = Math.max(0, Math.min(100, w.used)), mark = w.pace ? w.pace.expected : null;
     return '<div class="gauge" title="' + title + '"><div class="row"><span class="lbl">' + label + '</span>' +
-      '<div class="track grow"><div class="fill" style="width:' + used + '%;background:' + levelColor(used) + '"></div>' +
+      '<div class="track grow"><div class="fill" style="width:' + used + '%;background:' + levelFill(used) + '"></div>' +
       (mark != null ? '<div class="mark" style="left:' + Math.min(99, mark) + '%"></div>' : '') + '</div>' +
       '<span class="pct">' + Math.round(w.used) + '%</span></div>' +
       '<div class="foot row"><span class="muted grow" title="reinicia em ' + dur(w.resetsAt - now) + '">↻ ' + resetAt(w.resetsAt) + '</span>' +
@@ -37,10 +37,11 @@
   }
   function toolIcon(idx) {
     if (idx === 3) return ollamaIcon();
-    return idx < 2 ? brandIcon(idx) : '<span class="dot c2"></span>';
+    return brandIcon(idx);
   }
   function brandIcon(idx) {
-    return '<img class="brand" src="/brand-' + (idx ? 'codex' : 'claude') + '.svg" alt="">';
+    var slug = idx === 1 ? 'codex' : idx === 2 ? 'gemini' : 'claude';
+    return '<img class="brand" src="/brand-' + slug + '.svg" alt="">';
   }
 
   function quotaPanel(id, name, idx, q, now, used) {
@@ -48,8 +49,13 @@
       '<span class="grow"></span><span class="tokens" title="Tokens usados hoje">' + k(used) + ' <small>hoje</small></span><span class="chev">›</span></div>';
     if (!q) html += '<div class="empty">lendo…</div>';
     else {
-      var w = q.windows || {};
-      if (w.five_hour || w.seven_day) html += gauge('5h', 'Janela de 5 horas', w.five_hour, now) + gauge('7d', 'Semana', w.seven_day, now);
+      var w = q.windows || {}, gauges = '';
+      if (w.five_hour) gauges += gauge('5h', 'Janela de 5 horas', w.five_hour, now);
+      if (w.seven_day) gauges += gauge('7d', 'Semana', w.seven_day, now);
+      if (w.pro) gauges += gauge('Pro', 'Cota diária Pro' + (w.pro.modelId ? ' (' + w.pro.modelId + ')' : ''), w.pro, now);
+      if (w.flash) gauges += gauge('Fla', 'Cota diária Flash' + (w.flash.modelId ? ' (' + w.flash.modelId + ')' : ''), w.flash, now);
+      if (w.daily) gauges += gauge('24h', 'Cota diária' + (w.daily.modelId ? ' (' + w.daily.modelId + ')' : ''), w.daily, now);
+      if (gauges) html += gauges;
       else if (!q.error) html += '<div class="empty">sem cota de plano</div>';
       if (q.error) html += '<div class="qerr">⚠ ' + esc(q.error) + '</div>';
     }

@@ -27,10 +27,19 @@ function spawnDetached(exe, args, cwd, spawnFn = nodeSpawn, running = null, trac
       err ? reject(err) : resolve();
     };
     if (child.stderr) child.stderr.on('data', (c) => { if (stderr.length < 500) stderr += c; });
-    child.on('error', (e) => done(new Error(e.code === 'ENOENT' ? `${exe} não encontrado neste PC.` : e.message)));
+    child.on('error', (e) => {
+      const msg = e.code === 'ENOENT' ? `${exe} não encontrado neste PC.` : e.message;
+      if (running && trackKey) running.recordError(trackKey, msg);
+      done(new Error(msg));
+    });
     child.on('exit', (code) => {
-      if (code && code !== 0) done(new Error(stderr.trim().split(/\r?\n/)[0] || `processo encerrou com código ${code}`));
-      else done(null);
+      if (code && code !== 0) {
+        const msg = stderr.trim().split(/\r?\n/)[0] || `processo encerrou com código ${code}`;
+        if (running && trackKey) running.recordError(trackKey, msg);
+        done(new Error(msg));
+      } else {
+        done(null);
+      }
     });
     const timer = setTimeout(() => done(null), 200);
   });
@@ -65,8 +74,14 @@ function createReplies({ queue, claudeExe = '', codexExe, agyExe, exec, spawn, f
     }
     if (tool === 'Gemini') {
       if (!/^[0-9a-f-]{36}$/.test(key)) return { status: 400, body: 'sessão do Gemini sem ID compatível para resposta remota' };
-      if (running && running.isBusy(key)) return { status: 409, body: 'esta sessão já está executando uma resposta; aguarde terminar' };
       const s = findSession((x) => x.tool === 'Gemini' && x.id === key);
+      if (s && s.where === 'antigravity') {
+        return {
+          status: 409,
+          body: 'Sessões abertas no app Antigravity (IDE) não aceitam resposta via agy CLI. Use "↪ Handoff" para continuar pelo HUD ou "Abrir no PC".',
+        };
+      }
+      if (running && running.isBusy(key)) return { status: 409, body: 'esta sessão já está executando uma resposta; aguarde terminar' };
       try {
         await geminiReply({ exe: agyExe, key, text, cwd: s && s.cwd, spawnFn: spawn, running });
         return { status: 200, body: { sent: true } };

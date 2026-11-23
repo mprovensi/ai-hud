@@ -509,9 +509,15 @@
     }
     html += renderConversation(d);
     html += questionCard(d);
-    // ollama run no terminal e sessões legadas sem UUID: não há resposta rápida pelo HUD
-    var canReply = d.tool !== 'Antigravity' && d.where !== 'ollama-run' && (d.tool !== 'Gemini' || /(?:^|:)[0-9a-f-]{36}$/.test(String(d.id || '')));
-    if (canReply) html += replyBox(d);
+    // ollama run no terminal, Antigravity IDE (armazenamento separado do `agy` CLI) e sessões legadas sem UUID: sem resposta direta
+    var isIdeAntigravity = d.tool === 'Gemini' && d.where === 'antigravity';
+    var canReply = d.tool !== 'Antigravity' && d.where !== 'ollama-run' && !isIdeAntigravity && (d.tool !== 'Gemini' || /(?:^|:)[0-9a-f-]{36}$/.test(String(d.id || '')));
+    if (canReply) {
+      html += replyBox(d);
+    } else if (isIdeAntigravity) {
+      html += '<div class="panel reply"><div class="rnote" style="margin:0 0 8px">Sessão aberta no app <b>Antigravity (IDE)</b>: o <code>agy</code> CLI usa armazenamento separado e não entrega mensagens nesta janela. Para responder pelo celular/iPad, continue em uma sessão do HUD via Handoff ou use <b>Abrir no PC</b>.</div>' +
+        '<button type="button" class="pcaction" id="openHandoffIde" style="margin:0">↪ Continuar no HUD via Handoff</button></div>';
+    }
     html += '</div>';
 
     // ---- Aba Detalhes ----
@@ -630,6 +636,7 @@
       renderDetail(d);
     }
     if ($('openHandoffBanner')) $('openHandoffBanner').onclick = openHandoffPanel;
+    if ($('openHandoffIde')) $('openHandoffIde').onclick = openHandoffPanel;
     if ($('openHandoff')) $('openHandoff').onclick = openHandoffPanel;
     if ($('handoffCancel')) $('handoffCancel').onclick = function () {
       handoffUi.open = false;

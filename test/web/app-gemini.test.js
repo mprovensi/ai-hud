@@ -140,16 +140,18 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   assert.match(nodes.overlayBody.innerHTML, /web\/js\/drawers\/detail\.js/);
   assert.match(nodes.overlayBody.innerHTML, /3×/);
   assert.match(nodes.overlayBody.innerHTML, /id="focusPc"/);
-  assert.match(nodes.overlayBody.innerHTML, /id="replyText"/);
+  // Sessão da IDE Antigravity mostra aviso + botão de Handoff em vez da caixa de resposta (que falharia no agy CLI)
+  assert.doesNotMatch(nodes.overlayBody.innerHTML, /id="replyText"/);
+  assert.match(nodes.overlayBody.innerHTML, /id="openHandoffIde"/);
 
-  // Sessão de máquina Linux headless (canFocus: false) oculta o botão Abrir no PC
+  // Sessão criada pelo Antigravity CLI (`antigravity-cli`, ex.: via + Nova ou terminal) exibe a caixa de resposta
   const reqLinux = requests.length;
   goHash('#s=00000000-0000-4000-8000-000000000002');
   Object.assign(requests[reqLinux], {
     readyState: 4, status: 200,
     responseText: JSON.stringify({
       tool: 'Gemini', id: '00000000-0000-4000-8000-000000000002', key: '00000000-0000-4000-8000-000000000002',
-      where: 'gemini-cli', canFocus: false, project: 'vps-app', title: 'Sessão na VPS',
+      where: 'antigravity-cli', canFocus: false, project: 'vps-app', title: 'Sessão na VPS',
       cwd: '/home/ubuntu/vps-app', models: ['gemini-2.5-pro'], start: now - 600e3, end: now - 10e3,
       state: 'waiting', now, input: 1000, output: 200, cacheRead: 0, cacheWrite: 0,
       context: 1200, contextWindow: 1e6, prompts: 1, toolCalls: 0, lastTool: '',
@@ -159,4 +161,5 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   });
   requests[reqLinux].onreadystatechange();
   assert.doesNotMatch(nodes.overlayBody.innerHTML, /id="focusPc"/);
+  assert.match(nodes.overlayBody.innerHTML, /id="replyText"/);
 });

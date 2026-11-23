@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # Configura VPN IKEv2 (strongSwan) na VPS Oracle (Ubuntu/Debian) compatível com iPad mini 1 (iOS 9.3.5).
+# - Usa IKEv2 + PSK (SharedSecret) de 32 caracteres + AES-256 / SHA-256 / MODP-2048: 100% nativo no iOS 9.3.5
+#   sem exigir instalação de certificado CA nem pedir segredo/senha manualmente.
 # - Split-tunnel: o iPad envia pela VPN SOMENTE o tráfego para 10.10.10.1 (AI HUD na VPS); a internet normal
 #   do iPad continua direta pela Wi-Fi, sem NAT nem ip_forward na VPS.
-# - Gera o arquivo ai-hud-ipad.mobileconfig (CA + VPN IKEv2 em 1 toque no iPad).
+# - Gera o arquivo ai-hud-ipad.mobileconfig pronto para instalar em 1 toque no iPad.
 #
 # Uso (na VPS Oracle, como root):
 #   sudo bash platform/linux/ikev2-ipad-setup.sh --host <IP_PUBLICO_OU_DOMINIO_DA_VPS>
 #
-# Antes/depois, libere na Security List da Oracle Cloud (Ingress):
+# Libere na Security List da Oracle Cloud (Ingress):
 #   UDP 500  e  UDP 4500  (NÃO abra a porta TCP 8787 para a internet!)
 
 set -euo pipefail
 
 HOST=""
-VPN_USER="ipad"
-VPN_PASS=""
+CLIENT_ID="ipad"
+PSK=""
 VPN_IP="10.10.10.1"
 VPN_POOL="10.10.10.2-10.10.10.254"
 OUT_FILE="./ai-hud-ipad.mobileconfig"
@@ -22,12 +24,12 @@ OUT_FILE="./ai-hud-ipad.mobileconfig"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
-    --user) VPN_USER="$2"; shift 2 ;;
-    --pass) VPN_PASS="$2"; shift 2 ;;
+    --user|--client-id) CLIENT_ID="$2"; shift 2 ;;
+    --psk|--pass) PSK="$2"; shift 2 ;;
     --vpn-ip) VPN_IP="$2"; shift 2 ;;
     --out) OUT_FILE="$2"; shift 2 ;;
     -h|--help)
-      echo "Uso: sudo bash $0 --host <IP_OU_DOMINIO_VPS> [--user ipad] [--pass <senha>] [--out ./ai-hud-ipad.mobileconfig]"
+      echo "Uso: sudo bash $0 --host <IP_OU_DOMINIO_VPS> [--client-id ipad] [--psk <chave>] [--out ./ai-hud-ipad.mobileconfig]"
       exit 0 ;;
     *) echo "Opção desconhecida: $1" >&2; exit 1 ;;
   esac
@@ -43,14 +45,14 @@ if [[ -z "$HOST" ]]; then
   exit 1
 fi
 
-if [[ -z "$VPN_PASS" ]]; then
-  VPN_PASS="$(dd if=/dev/urandom bs=64 count=1 2>/dev/null | base64 | tr -dc 'A-Za-z0-9' | cut -c1-24)"
+if [[ -z "$PSK" ]]; then
+  PSK="$(dd if=/dev/urandom bs=64 count=1 2>/dev/null | base64 | tr -dc 'A-Za-z0-9' | cut -c1-32)"
 fi
 
-echo "==> Instalando strongSwan e plugins EAP (Ubuntu/Debian)..."
+echo "==> Instalando strongSwan (Ubuntu/Debian)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq strongswan strongswan-pki libcharon-extra-plugins openssl uuid-runtime
+apt-get install -y -qq strongswan libcharon-extra-plugins uuid-runtime
 
 echo "==> Configurando IP interno fixo da VPN (${VPN_IP}/32) na loopback..."
 cat >/etc/systemd/system/ai-hud-vpn-ip.service <<EOF
@@ -69,31 +71,7 @@ EOF
 systemctl daemon-reload
 systemctl enable --now ai-hud-vpn-ip.service
 
-echo "==> Gerando CA e certificado RSA 2048 compatível com iOS 9.3.5..."
-mkdir -p /etc/ipsec.d/{cacerts,certs,private}
-chmod 700 /etc/ipsec.d/private
-
-if [[ ! -f /etc/ipsec.d/private/ai-hud-ca-key.pem ]]; then
-  pki --gen --type rsa --size 2048 --outform pem >/etc/ipsec.d/private/ai-hud-ca-key.pem
-  pki --self --ca --lifetime 3650 \
-    --in /etc/ipsec.d/private/ai-hud-ca-key.pem --type rsa \
-    --dn "CN=AI HUD VPN Root CA" --digest sha256 \
-    --outform pem >/etc/ipsec.d/cacerts/ai-hud-ca-cert.pem
-fi
-
-SAN_FLAG="--san ${HOST}"
-pki --gen --type rsa --size 2048 --outform pem >/etc/ipsec.d/private/ai-hud-server-key.pem
-pki --pub --in /etc/ipsec.d/private/ai-hud-server-key.pem --type rsa | \
-  pki --issue --lifetime 3650 \
-    --cacert /etc/ipsec.d/cacerts/ai-hud-ca-cert.pem \
-    --cakey /etc/ipsec.d/private/ai-hud-ca-key.pem \
-    --dn "CN=${HOST}" ${SAN_FLAG} \
-    --flag serverAuth --flag ikeIntermediate --digest sha256 \
-    --outform pem >/etc/ipsec.d/certs/ai-hud-server-cert.pem
-
-chmod 600 /etc/ipsec.d/private/ai-hud-ca-key.pem /etc/ipsec.d/private/ai-hud-server-key.pem
-
-echo "==> Escrevendo /etc/ipsec.conf (AES-256 / SHA-256 / MODP-2048 para iOS 9.3.5)..."
+echo "==> Escrevendo /etc/ipsec.conf (IKEv2 PSK + AES-256 / SHA-256 / MODP-2048 para iOS 9.3.5)..."
 cat >/etc/ipsec.conf <<EOF
 config setup
   charondebug="ike 1, knl 1, cfg 0"
@@ -113,19 +91,17 @@ conn ai-hud-ipad
   esp=aes256-sha256,aes256-sha1!
   left=%any
   leftid=${HOST}
-  leftcert=ai-hud-server-cert.pem
-  leftsendcert=always
+  leftauth=psk
   leftsubnet=${VPN_IP}/32
   right=%any
-  rightid=%any
-  rightauth=eap-mschapv2
+  rightid=${CLIENT_ID}
+  rightauth=psk
   rightsourceip=${VPN_POOL}
-  eap_identity=%identity
 EOF
 
 cat >/etc/ipsec.secrets <<EOF
-: RSA "ai-hud-server-key.pem"
-${VPN_USER} : EAP "${VPN_PASS}"
+${HOST} ${CLIENT_ID} : PSK "${PSK}"
+: PSK "${PSK}"
 EOF
 chmod 600 /etc/ipsec.secrets
 
@@ -140,9 +116,7 @@ if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
 fi
 
 echo "==> Gerando perfil Apple (.mobileconfig) em ${OUT_FILE}..."
-CA_B64="$(openssl x509 -in /etc/ipsec.d/cacerts/ai-hud-ca-cert.pem -outform der | base64 -w 0)"
 UUID_TOP="$(uuidgen)"
-UUID_CA="$(uuidgen)"
 UUID_VPN="$(uuidgen)"
 
 cat >"${OUT_FILE}" <<EOF
@@ -153,28 +127,18 @@ cat >"${OUT_FILE}" <<EOF
   <key>PayloadContent</key>
   <array>
     <dict>
-      <key>PayloadCertificateFileName</key>
-      <string>ai-hud-ca.cer</string>
-      <key>PayloadContent</key>
-      <data>${CA_B64}</data>
-      <key>PayloadDescription</key>
-      <string>Certificado raiz da VPN privada do AI HUD</string>
-      <key>PayloadDisplayName</key>
-      <string>AI HUD VPN Root CA</string>
-      <key>PayloadIdentifier</key>
-      <string>local.ai-hud.vpn.ca</string>
-      <key>PayloadType</key>
-      <string>com.apple.security.root</string>
-      <key>PayloadUUID</key>
-      <string>${UUID_CA}</string>
-      <key>PayloadVersion</key>
-      <integer>1</integer>
-    </dict>
-    <dict>
       <key>IKEv2</key>
       <dict>
         <key>AuthenticationMethod</key>
-        <string>None</string>
+        <string>SharedSecret</string>
+        <key>SharedSecret</key>
+        <string>${PSK}</string>
+        <key>ExtendedAuthEnabled</key>
+        <integer>0</integer>
+        <key>AuthName</key>
+        <string></string>
+        <key>AuthPassword</key>
+        <string></string>
         <key>ChildSecurityAssociationParameters</key>
         <dict>
           <key>DiffieHellmanGroup</key>
@@ -192,16 +156,8 @@ cat >"${OUT_FILE}" <<EOF
         <integer>0</integer>
         <key>DisableRedirect</key>
         <integer>0</integer>
-        <key>EnableCertificateRevocationCheck</key>
-        <integer>0</integer>
         <key>EnablePFS</key>
         <integer>0</integer>
-        <key>ExtendedAuthEnabled</key>
-        <integer>1</integer>
-        <key>AuthName</key>
-        <string>${VPN_USER}</string>
-        <key>AuthPassword</key>
-        <string>${VPN_PASS}</string>
         <key>IKESecurityAssociationParameters</key>
         <dict>
           <key>DiffieHellmanGroup</key>
@@ -214,7 +170,7 @@ cat >"${OUT_FILE}" <<EOF
           <integer>1440</integer>
         </dict>
         <key>LocalIdentifier</key>
-        <string>${VPN_USER}</string>
+        <string>${CLIENT_ID}</string>
         <key>OnDemandEnabled</key>
         <integer>0</integer>
         <key>OnDemandRules</key>
@@ -271,23 +227,11 @@ chmod 600 "${OUT_FILE}"
 cat <<EOF
 
 ====================================================================
-VPN IKEv2 configurada!
+VPN IKEv2 (PSK para iOS 9.3.5) configurada!
 ====================================================================
-1. No painel da Oracle Cloud (VCN -> Security List -> Ingress Rules), libere:
-     - UDP porta 500  (origem 0.0.0.0/0)
-     - UDP porta 4500 (origem 0.0.0.0/0)
-   E no firewall da VPS (Oracle Linux / Ubuntu iptables), confirme que UDP 500 e 4500 estão aceitos
-   e que a porta TCP 8787 NÃO está aberta para a internet pública.
-
-2. Transfira o arquivo "${OUT_FILE}" para o iPad mini 1 (ex.: e-mail, AirDrop via Mac ou servidor local temporário)
-   e instale em: Ajustes -> Geral -> Perfis -> Instalar.
-
-3. No iPad mini 1:
-   - Ative a VPN "AI HUD (VPS Oracle)" em Ajustes -> VPN (depois de testar, pode ligar "Conectar Sob Demanda").
-   - Abra no Safari: http://${VPN_IP}:8787
-   - Digite o PIN do AI HUD da VPS e adicione à Tela de Início.
-
-Usuário EAP: ${VPN_USER}
-Senha EAP:   ${VPN_PASS}
+1. Transfira "${OUT_FILE}" para o iPad mini 1 e instale o perfil.
+2. Em Ajustes -> VPN, ative "AI HUD (VPS Oracle)".
+3. Abra no Safari: http://${VPN_IP}:8787
+   (Local ID: ${CLIENT_ID} | Remote ID: ${HOST})
 ====================================================================
 EOF

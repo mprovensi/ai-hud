@@ -82,6 +82,17 @@ function createClose({ home = os.homedir(), platform = process.platform, exec = 
     }
     return { ok: false, message: 'Ferramenta sem suporte para encerrar pelo HUD.' };
   }
+  async function stopSession(s) {
+    const hudPid = running && running.getPid(s.id);
+    if (!Number.isInteger(hudPid)) {
+      return { ok: false, message: 'Nenhum turno em execução gerenciado pelo HUD para parar.' };
+    }
+    await kill(hudPid, '');
+    running.drop(s.id);
+    return { ok: true, message: 'Turno interrompido.' };
+  }
+
+  closeSession.stop = stopSession;
   closeSession.endedAt = (id) => ended.get(id) || 0;
   return closeSession;
 }

@@ -12,6 +12,9 @@ const routes = [
   require('./refresh'),
   require('./capabilities'),
   require('./new-session'),
+  require('./projects'),
+  require('./fs'),
+  require('./handoff'),
   require('./hooks'),
 ];
 

@@ -48,6 +48,18 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `/api/focus` | `{ id }` | `{ ok, message }` |
 | `/api/remote` | `{ on }` | `{ remoteMode }` (repassado a todos os PCs) |
 | `/api/refresh` | — | snapshot; 429 se pedido há menos de 30 s |
+| `/api/close` | `{ id }` | `{ ok, message }` (encerra/arquiva a sessão) |
+| `/api/stop` | `{ id }` | `{ ok, message }` (interrompe só o turno em execução sem encerrar a sessão) |
+| `/api/new` | `{ machine?, tool, model?, cwd?, prompt }` | `{ ok, id, tool, machine }` (403 se `strictRemoteCwd` bloquear pasta remota) |
+| `/api/projects/pin` | `{ machine?, cwd, pinned }` | `{ ok, pinned[] }` (fixa/desfixa pasta favorita) |
+| `/api/handoff` | `{ id, targetTool?, targetModel?, note? }` | `{ ok, id, tool, machine, handoffFile, fromId, fromTool }` |
+
+## Outras consultas (GET)
+
+| Rota | Resposta |
+|---|---|
+| `GET /api/capabilities` | `{ machines: [{ name, online, platform, home, pinned[], strictRemoteCwd, cwds[], tools }] }` |
+| `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão) |
 
 ## Hooks (mesmo PC)
 

@@ -10,6 +10,7 @@ const { createWebAssets } = require('./infra/web-bundle');
 const { createSources } = require('./collect/sources');
 const { createCollector } = require('./collect/collector');
 const { createCapabilities } = require('./collect/capabilities');
+const { readFilePreview } = require('./collect/file-preview');
 const { createQuotaTracker } = require('./collect/quotas/tracker');
 const { Ollama } = require('./collect/ollama-status');
 const { buildSnapshot } = require('./views/snapshot');
@@ -18,6 +19,8 @@ const { createPendingStore } = require('./actions/pending');
 const { createReplyQueue, replyKey } = require('./actions/reply/claude-queue');
 const { createReplies } = require('./actions/reply');
 const { createSessionLauncher } = require('./actions/spawn');
+const { createHandoff } = require('./actions/handoff');
+const { createProjectPins } = require('./actions/projects');
 const { createRunning } = require('./actions/running');
 const { createPermissions } = require('./actions/permissions');
 const { createFocus } = require('./actions/focus');
@@ -66,7 +69,13 @@ function createApp({
   // O que está pendente para uma sessão: aparece no cartão e na gaveta
   const pendingInfo = (s, now) => {
     const key = replyKey(s);
-    return { key, listening: queue.listenState(key, now), queued: queue.queued(key), permission: permissions.pendingFor(key, now) };
+    return {
+      key,
+      listening: queue.listenState(key, now),
+      queued: queue.queued(key),
+      permission: permissions.pendingFor(key, now),
+      canStop: running.isBusy(s.id),
+    };
   };
 
   // federation: este PC junta as sessões e tokens dos secundários (config.peers) e repassa a eles as ações das sessões deles
@@ -87,16 +96,23 @@ function createApp({
   }
   const collector = createCollector({ sources, buildLocal, build });
 
-  const capabilities = createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama, exec });
+  const capabilities = createCapabilities({
+    claudeExe, codexExe, agyExe, ollama, showOllama, exec,
+    getPinned: () => config.pinnedProjects || [],
+    getStrictRemoteCwd: () => !!config.strictRemoteCwd,
+  });
   const reply = createReplies({ queue, claudeExe, codexExe, agyExe, exec, spawn, findSession: (p) => collector.find(p),
     ollamaReply: (s, text, url) => sources.ollamaReply(s, text, url), ollamaUrl: () => ollama.url, running });
   const launch = createSessionLauncher({ claudeExe, codexExe, agyExe, spawn,
     ollamaCreate: (model, text, url) => sources.ollamaCreate && sources.ollamaCreate(model, text, url),
     ollamaUrl: () => ollama.url, running });
+  const handoff = createHandoff({ dataDir, launch });
+  const setProjectPin = createProjectPins({ config, saveConfig });
+  const filePreview = (opts) => readFilePreview({ ...opts, exec });
 
   // api
   const routes = createRoutes({ send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName });
+    reply, launch, handoff, setProjectPin, filePreview, config, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName });
   const serveStatic = createStatic({ webDir, webAssets, send, brands, dataDir });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, routes, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez

@@ -1,9 +1,14 @@
 // Acesso ao HUD: só redes locais/Tailscale, PIN trocado por token e bloqueio de tentativas.
 
 // Só loopback, redes privadas e Tailscale (100.64.0.0/10)
+function isLoopback(addr) {
+  const ip = String(addr || '').replace(/^::ffff:/, '');
+  return ip === '::1' || ip.startsWith('127.');
+}
+
 function allowed(addr) {
   const ip = String(addr || '').replace(/^::ffff:/, '');
-  if (ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') || ip.startsWith('192.168.')) return true;
+  if (isLoopback(ip) || ip.startsWith('10.') || ip.startsWith('192.168.')) return true;
   const [a, b] = ip.split('.').map(Number);
   return (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127) || /^fd/i.test(ip);
 }
@@ -42,4 +47,4 @@ p{color:#e87070}</style></head><body><h1>AI HUD</h1>
 <form method="POST" action="/login"><input name="pin" type="tel" pattern="[0-9]*" maxlength="8" autofocus placeholder="PIN"><br>
 <button>Entrar</button></form>${msg ? `<p>${msg}</p>` : ''}</body></html>`;
 
-module.exports = { allowed, createLoginGuard, loginPage };
+module.exports = { allowed, isLoopback, createLoginGuard, loginPage };

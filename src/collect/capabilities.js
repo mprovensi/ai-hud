@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const { ROOT } = require('../infra/paths');
+const { normalizePath } = require('../core/path-guard');
 
 const AGY_CACHE_MS = 10 * 60e3;
 const AGY_RETRY_MS = 30e3;
@@ -66,26 +67,30 @@ function mergeModels(presets, recentSet) {
   return out;
 }
 
-function recentCwds(sessions) {
+function recentCwds(sessions, pinned = []) {
+  const out = [];
+  const seen = new Set();
+  const add = (raw) => {
+    const norm = normalizePath(raw);
+    if (!norm) return;
+    const key = process.platform === 'win32' ? norm.toLowerCase() : norm;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(norm);
+  };
+  for (const p of pinned || []) add(p);
   const sorted = (sessions || [])
     .filter((s) => s && !s.subagent && s.cwd && typeof s.cwd === 'string')
     .slice()
     .sort((a, b) => (Date.parse(b.end) || 0) - (Date.parse(a.end) || 0));
-  const out = [];
-  const seen = new Set();
   for (const s of sorted) {
-    let norm = s.cwd.replace(/^\\\\\?\\/, '').replace(/[\\/]+$/, '');
-    if (process.platform === 'win32' && /^[a-zA-Z]:/.test(norm)) norm = norm.replace(/\//g, '\\');
-    const key = process.platform === 'win32' ? norm.toLowerCase() : norm;
-    if (!norm || seen.has(key)) continue;
-    seen.add(key);
-    out.push(norm);
-    if (out.length >= 10) break;
+    add(s.cwd);
+    if (out.length >= 16) break;
   }
   return out;
 }
 
-function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = true, exec = execFile } = {}) {
+function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = true, exec = execFile, getPinned = () => [], getStrictRemoteCwd = () => false } = {}) {
   let agyModels = [];
   let agyAt = 0;
   let agyRetryAt = 0;
@@ -154,12 +159,15 @@ function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = 
     if (hasAgy) tools.Gemini = { models: [{ id: '', label: 'Padrão' }].concat(agyModels) };
     if (ollamaOnline && ollamaNames.length) tools.Ollama = { models: ollamaNames.map((m) => ({ id: m, label: m })) };
 
+    const pinnedList = (getPinned() || []).map((p) => normalizePath(p)).filter(Boolean);
     return {
       name: machineName,
       online: true,
       platform: process.platform,
       home: os.homedir(),
-      cwds: recentCwds(sessions),
+      pinned: pinnedList,
+      strictRemoteCwd: !!getStrictRemoteCwd(),
+      cwds: recentCwds(sessions, pinnedList),
       tools,
     };
   }
@@ -167,4 +175,4 @@ function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = 
   return { start, get, refreshAgyModels };
 }
 
-module.exports = { createCapabilities, parseAgyModels, hasExe };
+module.exports = { createCapabilities, parseAgyModels, hasExe, recentCwds };

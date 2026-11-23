@@ -28,6 +28,70 @@
     return !d.machine && list.length === 1 ? list[0] : null;
   }
   var detailTab = 'convo', detailSessionId = '', detailFocusedId = '', qState = null;
+  var handoffUi = { open: false, tool: '', note: '', busy: false };
+  var filePrev = { open: false, path: '', mode: 'diff', loading: false, error: '', data: null };
+
+  function renderDiffHtml(text) {
+    var lines = String(text || '').split(/\r?\n/), out = [], i, line, cls;
+    for (i = 0; i < lines.length; i++) {
+      line = lines[i];
+      cls = '';
+      if (line.indexOf('+++') === 0 || line.indexOf('---') === 0) cls = 'diff-meta';
+      else if (line.indexOf('@@') === 0) cls = 'diff-hunk';
+      else if (line.charAt(0) === '+') cls = 'diff-add';
+      else if (line.charAt(0) === '-') cls = 'diff-del';
+      out.push(cls ? '<span class="' + cls + '">' + esc(line) + '</span>' : esc(line));
+    }
+    return out.join('\n');
+  }
+
+  function renderFilePreviewBox() {
+    if (!filePrev.open) return '';
+    var d = filePrev.data, isDiff = filePrev.mode === 'diff', html = '<div class="fprev" id="filePreviewBox">';
+    html += '<div class="row fprev-head"><span class="path grow" title="' + esc(filePrev.path) + '">📄 ' + esc(filePrev.path) + '</span>' +
+      '<button type="button" class="fprev-tab' + (isDiff ? ' on' : '') + '" id="fprevDiff">Diff</button>' +
+      '<button type="button" class="fprev-tab' + (!isDiff ? ' on' : '') + '" id="fprevFile">Arquivo</button>' +
+      '<button type="button" class="fprev-x" id="fprevClose" aria-label="Fechar prévia">✕</button></div>';
+    if (filePrev.loading) {
+      html += '<div class="fprev-msg">Carregando…</div>';
+    } else if (filePrev.error) {
+      html += '<div class="fprev-msg err">' + esc(filePrev.error) + '</div>';
+    } else if (d) {
+      var notes = [];
+      if (d.fallback === 'no-diff') notes.push('Sem diff pendente — exibindo arquivo atual');
+      if (d.redacted) notes.push('🔒 Segredos ocultados');
+      if (d.truncated) notes.push('Parcial (limite 256 KB)');
+      if (notes.length) html += '<div class="fprev-note">' + esc(notes.join(' · ')) + '</div>';
+      if (d.binary) {
+        html += '<div class="fprev-msg">Arquivo binário (' + (d.size || 0) + ' bytes) — prévia indisponível.</div>';
+      } else {
+        var body = d.mode === 'diff' ? renderDiffHtml(d.content) : esc(d.content || '(arquivo vazio)');
+        html += '<pre class="fprev-pre"><code>' + body + '</code></pre>';
+      }
+    }
+    return html + '</div>';
+  }
+
+  function renderHandoffPanel(d) {
+    if (!handoffUi.open) return '';
+    var tools = ['Claude Code', 'Codex', 'Gemini', 'Ollama'], i;
+    var chosen = handoffUi.tool || (d.tool === 'Antigravity' ? 'Gemini' : d.tool) || 'Claude Code';
+    var html = '<div class="panel handoff-box" id="handoffBox">' +
+      '<div class="row chead"><h2 class="grow">↪ Handoff · Resumir e continuar</h2>' +
+      '<button type="button" class="fprev-x" id="handoffCancel" aria-label="Fechar">✕</button></div>' +
+      '<div class="hsub">Salva um documento <code># Handoff</code> sanitizado e abre uma sessão nova na mesma pasta (inclusive trocando de IA).</div>' +
+      '<div class="nlabel">Continuar em</div><div class="npick">';
+    for (i = 0; i < tools.length; i++) {
+      var t = tools[i], on = chosen === t, idx = toolIndex(t);
+      html += '<button type="button" class="npill' + (on ? ' on' : '') + '" data-ht="' + esc(t) + '">' +
+        toolIcon(idx) + esc(t === 'Claude Code' ? 'Claude' : t) + '</button>';
+    }
+    html += '</div><textarea id="handoffNote" class="ntext" rows="2" placeholder="Instrução opcional para a nova sessão (ex.: foque nos testes)…">' +
+      esc(handoffUi.note || '') + '</textarea>' +
+      '<div class="row qactions"><button type="button" class="pbtn allow" id="handoffGo"' + (handoffUi.busy ? ' disabled' : '') + '>' +
+      (handoffUi.busy ? 'Criando handoff…' : 'Criar Handoff e abrir sessão') + '</button></div></div>';
+    return html;
+  }
 
   // ---- Markdown leve e seguro (ES5 / Safari 9, escapa HTML antes de formatar) ----
   function mdInline(text) {
@@ -369,7 +433,12 @@
   }
 
   function renderDetail(d) {
-    if (d.id !== detailSessionId) { detailSessionId = d.id; detailTab = 'convo'; }
+    if (d.id !== detailSessionId) {
+      detailSessionId = d.id;
+      detailTab = 'convo';
+      handoffUi = { open: false, tool: '', note: '', busy: false };
+      filePrev = { open: false, path: '', mode: 'diff', loading: false, error: '', data: null };
+    }
     var now = d.now, html = '';
     var pct = d.contextWindow ? Math.round(d.context / d.contextWindow * 100) : 0;
     var st = d.permission ? '<span class="badge perm">🔐 aguardando permissão</span>'
@@ -380,6 +449,7 @@
     html += sessHead(d);
     var places = { vscode: 'VS Code', terminal: 'terminal', 'claude-desktop': 'app Claude', 'codex-desktop': 'app Codex', antigravity: 'Antigravity', 'antigravity-cli': 'terminal', 'gemini-cli': 'terminal', 'ollama-app': 'app Ollama', 'ollama-run': 'terminal' };
     html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
+      (d.canStop ? '<button type="button" class="pcmini stopmini" id="stopTurn" title="Interromper o turno atual sem encerrar a sessão">⏹ Parar</button>' : '') +
       (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ')">🖥 Abrir no PC</button>' : '') + '</div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
@@ -398,6 +468,11 @@
 
     // ---- Aba Conversa ----
     html += '<div class="dtab-pane' + (onConvo ? ' active' : '') + '" id="paneConvo">';
+    if (pct >= 75 && d.tool !== 'Ollama' && !handoffUi.open) {
+      html += '<div class="row ctxwarn"><span class="grow">Contexto em <b>' + pct + '%</b> — recomenda-se Handoff para manter qualidade</span>' +
+        '<button type="button" class="pcmini" id="openHandoffBanner">↪ Handoff</button></div>';
+    }
+    if (handoffUi.open && onConvo) html += renderHandoffPanel(d);
     if (d.testRun && !d.testRun.ok) {
       html += '<div class="panel testbox"><h2>✗ Teste falhou' + (d.testRun.at ? ' <span class="htime">· ' + when(d.testRun.at) + '</span>' : '') + '</h2>' +
         '<div class="permcmd">' + esc(d.testRun.command) + '</div>' +
@@ -427,8 +502,11 @@
       if (d.files && d.files.length) {
         html += '<h2>Arquivos modificados · ' + d.files.length + '</h2>';
         for (var f = 0; f < d.files.length; f++) {
-          html += '<div class="dl"><span class="path" title="' + esc(d.files[f][0]) + '">' + esc(d.files[f][0]) + '</span><span class="muted">' + d.files[f][1] + '×</span></div>';
+          var fp = d.files[f][0], fSel = filePrev.open && filePrev.path === fp;
+          html += '<button type="button" class="dl file-row' + (fSel ? ' on' : '') + '" data-fp="' + esc(fp) + '" title="' + esc(fp) + '">' +
+            '<span class="path">📄 ' + esc(fp) + '</span><span class="muted">' + d.files[f][1] + '× ›</span></button>';
         }
+        html += renderFilePreviewBox();
       }
       if (d.tools.length) {
         html += '<h2' + (d.files && d.files.length ? ' style="margin-top:12px"' : '') + '>Ferramentas mais usadas</h2>';
@@ -449,6 +527,10 @@
         '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
     }
     html += '</div>';
+    if (handoffUi.open && !onConvo) html += renderHandoffPanel(d);
+    if (!handoffUi.open) {
+      html += '<button type="button" class="pcaction" id="openHandoff">↪ Handoff <small>(Resumir e continuar / trocar IA)</small></button>';
+    }
     // Encerrar fica na aba Detalhes, longe dos botões de uso frequente (para todas as IAs ativas)
     if (d.state !== 'closed') {
       html += '<button class="pcaction danger" id="closeSess">⏹ Encerrar sessão</button>';
@@ -492,6 +574,15 @@
       $('permAllow').onclick = function () { decide('allow'); };
       $('permDeny').onclick = function () { decide('deny'); };
     }
+    if ($('stopTurn')) $('stopTurn').onclick = function () {
+      var b = this;
+      b.disabled = true;
+      request('POST', '/api/stop', function (err, r) {
+        b.disabled = false;
+        flash(err ? 'Falhou: ' + err.message : r.message, !err && r.ok);
+        if (!err && r.ok) { d.canStop = false; if (d.state === 'working') d.state = 'waiting'; renderDetail(d); }
+      }, { id: d.id });
+    };
     if ($('focusPc')) $('focusPc').onclick = function () {
       var b = this;
       b.disabled = true;
@@ -500,6 +591,86 @@
         flash(err ? 'Falhou: ' + err.message : r.message, !err && r.ok);
       }, { id: d.id });
     };
+    function openHandoffPanel() {
+      handoffUi.open = true;
+      handoffUi.tool = handoffUi.tool || (d.tool === 'Antigravity' ? 'Gemini' : d.tool) || 'Claude Code';
+      renderDetail(d);
+    }
+    if ($('openHandoffBanner')) $('openHandoffBanner').onclick = openHandoffPanel;
+    if ($('openHandoff')) $('openHandoff').onclick = openHandoffPanel;
+    if ($('handoffCancel')) $('handoffCancel').onclick = function () {
+      handoffUi.open = false;
+      handoffUi.busy = false;
+      renderDetail(d);
+    };
+    if ($('handoffNote')) $('handoffNote').oninput = function () { handoffUi.note = this.value; };
+    if ($('handoffBox')) {
+      var hBtns = $('handoffBox').getElementsByTagName('button'), hb;
+      for (hb = 0; hb < hBtns.length; hb++) {
+        if (!hBtns[hb].getAttribute('data-ht')) continue;
+        hBtns[hb].onclick = function () {
+          handoffUi.tool = this.getAttribute('data-ht');
+          renderDetail(d);
+        };
+      }
+    }
+    if ($('handoffGo')) $('handoffGo').onclick = function () {
+      var tool = handoffUi.tool || (d.tool === 'Antigravity' ? 'Gemini' : d.tool) || 'Claude Code';
+      var note = $('handoffNote') ? $('handoffNote').value.replace(/^\s+|\s+$/g, '') : handoffUi.note;
+      handoffUi.busy = true;
+      this.disabled = true;
+      this.textContent = 'Criando handoff…';
+      request('POST', '/api/handoff', function (err, r) {
+        handoffUi.busy = false;
+        if (err) {
+          flash('Falhou: ' + err.message, false);
+          renderDetail(d);
+          return;
+        }
+        handoffUi.open = false;
+        handoffUi.note = '';
+        poll();
+        if (r && r.id) {
+          pendingNewId = r.id;
+          pendingNewUntil = new Date().getTime() + 15000;
+          flash('Handoff criado — abrindo nova sessão.');
+          var nextHash = '#s=' + encodeURIComponent(r.id);
+          if (history && history.replaceState) {
+            history.replaceState(null, '', nextHash);
+            syncHash();
+          } else {
+            location.hash = nextHash;
+          }
+        } else {
+          flash('Handoff criado — nova sessão aparecerá na lista em instantes.');
+          renderDetail(d);
+        }
+      }, { id: d.id, targetTool: tool, note: note });
+    };
+    function loadFilePreview(fp, mode) {
+      filePrev = { open: true, path: fp, mode: mode || 'diff', loading: true, error: '', data: null };
+      renderDetail(d);
+      var q = '/api/fs/preview?id=' + encodeURIComponent(d.id) + '&path=' + encodeURIComponent(fp) + '&mode=' + encodeURIComponent(filePrev.mode);
+      request('GET', q, function (err, data) {
+        if (!filePrev.open || filePrev.path !== fp) return;
+        filePrev.loading = false;
+        if (err) { filePrev.error = err.message; filePrev.data = null; }
+        else { filePrev.error = ''; filePrev.data = data; }
+        renderDetail(d);
+      });
+    }
+    var detBtns = $('paneDetails') ? $('paneDetails').getElementsByTagName('button') : [], fb;
+    for (fb = 0; fb < detBtns.length; fb++) {
+      if (!detBtns[fb].getAttribute('data-fp')) continue;
+      detBtns[fb].onclick = function () {
+        var fp = this.getAttribute('data-fp');
+        if (filePrev.open && filePrev.path === fp) { filePrev.open = false; renderDetail(d); return; }
+        loadFilePreview(fp, 'diff');
+      };
+    }
+    if ($('fprevDiff')) $('fprevDiff').onclick = function () { loadFilePreview(filePrev.path, 'diff'); };
+    if ($('fprevFile')) $('fprevFile').onclick = function () { loadFilePreview(filePrev.path, 'content'); };
+    if ($('fprevClose')) $('fprevClose').onclick = function () { filePrev.open = false; renderDetail(d); };
     if ($('closeSess')) $('closeSess').onclick = function () {
       var hasProc = d.tool === 'Claude Code' || d.where === 'ollama-run';
       var note = hasProc

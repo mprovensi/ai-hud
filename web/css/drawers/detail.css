@@ -5,6 +5,36 @@
   color: #d0dcff; font-size: .86em; font-weight: 700; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .pcmini:active { background: #2f3b60; }
 .pcmini:disabled { opacity: .6; }
+.stopmini { background: #432828; border-color: #824040; color: #f5b4b4; }
+.stopmini:active { background: #593333; }
+.ctxwarn { margin-bottom: 10px; padding: 8px 11px; border-radius: 10px; background: #2d2618; border: 1px solid #6b5629;
+  color: #f0d799; font-size: .82em; line-height: 1.35; }
+.handoff-box { border-color: #4a6b62; background: #18211f !important; }
+.handoff-box h2 { color: #bfe8db; }
+.handoff-box .hsub { font-size: .78em; color: #a7bab4; margin-bottom: 10px; line-height: 1.4; }
+.handoff-box .hsub code { background: #121716; border: 1px solid #2e423d; border-radius: 4px; padding: 1px 4px; color: #d6f0e8; }
+.handoff-box .nlabel { display: block; font-size: .72em; text-transform: uppercase; letter-spacing: .05em; color: #8fa8a0; margin: 4px 0 6px; font-weight: 700; }
+.file-row { width: 100%; text-align: left; cursor: pointer; background: transparent; border-radius: 7px; padding-left: 4px; padding-right: 4px; }
+.file-row:active, .file-row.on { background: #242731; }
+.file-row .path { padding-right: 8px; }
+.fprev { margin: 8px 0 12px; border: 1px solid #353844; border-radius: 10px; background: #141518; overflow: hidden; }
+.fprev-head { padding: 7px 9px; background: #1c1e24; border-bottom: 1px solid #2e313d; }
+.fprev-head .path { font-size: .8em; color: #dcdce2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fprev-tab { margin-left: 6px; padding: 4px 9px; border-radius: 7px; background: #262933; border: 1px solid #3a3f4f;
+  color: #aeb3c2; font-size: .76em; font-weight: 700; min-height: 32px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.fprev-tab.on { background: #2b3a59; border-color: #6c8ed6; color: #edf2ff; }
+.fprev-x { margin-left: 6px; width: 28px; height: 28px; border-radius: 50%; background: #262624; border: 1px solid #3a3a36;
+  color: #b5b5ae; font-size: .85em; text-align: center; line-height: 1; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.fprev-note { padding: 5px 10px; font-size: .74em; color: #d8c896; background: #211e16; border-bottom: 1px solid #2e2a1e; }
+.fprev-msg { padding: 12px; font-size: .82em; color: #9c9c96; }
+.fprev-msg.err { color: #f0a0a0; }
+.fprev-pre { margin: 0; padding: 9px 10px; max-height: 44vh; overflow: auto; -webkit-overflow-scrolling: touch;
+  font-family: Menlo, Consolas, monospace; font-size: .76em; line-height: 1.42; color: #deded8; white-space: pre; }
+.fprev-pre code { font-family: inherit; }
+.diff-add { color: #9fe0b4; background: rgba(63, 145, 92, .16); display: inline-block; min-width: 100%; }
+.diff-del { color: #f2a2a2; background: rgba(168, 66, 66, .18); display: inline-block; min-width: 100%; }
+.diff-hunk { color: #9db8f2; font-weight: 700; }
+.diff-meta { color: #8d8d87; }
 .dtabs { margin-bottom: 10px; background: #1c1c1a; border: 1px solid #2c2c29; border-radius: 12px; padding: 3px; }
 .dtab { -webkit-flex: 1; flex: 1; text-align: center; padding: .45em .6em; border-radius: 9px; font-size: .86em;
   font-weight: 700; color: #8d8d87; min-height: 40px; }
@@ -139,6 +169,14 @@ select.nsel option { background: #1c1c1a; color: #ecece8; }
   border: 1px solid #3a3a36; border-radius: 10px; padding: 9px 11px; resize: vertical; -webkit-appearance: none; appearance: none; }
 .nperm { font-size: .76em; color: #9fe0b4; background: #1d2b22; border: 1px solid #2f4d3a; border-radius: 8px;
   padding: 6px 9px; margin-top: 8px; }
+.nlock { font-size: .76em; color: #e2cfa0; background: #2a2417; border: 1px solid #594a26; border-radius: 8px;
+  padding: 6px 9px; margin-top: 6px; }
+.cwd-row { -webkit-align-items: stretch; align-items: stretch; margin-bottom: 6px; }
+.cwd-row .nsel { margin-bottom: 0; min-width: 0; }
+.pinbtn { margin-left: 8px; min-width: 44px; min-height: 42px; border-radius: 10px; background: #1c1c1a;
+  border: 1px solid #3a3a36; color: #a7a7a0; font-size: 1.15em; text-align: center; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.pinbtn.on { background: #2e2918; border-color: #9e8238; color: #f0d06b; }
+.pinbtn:disabled { opacity: .4; cursor: default; }
 .nactions { margin-top: 12px; }
 
 /* Desconectado: cobre tudo (inclusive gavetas) até o servidor voltar */

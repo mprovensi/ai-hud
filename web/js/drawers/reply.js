@@ -127,10 +127,12 @@
     setTimeout(function () { el.className = ''; }, 3000);
   }
 
-  // Não redesenha a gaveta enquanto o usuário escreve ou marca opções de múltipla escolha
+  // Não redesenha a gaveta enquanto o usuário escreve, marca opções, configura Handoff ou lê prévia de arquivo
   function typing() {
     var t = $('replyText');
     if (t && (t.value || document.activeElement === t || !!rec)) return true;
+    if (typeof handoffUi !== 'undefined' && handoffUi && handoffUi.open) return true;
+    if (typeof filePrev !== 'undefined' && filePrev && filePrev.open) return true;
     if (qState) {
       var qi, k2;
       for (qi in qState.others) if (qState.others[qi]) return true;

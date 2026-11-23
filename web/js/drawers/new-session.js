@@ -64,6 +64,16 @@
     });
   }
 
+  function isPinnedCwd(m, cwd) {
+    if (!m || !m.pinned || !cwd) return false;
+    var win = m.platform === 'win32', needle = win ? String(cwd).toLowerCase() : String(cwd);
+    for (var i = 0; i < m.pinned.length; i++) {
+      var cur = win ? String(m.pinned[i]).toLowerCase() : String(m.pinned[i]);
+      if (cur === needle) return true;
+    }
+    return false;
+  }
+
   function renderNewSession() {
     if (!newCaps) return;
     ensureNewSelection();
@@ -107,15 +117,26 @@
 
     // 4. Pasta / Projeto (não usado pelo Ollama)
     if (newSel.tool !== 'Ollama') {
-      var cwds = chosen.cwds || [];
-      html += '<label class="nlabel" for="newCwd">Pasta / Projeto</label><select class="nsel" id="newCwd">';
+      var cwds = chosen.cwds || [], isPin = isPinnedCwd(chosen, newSel.cwd);
+      var canPin = !!newSel.cwd && newSel.cwd !== '__custom__';
+      html += '<label class="nlabel" for="newCwd">Pasta / Projeto</label><div class="row cwd-row"><select class="nsel grow" id="newCwd">';
       for (i = 0; i < cwds.length; i++) {
-        html += '<option value="' + esc(cwds[i]) + '"' + (newSel.cwd === cwds[i] ? ' selected' : '') + '>' + esc(cwds[i]) + '</option>';
+        var star = isPinnedCwd(chosen, cwds[i]) ? '★ ' : '';
+        html += '<option value="' + esc(cwds[i]) + '"' + (newSel.cwd === cwds[i] ? ' selected' : '') + '>' + star + esc(cwds[i]) + '</option>';
       }
       html += '<option value=""' + (newSel.cwd === '' ? ' selected' : '') + '>Pasta pessoal (' + esc(chosen.home || 'padrão') + ')</option>';
-      html += '<option value="__custom__"' + (newSel.cwd === '__custom__' ? ' selected' : '') + '>Outro caminho…</option></select>';
-      if (newSel.cwd === '__custom__') {
+      if (!chosen.strictRemoteCwd) {
+        html += '<option value="__custom__"' + (newSel.cwd === '__custom__' ? ' selected' : '') + '>Outro caminho…</option>';
+      }
+      html += '</select>' +
+        '<button type="button" class="pinbtn' + (isPin ? ' on' : '') + '" id="pinCwdBtn"' +
+        (canPin ? '' : ' disabled') + ' title="' + (isPin ? 'Desfixar pasta favorita' : 'Fixar pasta nos favoritos') + '">' +
+        (isPin ? '★' : '☆') + '</button></div>';
+      if (newSel.cwd === '__custom__' && !chosen.strictRemoteCwd) {
         html += '<input type="text" class="nsel" id="newCustomCwd" placeholder="Caminho completo da pasta…" value="' + esc(newSel.customCwd || '') + '">';
+      }
+      if (chosen.strictRemoteCwd) {
+        html += '<div class="nlock">🔒 Acesso remoto restrito às pastas autorizadas desta máquina</div>';
       }
       html += '<div class="nperm">⚡ Todas as permissões ativadas (execução autônoma)</div>';
     }
@@ -152,6 +173,24 @@
       newSel.cwd = this.value;
       newSel._cwdTouched = true;
       renderNewSession();
+    };
+    if ($('pinCwdBtn')) $('pinCwdBtn').onclick = function () {
+      if (!newSel.cwd || newSel.cwd === '__custom__' || !chosen) return;
+      var nextPin = !isPinnedCwd(chosen, newSel.cwd), b = this, targetCwd = newSel.cwd;
+      b.disabled = true;
+      request('POST', '/api/projects/pin', function (err, r) {
+        b.disabled = false;
+        if (err) return flash('Falhou: ' + err.message, false);
+        chosen.pinned = (r && r.pinned) || [];
+        // Reordena favoritos no topo sem perder pastas recentes
+        var rest = [], k;
+        for (k = 0; k < (chosen.cwds || []).length; k++) {
+          if (!isPinnedCwd(chosen, chosen.cwds[k])) rest.push(chosen.cwds[k]);
+        }
+        chosen.cwds = chosen.pinned.concat(rest);
+        flash(nextPin ? 'Pasta fixada nos favoritos.' : 'Pasta removida dos favoritos.');
+        renderNewSession();
+      }, { machine: chosen.name, cwd: targetCwd, pinned: nextPin });
     };
     if ($('newCustomCwd')) $('newCustomCwd').oninput = function () { newSel.customCwd = this.value; };
     if ($('startNewSess')) $('startNewSess').onclick = function () {

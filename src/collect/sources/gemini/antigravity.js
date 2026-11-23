@@ -257,13 +257,25 @@ function antigravitySessions(rootOrHome = GEMINI_HOME) {
   }
 
   // Histórico do Antigravity CLI (~/.gemini/antigravity-cli/history.jsonl):
-  // completa o workspace das sessões já lidas e mantém conversas sem transcript.jsonl
+  // completa o workspace das sessões já lidas e mantém conversas antigas sem transcript.jsonl
   const CLI_SLASH_RE = /^\/(exit|quit|login|logout|help|usage|clear|models|status)\b/i;
+  const realSessions = [...byId.values()].filter((s) => s.file);
   for (const line of readLines(path.join(root, 'antigravity-cli', 'history.jsonl'))) {
     const r = parse(line);
     if (!r || !r.timestamp) continue;
     const display = String(r.display || '').trim();
     if (!r.conversationId && (!display || CLI_SLASH_RE.test(display))) continue;
+    if (!r.conversationId) {
+      // `agy` também grava o prompt no history.jsonl sem conversationId: se já há transcript no mesmo período, ignora
+      const dup = realSessions.find((s) => {
+        const a = Date.parse(s.start) || 0, b = Date.parse(s.end) || 0;
+        return r.timestamp >= a - 60e3 && r.timestamp <= b + 60e3;
+      });
+      if (dup) {
+        if (r.workspace && !dup.cwd) dup.cwd = r.workspace;
+        continue;
+      }
+    }
     const id = r.conversationId || `sem-id-${day(r.timestamp)}`;
     const existing = byId.get(id);
     if (existing && existing.file) {

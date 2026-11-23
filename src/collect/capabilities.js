@@ -95,7 +95,7 @@ function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = 
     if (!hasExe(agyExe)) return Promise.resolve([]);
     if (agyPending) return agyPending;
     agyPending = new Promise((resolve) => {
-      exec(agyExe, ['models'], { windowsHide: true, cwd: ROOT, timeout: 25e3, maxBuffer: 512 * 1024 }, (err, stdout) => {
+      exec(agyExe, ['models'], { windowsHide: true, cwd: ROOT, timeout: 45e3, maxBuffer: 512 * 1024 }, (err, stdout) => {
         agyPending = null;
         const now = Date.now();
         if (!err && stdout) {
@@ -116,7 +116,11 @@ function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = 
   }
 
   function start() {
-    if (hasExe(agyExe)) refreshAgyModels();
+    // Aguarda 6s para não competir por CPU com as leituras de cota no arranque de VMs pequenas
+    if (hasExe(agyExe)) {
+      const t = setTimeout(() => refreshAgyModels(), 6000);
+      if (t.unref) t.unref();
+    }
   }
 
   function get(sessions = [], machineName = os.hostname()) {

@@ -44,7 +44,7 @@ if [[ -z "$HOST" ]]; then
 fi
 
 if [[ -z "$VPN_PASS" ]]; then
-  VPN_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+  VPN_PASS="$(dd if=/dev/urandom bs=64 count=1 2>/dev/null | base64 | tr -dc 'A-Za-z0-9' | cut -c1-24)"
 fi
 
 echo "==> Instalando strongSwan e plugins EAP (Ubuntu/Debian)..."

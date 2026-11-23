@@ -36,16 +36,26 @@ const PUBLIC_ASSETS = {
   '/app.css': 'text/css; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8',
 };
 
+const CLAUDE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e08a66" stroke-width="2.1" stroke-linecap="round"><path d="M12 2.5v19M2.5 12h19M5.3 5.3l13.4 13.4M18.7 5.3L5.3 18.7M8.3 3.2l7.4 17.6M20.8 8.3L3.2 15.7M15.7 3.2L8.3 20.8M20.8 15.7L3.2 8.3"/></svg>';
+const CODEX_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#5fb8a4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5a4.5 4.5 0 0 1 4.2 2.9 4.5 4.5 0 0 1 5.3 4.4 4.5 4.5 0 0 1-1.3 6.1 4.5 4.5 0 0 1-4.9 5.3 4.5 4.5 0 0 1-6.6 0 4.5 4.5 0 0 1-4.9-5.3 4.5 4.5 0 0 1-1.3-6.1 4.5 4.5 0 0 1 5.3-4.4A4.5 4.5 0 0 1 12 2.5z"/></svg>';
 const GEMINI_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#7d9bf0"><path d="M12 2C12.7 7.2 16.8 11.3 22 12c-5.2.7-9.3 4.8-10 10-.7-5.2-4.8-9.3-10-10 5.2-.7 9.3-4.8 10-10z"/></svg>';
 
+// Ícones salvos localmente em data/brands/ (ex.: copiados de um PC com VS Code para uma VPS Linux)
+function savedBrand(dataDir, name, asUtf8 = true) {
+  if (!dataDir) return null;
+  try { return fs.readFileSync(path.join(dataDir, 'brands', name), asUtf8 ? 'utf8' : undefined); } catch { return null; }
+}
+
 // Devolve um handler (res, url) => true se respondeu
-function createStatic({ webDir, webAssets, send, brands = true }) {
-  const ollama = brands ? ollamaIcon() : null;
+function createStatic({ webDir, webAssets, send, brands = true, dataDir }) {
+  const ollama = brands ? (ollamaIcon() || savedBrand(dataDir, 'brand-ollama.png', false)) : null;
   const svgs = brands ? {
-    '/brand-claude.svg': extensionIcon('anthropic.claude-code-', 'claude-logo.svg', '#e08a66'),
-    '/brand-codex.svg': extensionIcon('openai.chatgpt-', 'blossom-white.svg', '#5fb8a4'),
+    '/brand-claude.svg': extensionIcon('anthropic.claude-code-', 'claude-logo.svg', '#e08a66') || savedBrand(dataDir, 'brand-claude.svg') || CLAUDE_SVG,
+    '/brand-codex.svg': extensionIcon('openai.chatgpt-', 'blossom-white.svg', '#5fb8a4') || savedBrand(dataDir, 'brand-codex.svg') || CODEX_SVG,
     '/brand-gemini.svg': GEMINI_SVG,
   } : {
+    '/brand-claude.svg': CLAUDE_SVG,
+    '/brand-codex.svg': CODEX_SVG,
     '/brand-gemini.svg': GEMINI_SVG,
   };
   const day = { 'Cache-Control': 'max-age=86400' };

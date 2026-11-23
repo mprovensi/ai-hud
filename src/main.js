@@ -87,7 +87,7 @@ function createApp({
   // api
   const routes = createRoutes({ send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
     reply, queue, permissions, focus, close, peers, quotas, machineName });
-  const serveStatic = createStatic({ webDir, webAssets, send, brands });
+  const serveStatic = createStatic({ webDir, webAssets, send, brands, dataDir });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, routes, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)

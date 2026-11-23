@@ -2,6 +2,13 @@
   .quotas { display: block; }
   .quotas .panel + .panel { margin-left: 0; }
   .quotas .olla { -webkit-flex: none; flex: none; width: 100%; }
+  /* Barras de cota um pouco mais altas no celular para facilitar a leitura rápida */
+  .track { height: 14px; border-radius: 7px; }
+  .track .fill { border-radius: 6px; }
+  .track .mark { top: -3px; height: 20px; }
+  .utrack { height: 16px; border-radius: 8px; }
+  .utrack .fill { border-radius: 7px; }
+  .utrack .mark { top: -3px; height: 22px; }
   .card { width: 100%; }
   .top .clock { display: inline-block; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
   .top .btn { margin-left: 6px; }

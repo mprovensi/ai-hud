@@ -9,7 +9,7 @@ module.exports = ({ collector, peers, detail, machineName, json, text, send }) =
         json(res, { ...r.json, id, machine: remote.peer.name });
       }, () => text(res, 502, `${remote.peer.name} não respondeu`));
     }
-    const s = collector.find((x) => x.id === id && !x.subagent);
+    const s = collector.find((x) => !x.subagent && (x.id === id || x.id.endsWith('-' + id)));
     return s ? json(res, { ...detail(s, Date.now()), machine: machineName }) : send(res, 404, 'text/plain', 'sessão não encontrada');
   } },
 ];

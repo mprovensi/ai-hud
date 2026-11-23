@@ -10,6 +10,8 @@ const routes = [
   require('./focus'),
   require('./close'),
   require('./refresh'),
+  require('./capabilities'),
+  require('./new-session'),
   require('./hooks'),
 ];
 

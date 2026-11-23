@@ -113,6 +113,28 @@
   -webkit-align-self: stretch; align-self: stretch; font-size: 1em; }
 .mic.on { background: #4d2f2f; border-color: #c98a85; -webkit-animation: pulse 1.6s infinite; animation: pulse 1.6s infinite; }
 
+/* Botão + Nova no topo e gaveta de nova sessão (#nova) */
+.new-btn { background: #23332e; border-color: #3e6b5f; color: #bfe8db; font-weight: 700; }
+.new-btn:active { background: #2c423b; }
+.nform .nlabel { display: block; font-size: .74em; text-transform: uppercase; letter-spacing: .05em; color: #8d8d87; margin: 12px 0 6px; font-weight: 700; }
+.nform .nlabel:first-child { margin-top: 0; }
+.npick { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -4px; }
+.npill { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin: 0 4px 8px;
+  padding: 8px 12px; border-radius: 10px; background: #232321; border: 1px solid #3a3a36; color: #dcdcd6;
+  font-size: .88em; font-weight: 700; min-height: 42px; }
+.npill:active { background: #2c2d33; }
+.npill.on { background: #253447; border-color: #5fb8a4; color: #f2f5f4; box-shadow: inset 0 0 0 1px #5fb8a4; }
+.npill.off { opacity: .45; cursor: default; }
+.npill small { font-weight: 400; color: #8d8d87; margin-left: 4px; }
+.npill .brand { width: 1.1em; height: 1.1em; margin-right: 6px; }
+.nsel { display: block; width: 100%; font: inherit; font-size: 16px; color: #ecece8; background: #141413;
+  border: 1px solid #3a3a36; border-radius: 10px; padding: 9px 11px; margin-bottom: 6px; }
+.ntext { display: block; width: 100%; font: inherit; font-size: 16px; color: #ecece8; background: #141413;
+  border: 1px solid #3a3a36; border-radius: 10px; padding: 9px 11px; resize: vertical; -webkit-appearance: none; }
+.nperm { font-size: .76em; color: #9fe0b4; background: #1d2b22; border: 1px solid #2f4d3a; border-radius: 8px;
+  padding: 6px 9px; margin-top: 8px; }
+.nactions { margin-top: 12px; }
+
 /* Desconectado: cobre tudo (inclusive gavetas) até o servidor voltar */
 #offline { display: none; position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 30; background: rgba(18, 18, 17, .97);
   -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }

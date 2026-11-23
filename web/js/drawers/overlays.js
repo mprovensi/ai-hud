@@ -49,7 +49,16 @@
     var id = decodeURIComponent(m[1]);
     request('GET', '/api/session?id=' + encodeURIComponent(id), function (err, d) {
       if (location.hash !== '#s=' + encodeURIComponent(id)) return;
-      if (err) return setOverlay(head('Sessão') + '<p class="empty">' + esc(err.message) + '</p>');
+      if (err) {
+        if (typeof pendingNewId !== 'undefined' && id === pendingNewId && new Date().getTime() < pendingNewUntil) {
+          setOverlay(head('Iniciando sessão…', 'aguardando a IA responder') +
+            '<div class="panel"><span class="sk sk-line" style="width:75%;margin-top:0"></span><span class="sk sk-line" style="width:55%"></span></div>');
+          setTimeout(loadDetail, 1200);
+          return;
+        }
+        return setOverlay(head('Sessão') + '<p class="empty">' + esc(err.message) + '</p>');
+      }
+      if (typeof pendingNewId !== 'undefined' && id === pendingNewId) pendingNewId = '';
       if (d.tool === 'Ollama') d.ollama = ollamaRuntime(d);
       // Só redesenha se algo mudou ("now" sempre muda), preservando a rolagem da última resposta
       var sig = JSON.stringify(d).replace(/"now":\d+/, '');
@@ -74,7 +83,7 @@
     if (viewedSession && (!nextSession || decodeURIComponent(nextSession[1]) !== viewedSession.id)) acknowledgeViewed();
     var usage = /^#uso=(claude|codex|gemini)$/.exec(h);
     usageName = usage ? usage[1] : null;
-    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : usage ? 'usage' : null;
+    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : h === '#nova' ? 'new' : usage ? 'usage' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
     if (view) {
       $('overlay').scrollTop = 0;
@@ -85,6 +94,7 @@
     }
     if (view === 'detail') { quickDetail(decodeURIComponent(h.slice(3))); loadDetail(); }
     if (view === 'recent') renderRecent();
+    if (view === 'new') openNewSession();
     // A gaveta precisa estar visível para o gráfico medir a própria largura
     if (view === 'stats') setTimeout(renderStats, 30);
     if (view === 'usage') setTimeout(renderUsage, 30);
@@ -100,6 +110,7 @@
     }
   });
   window.addEventListener('hashchange', syncHash);
+  $('openNew').onclick = function () { location.hash = 'nova'; };
   $('openRecent').onclick = function () { location.hash = 'recentes'; };
   $('openStats').onclick = function () { location.hash = 'estatisticas'; };
   $('q-ollama').onclick = function () { location.hash = 'ollama'; };

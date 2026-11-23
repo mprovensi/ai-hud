@@ -278,7 +278,7 @@
 
   function ollamaMore(d) {
     var terminal = d.where === 'ollama-run', runtime = d.ollama || ollamaRuntime(d);
-    var html = '<div class="stats">' + stat(terminal ? 'Terminal' : d.where === 'ollama-api' ? 'API' : 'App', 'origem') +
+    var html = '<div class="stats">' + stat(terminal ? 'Terminal' : d.where === 'ollama-api' ? 'API' : d.where === 'ollama-hud' ? 'HUD' : 'App', 'origem') +
       stat(dur(Math.max(0, d.now - d.start)), terminal ? 'aberta há' : 'idade da conversa');
     if (!terminal && d.prompts > 0) html += stat(d.prompts, 'pedidos na conversa');
     if (!terminal && d.history && d.history.length) html += stat(d.history.length, 'mensagens exibidas');

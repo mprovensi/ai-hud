@@ -50,6 +50,7 @@ class Ollama {
     // até responder; sem Ollama, null e o HUD não mostra nada
     this.state = url || installed() ? { online: false, version: null, models: [], installed: null, gpu: null, at: Date.now() } : null;
     this.installed = null;
+    this.installedModels = [];
     this.tagsAt = 0;
   }
 
@@ -62,7 +63,12 @@ class Ollama {
     try {
       const [version, ps] = await Promise.all([get(this.url, '/api/version'), get(this.url, '/api/ps')]);
       if (Date.now() - this.tagsAt > TAGS_MS) {
-        get(this.url, '/api/tags').then((t) => { this.installed = (t.models || []).length; this.tagsAt = Date.now(); }, () => {});
+        get(this.url, '/api/tags').then((t) => {
+          const list = Array.isArray(t.models) ? t.models : [];
+          this.installed = list.length;
+          this.installedModels = list.map((m) => m && (m.name || m.model)).filter(Boolean);
+          this.tagsAt = Date.now();
+        }, () => {});
       }
       const models = (ps.models || []).map((m) => ({
         name: m.name || m.model, size: m.size || 0, vram: m.size_vram || 0,

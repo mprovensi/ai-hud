@@ -12,7 +12,7 @@ const APP_SCRIPTS = [
   'drawers/burn', 'drawers/usage',
   'app/alerts',
   'home/ollama', 'home/render',
-  'drawers/detail', 'drawers/reply', 'drawers/overlays',
+  'drawers/detail', 'drawers/reply', 'drawers/new-session', 'drawers/overlays',
   'app/network', 'app/main',
 ];
 const APP_STYLES = ['base', 'home/panels', 'home/cards', 'drawers/detail', 'home/gauges', 'drawers/overlay', 'screens/ipad', 'screens/mobile'];

@@ -2,9 +2,11 @@
 // na memória dele, então responder pelo HUD não passa pelo app: o servidor monta o histórico da conversa
 // + a mensagem nova, gera no Ollama (:11434) e guarda essa continuação em data/ollama-replies.json.
 // Ela aparece no HUD, não no app.
+const crypto = require('crypto');
 const http = require('http');
 const { generationMetrics } = require('../../../core/ollama-metrics');
 const { readJson, writeJson } = require('../../../infra/store');
+const { cut } = require('../common');
 
 function createOllamaReplies({ file, request = http.request }) {
   let cont = readJson(file, {}); // chatId -> { messages: [{ role, content, at, model, tokens }], generating }
@@ -24,19 +26,11 @@ function createOllamaReplies({ file, request = http.request }) {
 
   const extra = (chatId) => (cont[chatId] && cont[chatId].messages) || [];
   const generating = (chatId) => !!(cont[chatId] && cont[chatId].generating);
+  const hudChats = () => Object.entries(cont)
+    .filter(([, e]) => e && e.hudOnly && Array.isArray(e.messages) && e.messages.length)
+    .map(([chatId, e]) => ({ chatId, ...e }));
 
-  // Responder: histórico da conversa + mensagem nova → Ollama /api/chat; guarda a continuação
-  function reply(session, text, ollamaUrl) {
-    const chatId = session.chatId;
-    const model = [...session.models][0];
-    if (!model) return Promise.reject(new Error('não sei qual modelo esta conversa usa'));
-    const entry = cont[chatId] = cont[chatId] || { messages: [] };
-    if (entry.generating) return Promise.reject(new Error('ainda gerando a resposta anterior'));
-    const messages = session.history.filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: text }]);
-    entry.messages.push({ role: 'user', content: text, at: Date.now() });
-    entry.generating = true;
-    save();
+  function dispatchChat(entry, model, messages, ollamaUrl) {
     const body = JSON.stringify({ model, messages, stream: false });
     const req = request(new URL('/api/chat', ollamaUrl), { method: 'POST', timeout: 10 * 60e3,
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'User-Agent': 'ai-hud' } }, (res) => {
@@ -56,10 +50,46 @@ function createOllamaReplies({ file, request = http.request }) {
     req.on('timeout', () => req.destroy(new Error('o Ollama demorou demais')));
     req.on('error', fail);
     req.end(body);
+  }
+
+  // Cria uma nova conversa do Ollama iniciada direto pelo HUD (salva em data/ollama-replies.json)
+  function createChat(model, text, ollamaUrl) {
+    const m = String(model || '').trim();
+    const prompt = String(text || '').trim();
+    if (!m) return Promise.reject(new Error('escolha um modelo do Ollama'));
+    if (!prompt) return Promise.reject(new Error('escreva uma mensagem inicial'));
+    const chatId = `hud-${crypto.randomBytes(6).toString('hex')}`;
+    const now = Date.now();
+    const entry = cont[chatId] = {
+      hudOnly: true,
+      createdAt: now,
+      model: m,
+      title: cut(prompt, 60),
+      messages: [{ role: 'user', content: prompt, at: now, model: m }],
+      generating: true,
+    };
+    save();
+    dispatchChat(entry, m, [{ role: 'user', content: prompt }], ollamaUrl);
+    return Promise.resolve({ ok: true, id: `ollama-${chatId}`, tool: 'Ollama' });
+  }
+
+  // Responder: histórico da conversa + mensagem nova → Ollama /api/chat; guarda a continuação
+  function reply(session, text, ollamaUrl) {
+    const chatId = session.chatId;
+    const model = [...session.models][0];
+    if (!model) return Promise.reject(new Error('não sei qual modelo esta conversa usa'));
+    const entry = cont[chatId] = cont[chatId] || { messages: [] };
+    if (entry.generating) return Promise.reject(new Error('ainda gerando a resposta anterior'));
+    const messages = session.history.filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: text }]);
+    entry.messages.push({ role: 'user', content: text, at: Date.now(), model });
+    entry.generating = true;
+    save();
+    dispatchChat(entry, model, messages, ollamaUrl);
     return Promise.resolve({ sent: true });
   }
 
-  return { extra, generating, reply };
+  return { extra, generating, hudChats, createChat, reply };
 }
 
 module.exports = { createOllamaReplies };

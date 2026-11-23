@@ -12,6 +12,7 @@ function createSources({ dataDir, ollama = createOllamaSource({ dataDir }) }) {
     start: () => ollama.start(),
     all: () => [...claudeSessions({ statuslineFile }), ...codexData().sessions, ...geminiSessions(), ...ollama.sessions()],
     ollamaReply: (session, text, url) => ollama.reply(session, text, url),
+    ollamaCreate: (model, text, url) => ollama.createChat(model, text, url),
   };
 }
 

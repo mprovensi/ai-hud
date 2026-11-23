@@ -9,6 +9,7 @@ const { loadConfig } = require('./infra/config');
 const { createWebAssets } = require('./infra/web-bundle');
 const { createSources } = require('./collect/sources');
 const { createCollector } = require('./collect/collector');
+const { createCapabilities } = require('./collect/capabilities');
 const { createQuotaTracker } = require('./collect/quotas/tracker');
 const { Ollama } = require('./collect/ollama-status');
 const { buildSnapshot } = require('./views/snapshot');
@@ -16,6 +17,7 @@ const { buildSessionDetail } = require('./views/session-detail');
 const { createPendingStore } = require('./actions/pending');
 const { createReplyQueue, replyKey } = require('./actions/reply/claude-queue');
 const { createReplies } = require('./actions/reply');
+const { createSessionLauncher } = require('./actions/spawn');
 const { createPermissions } = require('./actions/permissions');
 const { createFocus } = require('./actions/focus');
 const { createClose } = require('./actions/close');
@@ -35,6 +37,7 @@ function createApp({
   quotaFetchers,
   focus = createFocus(),
   close = createClose(),
+  claudeExe = '',
   codexExe = 'codex',
   agyExe = '',
   exec,
@@ -81,12 +84,16 @@ function createApp({
   }
   const collector = createCollector({ sources, buildLocal, build });
 
-  const reply = createReplies({ queue, codexExe, agyExe, exec, spawn, findSession: (p) => collector.find(p),
+  const capabilities = createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama, exec });
+  const reply = createReplies({ queue, claudeExe, codexExe, agyExe, exec, spawn, findSession: (p) => collector.find(p),
     ollamaReply: (s, text, url) => sources.ollamaReply(s, text, url), ollamaUrl: () => ollama.url });
+  const launch = createSessionLauncher({ claudeExe, codexExe, agyExe, spawn,
+    ollamaCreate: (model, text, url) => sources.ollamaCreate && sources.ollamaCreate(model, text, url),
+    ollamaUrl: () => ollama.url });
 
   // api
   const routes = createRoutes({ send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, queue, permissions, focus, close, peers, quotas, machineName });
+    reply, launch, capabilities, queue, permissions, focus, close, peers, quotas, machineName });
   const serveStatic = createStatic({ webDir, webAssets, send, brands, dataDir });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, routes, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
@@ -98,6 +105,7 @@ function createApp({
   function start() {
     if (sources.start) sources.start();
     if (showOllama) ollama.start();
+    capabilities.start();
     collector.start();
     peers.start(() => collector.poke());
     quotas.refreshAll().then(() => collector.poke());

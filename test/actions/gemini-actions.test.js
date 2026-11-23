@@ -28,7 +28,7 @@ test('createReplies envia resposta ao Gemini via agy --conversation <uuid> --pri
   assert.deepEqual(ok.body, { sent: true });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].exe, 'agy.exe');
-  assert.deepEqual(calls[0].args, ['--conversation', '00000000-0000-4000-8000-000000000001', '--print=continue', '--output-format', 'json']);
+  assert.deepEqual(calls[0].args, ['--conversation', '00000000-0000-4000-8000-000000000001', '--print=continue', '--dangerously-skip-permissions', '--output-format', 'json']);
   assert.equal(calls[0].opts.cwd, 'D:\\Projetos\\ai-hud');
   assert.equal(calls[0].child.unreffed, true);
 });

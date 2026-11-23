@@ -4,12 +4,12 @@ const os = require('os');
 const { ROOT, DATA } = require('./src/infra/paths');
 const { migrateLegacy } = require('./src/infra/config');
 const { createApp } = require('./src/main');
-const { claudeQuota, codexQuota, geminiQuota, findAgy, CODEX } = require('./src/collect/quotas/cli');
+const { claudeQuota, codexQuota, geminiQuota, findAgy, CLAUDE, CODEX } = require('./src/collect/quotas/cli');
 
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
 
 migrateLegacy(ROOT, DATA);
-const app = createApp({ dataDir: DATA, quotaFetchers: { claude: claudeQuota, codex: codexQuota, gemini: geminiQuota }, codexExe: CODEX, agyExe: findAgy() });
+const app = createApp({ dataDir: DATA, quotaFetchers: { claude: claudeQuota, codex: codexQuota, gemini: geminiQuota }, claudeExe: CLAUDE, codexExe: CODEX, agyExe: findAgy() });
 app.start();
 app.server.listen(PORT, '0.0.0.0', () => {
   app.warm(); // aquece o cache de logs: a primeira leitura de todos os arquivos leva ~1,5 s

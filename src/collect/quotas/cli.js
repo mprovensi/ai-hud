@@ -97,4 +97,4 @@ async function codexQuota() {
 
 const { geminiQuota, findAgy } = require('./gemini');
 
-module.exports = { claudeQuota, codexQuota, geminiQuota, findAgy, CODEX };
+module.exports = { claudeQuota, codexQuota, geminiQuota, findAgy, CLAUDE, CODEX };

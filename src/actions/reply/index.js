@@ -75,12 +75,12 @@ function createReplies({ queue, claudeExe = '', codexExe, agyExe, exec, spawn, f
     if (tool === 'Gemini') {
       if (!/^[0-9a-f-]{36}$/.test(key)) return { status: 400, body: 'sessão do Gemini sem ID compatível para resposta remota' };
       const s = findSession((x) => x.tool === 'Gemini' && x.id === key);
+      // Sessões da IDE Antigravity (`where: 'antigravity'`) recebem respostas via fila do hook Stop (`~/.gemini/config/hooks.json`)
       if (s && s.where === 'antigravity') {
-        return {
-          status: 409,
-          body: 'Sessões abertas no app Antigravity (IDE) não aceitam resposta via agy CLI. Use "↪ Handoff" para continuar pelo HUD ou "Abrir no PC".',
-        };
+        queue.set(key, text);
+        return { status: 200, body: { queued: text || null, listening: queue.listenState(key, Date.now()) } };
       }
+      if (!text) return { status: 400, body: 'mensagem vazia' };
       if (running && running.isBusy(key)) return { status: 409, body: 'esta sessão já está executando uma resposta; aguarde terminar' };
       try {
         await geminiReply({ exe: agyExe, key, text, cwd: s && s.cwd, spawnFn: spawn, running });

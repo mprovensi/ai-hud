@@ -3,10 +3,13 @@
   var chipsOpen = false;
 
   function replyBox(d) {
-    // Um status curto: chega na hora (hook ouvindo, ou Claude/Codex/Gemini/Ollama livre) ou espera a sessão parar
-    var live = d.tool === 'Codex' || d.tool === 'Ollama' || d.tool === 'Gemini'
-      ? d.state !== 'working'
-      : (!!d.listening || (d.state !== 'working' && /(?:^|:)[0-9a-f-]{36}$/.test(String(d.key || d.id || ''))));
+    // Um status curto: chega na hora (hook ouvindo, ou CLI livre) ou espera a sessão parar (fila)
+    var isIdeAgy = d.tool === 'Gemini' && d.where === 'antigravity';
+    var live = isIdeAgy
+      ? !!d.listening
+      : (d.tool === 'Codex' || d.tool === 'Ollama' || d.tool === 'Gemini'
+        ? d.state !== 'working'
+        : (!!d.listening || (d.state !== 'working' && /(?:^|:)[0-9a-f-]{36}$/.test(String(d.key || d.id || '')))));
     var sugg = d.suggestions && d.suggestions.length ? d.suggestions : [];
     var i, html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
       (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">vai para a fila</span>') +

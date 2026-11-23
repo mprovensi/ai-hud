@@ -4,7 +4,7 @@ const { extractTextQuestions, suggestReplies } = require('../core/questions');
 
 function canReplyRemote(s) {
   if (s.where === 'ollama-run' || s.tool === 'Antigravity') return false;
-  if (s.tool === 'Gemini') return s.where !== 'antigravity' && /^[0-9a-f-]{36}$/.test(String(s.id || ''));
+  if (s.tool === 'Gemini') return /^[0-9a-f-]{36}$/.test(String(s.id || ''));
   return true;
 }
 

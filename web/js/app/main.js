@@ -44,6 +44,22 @@
     document.addEventListener('touchend', goFull, false);
   }
 
+  // iPad / iOS (incluindo Safari 9 no iPad mini 1): desativa o zoom por toque duplo sem afetar a pinça no Android
+  var isIOS = /iPad|iPhone|iPod/.test((navigator && navigator.userAgent) || '');
+  if (isIOS) {
+    var vp = document.querySelector && document.querySelector('meta[name="viewport"]');
+    if (vp) vp.setAttribute('content', 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no');
+    var lastTap = 0;
+    document.addEventListener('touchend', function (e) {
+      if (e.touches && e.touches.length) return;
+      var tag = e.target && e.target.tagName ? e.target.tagName.toUpperCase() : '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      var now = new Date().getTime();
+      if (now - lastTap <= 320) e.preventDefault();
+      lastTap = now;
+    }, false);
+  }
+
   window.addEventListener('resize', function () { if (snap) burnChart(snap, view === 'usage' ? usageName : null); });
   $('oretryNow').onclick = function () { poll(); tick(); };
   syncHash(); poll(); tick();

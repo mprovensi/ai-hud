@@ -1,8 +1,8 @@
 /* AI HUD: estilos. ES5 e flexbox sem gap no JS/CSS: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: #121211; color: #ecece8; overflow-x: hidden; }
-/* Sem a espera de ~300 ms do Safari para distinguir toque de duplo toque */
-html { touch-action: manipulation; -ms-touch-action: manipulation; }
+/* Sem a espera de ~300 ms nem zoom de duplo toque nos cartões e botões */
+html, body, button, [role="button"], .panel, .card { touch-action: manipulation; -ms-touch-action: manipulation; }
 button { -webkit-tap-highlight-color: transparent; }
 body { font: 15px/1.35 -apple-system, "Helvetica Neue", Roboto, sans-serif; padding: 12px 14px 20px; -webkit-text-size-adjust: 100%; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }

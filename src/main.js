@@ -10,7 +10,7 @@ const { createWebAssets } = require('./infra/web-bundle');
 const { createSources } = require('./collect/sources');
 const { createCollector } = require('./collect/collector');
 const { createCapabilities } = require('./collect/capabilities');
-const { readFilePreview } = require('./collect/file-preview');
+const { readFilePreview, listProjectFiles, readProjectGit } = require('./collect/file-preview');
 const { createQuotaTracker } = require('./collect/quotas/tracker');
 const { Ollama } = require('./collect/ollama-status');
 const { buildSnapshot } = require('./views/snapshot');
@@ -21,6 +21,8 @@ const { createReplies } = require('./actions/reply');
 const { createSessionLauncher } = require('./actions/spawn');
 const { createHandoff } = require('./actions/handoff');
 const { createProjectPins } = require('./actions/projects');
+const { createWorkspaceActions } = require('./actions/workspace');
+const { createMemoryActions } = require('./actions/memory');
 const { createRunning } = require('./actions/running');
 const { createPermissions } = require('./actions/permissions');
 const { createFocus } = require('./actions/focus');
@@ -46,6 +48,7 @@ function createApp({
   agyExe = '',
   exec,
   spawn,
+  dreamRunModel,
   brands = true,
   log = console.log,
 }) {
@@ -108,11 +111,21 @@ function createApp({
     ollamaUrl: () => ollama.url, running });
   const handoff = createHandoff({ dataDir, launch });
   const setProjectPin = createProjectPins({ config, saveConfig });
+  const workspace = createWorkspaceActions({ dataDir, config });
+  const memory = createMemoryActions({
+    dataDir, config, collector, quotas, ollama,
+    claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel, log,
+  });
   const filePreview = (opts) => readFilePreview({ ...opts, exec });
+  const fileList = (opts) => listProjectFiles(opts);
+  const projectGit = (cwd) => readProjectGit(cwd, exec);
 
   // api
-  const routes = createRoutes({ send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, filePreview, config, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName });
+  const routes = createRoutes({
+    send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
+    reply, launch, handoff, setProjectPin, workspace, memory, filePreview, fileList, projectGit,
+    dataDir, config, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName,
+  });
   const serveStatic = createStatic({ webDir, webAssets, send, brands, dataDir });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, routes, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
@@ -126,6 +139,7 @@ function createApp({
     if (showOllama) ollama.start();
     capabilities.start();
     collector.start();
+    memory.startScheduler();
     peers.start(() => collector.poke());
     quotas.refreshAll().then(() => collector.poke());
     // Com alguma sessão trabalhando, lê a cada 1 min (o gráfico da janela de 5h fica mais detalhado)

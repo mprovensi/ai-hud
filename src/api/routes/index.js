@@ -15,6 +15,8 @@ const routes = [
   require('./projects'),
   require('./fs'),
   require('./handoff'),
+  require('./workspace'),
+  require('./memory'),
   require('./hooks'),
 ];
 

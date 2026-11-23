@@ -40,7 +40,7 @@ function createHandler({ config, send, serveStatic, webAssets, routes, log = con
     }
     const route = routes.find((r) => r.path === url.pathname && (!r.method || r.method === req.method));
     if (!route) return send(res, 404, 'text/plain', 'não encontrado');
-    const body = route.json ? await readJson(req) : null;
+    const body = route.json ? await readJson(req, route.maxBytes) : null;
     return route.handler({ req, res, url, body });
   });
 }

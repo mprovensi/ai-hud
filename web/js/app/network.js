@@ -67,6 +67,7 @@
     if (view === 'usage') renderUsage();
     if (view === 'ollama') renderOllama();
     if (view === 'recent') renderRecent();
+    if (view === 'detail') checkPendingNewSession(s);
   }
 
   // ---- Desconectado: tela própria e nova tentativa a cada 5 s (conectado: a cada 10 s) ----

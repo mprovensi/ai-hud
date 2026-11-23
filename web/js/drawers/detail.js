@@ -30,6 +30,34 @@
   var detailTab = 'convo', detailSessionId = '', detailFocusedId = '', qState = null;
   var handoffUi = { open: false, tool: '', note: '', busy: false };
   var filePrev = { open: false, path: '', mode: 'diff', loading: false, error: '', data: null };
+  var memUi = { open: false, loading: false, busy: false, error: '', data: null };
+
+  function renderMemoryBox() {
+    if (!memUi.open) return '';
+    var m = memUi.data, html = '<div class="fprev" id="memBox">';
+    html += '<div class="row fprev-head"><span class="path grow">🧠 Memória compartilhada</span>' +
+      '<button type="button" class="fprev-tab on" id="memDream"' + (memUi.busy ? ' disabled' : '') + '>' +
+      (memUi.busy ? 'Consolidando…' : '🌙 Dream') + '</button>' +
+      '<button type="button" class="fprev-x" id="memClose" aria-label="Fechar memória">✕</button></div>';
+    if (memUi.loading) {
+      html += '<div class="fprev-msg">Carregando memória do projeto…</div>';
+    } else if (memUi.error) {
+      html += '<div class="fprev-msg err">' + esc(memUi.error) + '</div>';
+    } else if (m) {
+      var meta = [];
+      meta.push(m.pendingCount ? m.pendingCount + ' sessão(ões) pendente(s)' : 'Tudo consolidado');
+      if (m.lastDreamAt) meta.push('último Dream: ' + when(m.lastDreamAt));
+      if (m.lastEngine) meta.push(m.lastEngine);
+      html += '<div class="fprev-note">' + esc(meta.join(' · ')) + '</div>';
+      var body = (m.files && (m.files['MEMORY.md'] || m.files['current-state.md']))
+        ? (m.files['pinned.md'] ? '### 📌 Regras fixadas\n' + m.files['pinned.md'] + '\n\n' : '') +
+          (m.files['MEMORY.md'] || '') +
+          (m.files['current-state.md'] ? '\n\n' + m.files['current-state.md'] : '')
+        : 'Nenhuma memória consolidada ainda para este projeto. Toque em "🌙 Dream" para gerar a primeira consolidação.';
+      html += '<div class="md" style="padding:10px 11px;max-height:42vh;overflow:auto">' + renderMd(body) + '</div>';
+    }
+    return html + '</div>';
+  }
 
   function renderDiffHtml(text) {
     var lines = String(text || '').split(/\r?\n/), out = [], i, line, cls;
@@ -438,6 +466,7 @@
       detailTab = 'convo';
       handoffUi = { open: false, tool: '', note: '', busy: false };
       filePrev = { open: false, path: '', mode: 'diff', loading: false, error: '', data: null };
+      memUi = { open: false, loading: false, busy: false, error: '', data: null };
     }
     var now = d.now, html = '';
     var pct = d.contextWindow ? Math.round(d.context / d.contextWindow * 100) : 0;
@@ -527,6 +556,10 @@
         '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
     }
     html += '</div>';
+    html += renderMemoryBox();
+    if (!memUi.open) {
+      html += '<button type="button" class="pcaction" id="openMem">🧠 Memória compartilhada <small>(ver / 🌙 Dream)</small></button>';
+    }
     if (handoffUi.open && !onConvo) html += renderHandoffPanel(d);
     if (!handoffUi.open) {
       html += '<button type="button" class="pcaction" id="openHandoff">↪ Handoff <small>(Resumir e continuar / trocar IA)</small></button>';
@@ -617,6 +650,7 @@
     if ($('handoffGo')) $('handoffGo').onclick = function () {
       var tool = handoffUi.tool || (d.tool === 'Antigravity' ? 'Gemini' : d.tool) || 'Claude Code';
       var note = $('handoffNote') ? $('handoffNote').value.replace(/^\s+|\s+$/g, '') : handoffUi.note;
+      var beforeIds = snapshotKnownIds();
       handoffUi.busy = true;
       this.disabled = true;
       this.textContent = 'Criando handoff…';
@@ -630,21 +664,16 @@
         handoffUi.open = false;
         handoffUi.note = '';
         poll();
-        if (r && r.id) {
-          pendingNewId = r.id;
-          pendingNewUntil = new Date().getTime() + 15000;
-          flash('Handoff criado — abrindo nova sessão.');
-          var nextHash = '#s=' + encodeURIComponent(r.id);
-          if (history && history.replaceState) {
-            history.replaceState(null, '', nextHash);
-            syncHash();
-          } else {
-            location.hash = nextHash;
-          }
-        } else {
-          flash('Handoff criado — nova sessão aparecerá na lista em instantes.');
-          renderDetail(d);
-        }
+        flash('Handoff criado — abrindo nova sessão.');
+        openPendingSessionDrawer({
+          id: r && r.id ? r.id : '',
+          tool: tool,
+          machine: (r && r.machine) || d.machine || '',
+          cwd: d.cwd || '',
+          project: d.project || '',
+          prompt: note || 'Continuação de sessão por Handoff…',
+          beforeIds: beforeIds,
+        });
       }, { id: d.id, targetTool: tool, note: note });
     };
     function loadFilePreview(fp, mode) {
@@ -671,6 +700,31 @@
     if ($('fprevDiff')) $('fprevDiff').onclick = function () { loadFilePreview(filePrev.path, 'diff'); };
     if ($('fprevFile')) $('fprevFile').onclick = function () { loadFilePreview(filePrev.path, 'content'); };
     if ($('fprevClose')) $('fprevClose').onclick = function () { filePrev.open = false; renderDetail(d); };
+    function loadProjectMemory() {
+      memUi = { open: true, loading: true, busy: false, error: '', data: null };
+      renderDetail(d);
+      var q = '/api/memory?project=' + encodeURIComponent(d.project || '') + '&cwd=' + encodeURIComponent(d.cwd || '');
+      request('GET', q, function (err, data) {
+        if (!memUi.open) return;
+        memUi.loading = false;
+        if (err) { memUi.error = err.message; memUi.data = null; }
+        else { memUi.error = ''; memUi.data = data; }
+        renderDetail(d);
+      });
+    }
+    if ($('openMem')) $('openMem').onclick = loadProjectMemory;
+    if ($('memClose')) $('memClose').onclick = function () { memUi.open = false; renderDetail(d); };
+    if ($('memDream')) $('memDream').onclick = function () {
+      memUi.busy = true;
+      renderDetail(d);
+      request('POST', '/api/memory/dream', function (err, r) {
+        memUi.busy = false;
+        if (err) { flash('Dreaming falhou: ' + err.message, false); renderDetail(d); return; }
+        if (r && r.skipped) { flash(r.reason || 'Nada novo para consolidar.', true); renderDetail(d); return; }
+        flash('Memória consolidada: ' + ((r && r.summary) || 'OK'));
+        loadProjectMemory();
+      }, { project: d.project || '', cwd: d.cwd || '', ignoreQuota: true });
+    };
     if ($('closeSess')) $('closeSess').onclick = function () {
       var hasProc = d.tool === 'Claude Code' || d.where === 'ollama-run';
       var note = hasProc

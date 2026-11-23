@@ -43,22 +43,84 @@
     if (x) rememberViewed(x);
   }
 
+  function renderStartingSession(meta) {
+    var m = meta || {};
+    var idx = toolIndex(m.tool || 'Claude Code');
+    var mach = snap && snap.machines && snap.machines.length > 1 && m.machine ? ' · 🖥 ' + esc(m.machine) : '';
+    var title = m.tool ? toolIcon(idx) + esc(m.project || 'Nova sessão') + ' <small class="muted">' + esc(m.tool) + mach + '</small>' : 'Iniciando sessão…';
+    var html = head(title, 'aguardando a IA iniciar a sessão') +
+      '<div class="dstate row"><span class="badge working"><span class="pulse">●</span> iniciando sessão…</span><span class="muted grow ell">aguardando primeira resposta</span></div>' +
+      '<div class="dtabs row" role="tablist"><button type="button" class="dtab active" disabled>Conversa</button><button type="button" class="dtab" disabled>Detalhes</button></div>' +
+      '<div class="panel convpanel"><div class="row chead"><h2 class="grow">Conversa</h2></div><div class="convo lastreply">';
+    if (m.prompt) html += '<div class="msg me"><div class="mtxt">' + esc(m.prompt) + '</div></div>';
+    html += '<div class="mworking"><span class="pulse">●</span> iniciando processo e aguardando resposta…</div></div></div>';
+    setOverlay(html);
+  }
+
+  function matchStartedSession(s, meta) {
+    if (!s || !meta) return null;
+    var all = (s.active || []).concat(s.recent || []), i, c;
+    var multi = s.machines && s.machines.length > 1;
+    for (i = 0; i < all.length; i++) {
+      c = all[i];
+      if (!c || (meta.beforeIds && meta.beforeIds[c.id])) continue;
+      if (meta.tool && c.tool !== meta.tool) continue;
+      if (multi && meta.machine && c.machine && c.machine !== meta.machine) continue;
+      return c.id;
+    }
+    return null;
+  }
+
+  function checkPendingNewSession(s) {
+    if (location.hash !== '#s=__starting__' || typeof pendingNewMeta === 'undefined' || !pendingNewMeta) return;
+    var foundId = matchStartedSession(s, pendingNewMeta);
+    if (foundId) {
+      pendingNewId = foundId;
+      pendingNewMeta.id = foundId;
+      var nextHash = '#s=' + encodeURIComponent(foundId);
+      if (typeof history !== 'undefined' && history && history.replaceState) {
+        history.replaceState(null, '', nextHash);
+        syncHash();
+      } else {
+        location.hash = nextHash;
+      }
+      return;
+    }
+    if (new Date().getTime() >= pendingNewUntil) {
+      pendingNewId = '';
+      pendingNewMeta = null;
+      setOverlay(head('Sessão iniciada') + '<div class="panel"><p class="empty">A sessão ainda não apareceu no histórico. Feche para conferir na lista ou aguarde mais alguns instantes.</p></div>');
+    }
+  }
+
   function loadDetail() {
     var m = /^#s=(.+)$/.exec(location.hash);
     if (!m) return;
     var id = decodeURIComponent(m[1]);
+    if (id === '__starting__') {
+      var meta = typeof pendingNewMeta !== 'undefined' ? pendingNewMeta : null;
+      var found = snap && meta ? matchStartedSession(snap, meta) : null;
+      if (found) { checkPendingNewSession(snap); return; }
+      if (meta && new Date().getTime() < pendingNewUntil) {
+        renderStartingSession(meta);
+        setTimeout(function () { if (location.hash === '#s=__starting__') { poll(); loadDetail(); } }, 1500);
+        return;
+      }
+      pendingNewId = '';
+      pendingNewMeta = null;
+      return setOverlay(head('Sessão') + '<div class="panel"><p class="empty">Sessão iniciada, mas ainda sem resposta registrada.</p></div>');
+    }
     request('GET', '/api/session?id=' + encodeURIComponent(id), function (err, d) {
       if (location.hash !== '#s=' + encodeURIComponent(id)) return;
       if (err) {
         if (err.status === 404 && typeof pendingNewId !== 'undefined' && id === pendingNewId && new Date().getTime() < pendingNewUntil) {
-          setOverlay(head('Iniciando sessão…', 'aguardando a IA responder') +
-            '<div class="panel"><span class="sk sk-line" style="width:75%;margin-top:0"></span><span class="sk sk-line" style="width:55%"></span></div>');
+          renderStartingSession(typeof pendingNewMeta !== 'undefined' ? pendingNewMeta : null);
           setTimeout(loadDetail, 1200);
           return;
         }
         return setOverlay(head('Sessão') + '<p class="empty">' + esc(err.message) + '</p>');
       }
-      if (typeof pendingNewId !== 'undefined' && id === pendingNewId) pendingNewId = '';
+      if (typeof pendingNewId !== 'undefined' && id === pendingNewId) { pendingNewId = ''; pendingNewMeta = null; }
       // Se abriu por UUID curto (ex.: Codex recém-criado), alinha a URL e o cache ao id completo do cartão
       if (d && d.id && d.id !== id) {
         id = d.id;
@@ -99,7 +161,12 @@
       detailFocusedId = '';
       if (snap) render(snap); // o fundo não é redesenhado com a gaveta aberta
     }
-    if (view === 'detail') { quickDetail(decodeURIComponent(h.slice(3))); loadDetail(); }
+    if (view === 'detail') {
+      var sid = decodeURIComponent(h.slice(3));
+      if (sid === '__starting__') renderStartingSession(typeof pendingNewMeta !== 'undefined' ? pendingNewMeta : null);
+      else quickDetail(sid);
+      loadDetail();
+    }
     if (view === 'recent') renderRecent();
     if (view === 'new') openNewSession();
     // A gaveta precisa estar visível para o gráfico medir a própria largura

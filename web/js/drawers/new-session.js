@@ -1,7 +1,39 @@
   // ---- Nova sessão de IA (gaveta #nova: escolhe máquina, IA, modelo, pasta e mensagem inicial) ----
   var newCaps = null, newBusy = false;
   var newSel = { machine: '', tool: '', model: '', cwd: '', customCwd: '' };
-  var pendingNewId = '', pendingNewUntil = 0;
+  var pendingNewId = '', pendingNewUntil = 0, pendingNewMeta = null;
+
+  function snapshotKnownIds() {
+    var map = {}, all = snap ? snap.active.concat(snap.recent) : [], i;
+    for (i = 0; i < all.length; i++) map[all[i].id] = true;
+    return map;
+  }
+
+  function openPendingSessionDrawer(opts) {
+    var now = new Date().getTime();
+    var id = opts.id || '__starting__';
+    pendingNewId = id;
+    pendingNewUntil = now + 60000;
+    pendingNewMeta = {
+      id: id,
+      tool: opts.tool || '',
+      machine: opts.machine || '',
+      cwd: opts.cwd || '',
+      project: opts.project || (opts.cwd ? String(opts.cwd).replace(/[\\/]+$/, '').split(/[\\/]/).pop() : '') || 'Nova sessão',
+      prompt: opts.prompt || '',
+      beforeIds: opts.beforeIds || snapshotKnownIds(),
+      until: pendingNewUntil,
+    };
+    var nextHash = '#s=' + encodeURIComponent(id);
+    if (history && history.replaceState) {
+      history.replaceState(null, '', nextHash);
+      syncHash();
+    } else if (location.replace) {
+      location.replace(nextHash);
+    } else {
+      location.hash = nextHash;
+    }
+  }
 
   function machineToolList(m) {
     var out = [], order = ['Claude Code', 'Codex', 'Gemini', 'Ollama'], i;
@@ -200,6 +232,7 @@
       if (newSel.tool !== 'Ollama' && newSel.cwd === '__custom__' && !cwd) {
         flash('Informe o caminho da pasta.', false); if ($('newCustomCwd')) $('newCustomCwd').focus(); return;
       }
+      var beforeIds = snapshotKnownIds();
       store('hud.newMachine', newSel.machine);
       store('hud.newTool', newSel.tool);
       newBusy = true;
@@ -212,23 +245,14 @@
           return flash('Falhou: ' + err.message, false);
         }
         poll();
-        if (r && r.id) {
-          pendingNewId = r.id;
-          pendingNewUntil = new Date().getTime() + 15000;
-          var nextHash = '#s=' + encodeURIComponent(r.id);
-          // Substitui #nova no histórico para fechar a gaveta de criação (✕ / Voltar vai direto para a tela inicial)
-          if (history && history.replaceState) {
-            history.replaceState(null, '', nextHash);
-            syncHash();
-          } else if (location.replace) {
-            location.replace(nextHash);
-          } else {
-            location.hash = nextHash;
-          }
-        } else {
-          closeOverlay();
-          flash('Sessão iniciada — aparece na lista em instantes.');
-        }
+        openPendingSessionDrawer({
+          id: r && r.id ? r.id : '',
+          tool: newSel.tool,
+          machine: (r && r.machine) || newSel.machine,
+          cwd: cwd,
+          prompt: prompt,
+          beforeIds: beforeIds,
+        });
       }, { machine: newSel.machine, tool: newSel.tool, model: newSel.model, cwd: cwd, prompt: prompt });
     };
   }

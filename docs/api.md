@@ -59,7 +59,25 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | Rota | Resposta |
 |---|---|
 | `GET /api/capabilities` | `{ machines: [{ name, online, platform, home, pinned[], strictRemoteCwd, cwds[], tools }] }` |
-| `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão) |
+| `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão ou autorizado) |
+| `GET /api/fs/list?cwd=&path=&machine=` | `{ ok, dir, entries: [{ name, path, type, size }], truncated }` (pastas autorizadas) |
+| `GET /api/fs/git?cwd=&machine=` | `{ ok, isRepo, branch, modified[], commits[] }` (pastas autorizadas) |
+
+## AI Workspace & Memória Compartilhada (`/api/workspace/*`, `/api/memory/*`)
+
+| Rota | Efeito |
+|---|---|
+| `GET /api/workspace/index` | Índice `workspace.json` + arquivos em `context/`, `knowledge/`, `skills/`, `inbox/handoffs/` |
+| `POST /api/workspace/entity` | Cria entidade/projeto (`overview.card.json` + `notes.md` + pasta `media/`) |
+| `GET / PUT /api/workspace/entity/file` | Lê ou grava card (`.card.json`) / Markdown com verificação `baseHash` (`409 Conflict` em edição concorrente) + backup |
+| `GET /api/workspace/entity/asset?id=&path=` | Serve `media/*` e `report.html` isolados (CSP restrita em HTML) |
+| `POST /api/workspace/entity/media` | Upload seguro de imagem (PNG/JPG/WEBP/GIF, até 10 MB) para `media/` da entidade |
+| `GET / PUT /api/workspace/doc` | Lê ou grava documento em `context/`, `knowledge/` ou `skills/` (com proteção `409`) |
+| `GET /api/memory?project=&cwd=` | Sem filtro: lista todos os projetos e pendências de Dreaming; com projeto: lê `MEMORY.md`, `current-state.md`, `pinned.md`, `decisions.md`, `pitfalls.md`, `dream-log.md` e `episodic[]` |
+| `PUT /api/memory/file` | Edita arquivo de memória (ex.: `pinned.md`) com proteção `409` + backup |
+| `POST /api/memory/dream` | Dispara consolidação (Dreaming) manual cota-aware (`{ project, cwd?, engine?, dryRun?, force?, ignoreQuota? }`) |
+| `POST /api/memory/undo` | Restaura o backup imediatamente anterior ao último Dreaming do projeto |
+| `POST /api/memory/bridges` | Instala/atualiza pontes finas (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) preservando conteúdo existente |
 
 ## Hooks (mesmo PC)
 

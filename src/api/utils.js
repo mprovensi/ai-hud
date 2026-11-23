@@ -12,19 +12,19 @@ function requestError(statusCode, message) {
   return Object.assign(new Error(message), { statusCode });
 }
 
-function readJson(req) {
+function readJson(req, maxBytes = 20e3) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > 20e3) {
+      if (size > maxBytes) {
         chunks.length = 0;
         reject(requestError(413, 'corpo da requisição muito grande'));
       } else chunks.push(chunk);
     });
     req.on('end', () => {
-      if (size > 20e3) return;
+      if (size > maxBytes) return;
       try {
         // Decodifica depois de juntar os bytes: acentos podem atravessar pacotes.
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));

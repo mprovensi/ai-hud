@@ -28,9 +28,12 @@ test('botão + Nova abre gaveta lateral, lista máquinas/IAs/modelos e inicia se
     send(body) { this.sentBody = body; }
     setRequestHeader() {}
   }
+  const replaced = [];
   const context = {
     document: { body: { className: '' }, documentElement: {}, hidden: false, getElementById: byId, addEventListener: () => {} },
-    navigator: {}, location: { search: '', hash: '' }, history: { back() {} }, XMLHttpRequest: XHR,
+    navigator: {}, location: { search: '', hash: '' },
+    history: { back() {}, replaceState(_s, _t, url) { replaced.push(url); context.location.hash = url; } },
+    XMLHttpRequest: XHR,
     Promise: undefined, fetch: undefined, localStorage: { getItem() { return null; }, setItem() {} },
     addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
     setInterval: () => {}, setTimeout: () => 1, clearTimeout: () => {}, innerWidth: 1024,
@@ -87,5 +90,6 @@ test('botão + Nova abre gaveta lateral, lista máquinas/IAs/modelos e inicia se
     responseText: JSON.stringify({ ok: true, id: 'm0:00000000-0000-4000-8000-000000000123', machine: 'MateusNote', tool: 'Claude Code' }),
   });
   newReq.onreadystatechange();
-  assert.equal(context.location.hash, 's=m0%3A00000000-0000-4000-8000-000000000123');
+  assert.deepEqual(replaced, ['#s=m0%3A00000000-0000-4000-8000-000000000123']);
+  assert.equal(context.location.hash, '#s=m0%3A00000000-0000-4000-8000-000000000123');
 });

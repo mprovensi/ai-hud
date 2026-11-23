@@ -176,7 +176,16 @@
         if (r && r.id) {
           pendingNewId = r.id;
           pendingNewUntil = new Date().getTime() + 15000;
-          location.hash = 's=' + encodeURIComponent(r.id);
+          var nextHash = '#s=' + encodeURIComponent(r.id);
+          // Substitui #nova no histórico para fechar a gaveta de criação (✕ / Voltar vai direto para a tela inicial)
+          if (history && history.replaceState) {
+            history.replaceState(null, '', nextHash);
+            syncHash();
+          } else if (location.replace) {
+            location.replace(nextHash);
+          } else {
+            location.hash = nextHash;
+          }
         } else {
           closeOverlay();
           flash('Sessão iniciada — aparece na lista em instantes.');

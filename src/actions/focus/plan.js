@@ -42,6 +42,18 @@ function claudeDesktopId(cliId) {
 
 function focusPlan(s, folders = vscodeFolders()) {
   const key = replyKey(s);
+  // App do Antigravity (Gemini): foca a janela do projeto (ou qualquer janela do Antigravity); se fechado, abre pelo protocolo
+  if (s.where === 'antigravity') {
+    const folder = base(s.cwd);
+    return {
+      process: 'Antigravity',
+      include: folder ? `${noPipe(folder)}|Antigravity` : '',
+      exclude: '',
+      uri: '',
+      fallbackUri: 'antigravity://',
+      label: 'Antigravity em primeiro plano.',
+    };
+  }
   // App do Ollama: o link ollama:// só abre o app (não uma conversa); depois traz a janela para frente
   if (s.where === 'ollama-app') return { uriFirst: true, uri: 'ollama://', process: 'ollama app', include: '', exclude: '', label: 'App do Ollama aberto: escolha a conversa nele.' };
   // App do Codex (ChatGPT.exe): o link abre a conversa pelo id da thread; depois traz a janela para frente

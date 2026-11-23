@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const vm = require('node:vm');
 const { codexData, codexWhere } = require('../../src/collect/sources/codex');
+const { buildSessionDetail } = require('../../src/views/session-detail');
 let DatabaseSync;
 try { ({ DatabaseSync } = require('node:sqlite')); } catch {}
 const ID = '00000000-0000-4000-8000-000000000001';
@@ -183,4 +184,35 @@ test('Codex: onde a sessão roda vem do originator, não do source "vscode" que 
   assert.equal(codexWhere({ originator: 'Codex Desktop', source: 'vscode' }), 'codex-desktop');
   assert.equal(codexWhere({ source: 'vscode' }), 'vscode');
   assert.equal(codexWhere({ source: 'cli' }), 'terminal');
+});
+
+test('Codex: detecta teste que falhou (e limpa quando passa) e lista arquivos modificados via apply_patch', (t) => {
+  const { root, lib } = fixture(t);
+  const patch1 = '*** Begin Patch\n*** Update File: /project/src/app.js\n@@\n-a\n+b\n*** Add File: src/novo.js\n+ok\n*** End Patch';
+  const patch2 = '*** Begin Patch\n*** Update File: /project/src/app.js\n@@\n-b\n+c\n*** End Patch';
+  rollout(root, ID, [
+    meta(ID),
+    message('user', 'corrija os testes'),
+    { type: 'response_item', payload: { type: 'custom_tool_call', call_id: 'p1', name: 'apply_patch', input: patch1 } },
+    { type: 'response_item', payload: { type: 'function_call', call_id: 'c1', name: 'shell_command', arguments: JSON.stringify({ command: 'npm test' }) } },
+    { type: 'response_item', payload: { type: 'function_call_output', call_id: 'c1', output: 'Exit code: 1\nOutput:\nnot ok 1 - falhou\n  error: esperado 42\n# pass 2\n# fail 1' } },
+    { type: 'response_item', payload: { type: 'custom_tool_call', call_id: 'p2', name: 'apply_patch', input: patch2 } },
+  ]);
+  const s1 = lib.codexData().sessions[0];
+  assert.equal(s1.testRun.ok, false);
+  assert.equal(s1.testRun.command, 'npm test');
+  assert.match(s1.testRun.summary, /esperado 42/);
+  const detail = buildSessionDetail(s1, Date.parse(TS) + 1000, () => ({}));
+  // src/app.js foi editado por último (2×), seguido de src/novo.js (1×)
+  assert.deepEqual(detail.files, [['src/app.js', 2], ['src/novo.js', 1]]);
+
+  // Novo comando de teste passando limpa o estado de falha
+  rollout(root, CHILD, [
+    meta(CHILD),
+    message('user', 'rode de novo'),
+    { type: 'response_item', payload: { type: 'local_shell_call', call_id: 'c2', action: { command: ['bash', '-lc', 'npm test'] } } },
+    { type: 'response_item', payload: { type: 'local_shell_call_output', call_id: 'c2', output: JSON.stringify({ output: '# pass 3\n# fail 0', metadata: { exit_code: 0 } }) } },
+  ]);
+  const s2 = lib.codexData().sessions.find((s) => s.id.endsWith(CHILD));
+  assert.equal(s2.testRun.ok, true);
 });

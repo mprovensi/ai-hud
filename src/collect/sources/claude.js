@@ -1,9 +1,10 @@
 // Claude Code: um .jsonl por sessão em ~/.claude/projects; subagentes em <sessão>/subagents/agent-*.jsonl
 const path = require('path');
 const os = require('os');
-const { walk, readLines, parse, cached, emptySession, clip, prompt, toolCall, touch } = require('./common');
+const { walk, readLines, parse, cached, emptySession, touchFile, pushHistory, clip, prompt, toolCall, touch } = require('./common');
 const { readJson } = require('../../infra/store');
 const { isTestCommand, testOutcome } = require('../../core/tests');
+const { normalizeQuestions } = require('../../core/questions');
 
 // Resultado de uma ferramenta: texto puro ou lista de blocos de texto
 const resultText = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.filter((b) => b.type === 'text').map((b) => b.text).join('\n') : '');
@@ -12,6 +13,9 @@ const resultText = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.filt
 function parseClaude(f) {
   const seen = new Set();
   const tests = new Map(); // id da chamada → comando de teste, até chegar o resultado
+  const asks = new Map();  // id da chamada AskUserQuestion → perguntas normalizadas, até chegar o resultado
+  let turnTools = [];
+  let lastAssistMsgId = '';
   const s = emptySession('Claude Code', path.basename(f, '.jsonl'), f);
   s.subagent = f.includes('subagents');
   for (const line of readLines(f)) {
@@ -30,10 +34,18 @@ function parseClaude(f) {
       const text = typeof c === 'string' ? c
         : Array.isArray(c) && !c.some((b) => b.type === 'tool_result') ? c.filter((b) => b.type === 'text').map((b) => b.text).join(' ') : '';
       // "[Request interrupted by user]" é aviso do Claude Code, não pedido
-      if (text && !text.startsWith('<') && !text.startsWith('[Request interrupted')) prompt(s, text);
-      // Resultado de um comando de teste: o último decide se a sessão está com teste falhando
+      if (text && !text.startsWith('<') && !text.startsWith('[Request interrupted')) {
+        prompt(s, text);
+        pushHistory(s, 'user', text, r.timestamp);
+        turnTools = [];
+        lastAssistMsgId = '';
+        asks.clear();
+      }
+      // Resultado de ferramenta: teste ou resposta a AskUserQuestion
       for (const b of Array.isArray(c) ? c : []) {
-        if (b.type !== 'tool_result' || !tests.has(b.tool_use_id)) continue;
+        if (b.type !== 'tool_result') continue;
+        if (asks.has(b.tool_use_id)) asks.delete(b.tool_use_id);
+        if (!tests.has(b.tool_use_id)) continue;
         s.testRun = { command: tests.get(b.tool_use_id), at: Date.parse(r.timestamp) || 0, ...testOutcome(resultText(b.content), b.is_error) };
         tests.delete(b.tool_use_id);
       }
@@ -41,12 +53,44 @@ function parseClaude(f) {
     // Resposta enviada pelo HUD: o hook Stop (hook-stop.js) a entrega como "erro de bloqueio", não como pedido
     const a = r.type === 'attachment' && r.attachment;
     if (a && a.type === 'hook_blocking_error' && a.hookEvent === 'Stop' && a.blockingError
-      && /hook-stop\.js/.test(a.blockingError.command || '') && a.blockingError.blockingError) prompt(s, a.blockingError.blockingError);
+      && /hook-stop\.js/.test(a.blockingError.command || '') && a.blockingError.blockingError) {
+      prompt(s, a.blockingError.blockingError);
+      pushHistory(s, 'user', a.blockingError.blockingError, r.timestamp);
+      turnTools = [];
+      lastAssistMsgId = '';
+    }
     if (r.type !== 'assistant' || !m || !m.usage) continue;
+    const textParts = [];
     for (const b of m.content || []) {
-      if (b.type === 'text' && b.text) { s.lastReply = clip(b.text, 4000); s.lastReplyAt = Date.parse(r.timestamp) || 0; }
-      if (b.type === 'tool_use') toolCall(s, b.name);
+      if (b.type === 'text' && b.text) {
+        s.lastReply = clip(b.text, 4000);
+        s.lastReplyAt = Date.parse(r.timestamp) || 0;
+        textParts.push(b.text);
+      }
+      if (b.type === 'tool_use') {
+        toolCall(s, b.name);
+        if (b.name) turnTools.push(b.name);
+        if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name || '') && b.input) {
+          touchFile(s, b.input.file_path || b.input.path || b.input.notebook_path);
+        }
+        if (b.name === 'AskUserQuestion' && b.input) {
+          const qs = normalizeQuestions(b.input);
+          if (qs.length) asks.set(b.id, qs);
+        }
+      }
       if (b.type === 'tool_use' && b.input && isTestCommand(b.input.command)) tests.set(b.id, clip(b.input.command, 200));
+    }
+    if (textParts.length) {
+      const joined = textParts.join('\n').trim();
+      const prev = s.history[s.history.length - 1];
+      if (m.id && m.id === lastAssistMsgId && prev && prev.role === 'assistant') {
+        prev.content = clip(`${prev.content}\n${joined}`, 4000);
+        prev.at = Date.parse(r.timestamp) || prev.at;
+      } else {
+        pushHistory(s, 'assistant', joined, r.timestamp, turnTools);
+        turnTools = [];
+        lastAssistMsgId = m.id || '';
+      }
     }
     if (m.stop_reason) s.lastStop = m.stop_reason;
     const key = `${m.id}:${r.requestId || ''}`;
@@ -62,6 +106,8 @@ function parseClaude(f) {
     s.events.push({ ts: r.timestamp, fresh: (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_creation_input_tokens || 0),
       cacheRead: u.cache_read_input_tokens || 0 });
   }
+  const lastAsk = [...asks.values()].pop();
+  s.pendingQuestion = lastAsk || null;
   return s.events.length ? s : null;
 }
 

@@ -2,8 +2,10 @@
 // + rate_limits do plano. Conversas antigas podem existir só nos bancos SQLite (codex-history.js).
 const path = require('path');
 const os = require('os');
-const { walk, readLines, parse, cached, emptySession, clip, prompt, toolCall, touch } = require('../common');
+const { walk, readLines, parse, cached, emptySession, touchFile, pushHistory, clip, prompt, toolCall, touch } = require('../common');
 const { readCodexHistory } = require('./history-db');
+const { normalizeQuestions } = require('../../../core/questions');
+const { isTestCommand, testOutcome } = require('../../../core/tests');
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
 
@@ -28,12 +30,53 @@ function codexTime(value) {
   return Date.parse(value) || 0;
 }
 
+function codexShellCommand(p) {
+  const args = typeof p.arguments === 'string' ? parse(p.arguments) : (p.arguments || {});
+  const raw = (p.action && p.action.command) || p.command || (args && (args.command || args.cmd));
+  if (Array.isArray(raw)) {
+    // Ex.: ["bash", "-lc", "npm test"] → extrai o comando interno quando houver flag -c/-lc/-Command
+    const flagIdx = raw.findIndex((x) => /^-(l?c|Command)$/i.test(String(x)));
+    if (flagIdx >= 0 && raw[flagIdx + 1]) return String(raw[flagIdx + 1]);
+    return raw.join(' ');
+  }
+  return typeof raw === 'string' ? raw : '';
+}
+
+function codexShellResult(rawOutput) {
+  const str = typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput || '');
+  const obj = typeof rawOutput === 'string' ? parse(rawOutput) : rawOutput;
+  if (obj && typeof obj === 'object') {
+    const code = obj.metadata && obj.metadata.exit_code != null ? Number(obj.metadata.exit_code)
+      : obj.exit_code != null ? Number(obj.exit_code) : null;
+    const text = typeof obj.output === 'string' ? obj.output : str;
+    return { text, isError: code != null ? code !== 0 : false };
+  }
+  const exit = /(?:Exit code|Process exited with code|Command exited with code)[:\s]+(\d+)/i.exec(str);
+  return { text: str, isError: exit ? Number(exit[1]) !== 0 : false };
+}
+
+function codexPatchFiles(p) {
+  const args = typeof p.arguments === 'string' ? parse(p.arguments) : p.arguments;
+  const raw = typeof p.input === 'string' ? p.input
+    : typeof p.arguments === 'string' && !args ? p.arguments
+    : (args && (args.input || args.patch)) || '';
+  const files = [];
+  for (const m of String(raw).matchAll(/^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)$/gm)) {
+    if (m[1]) files.push(m[1].trim());
+  }
+  return files;
+}
+
 function parseCodex(f) {
   const s = emptySession('Codex', path.basename(f, '.jsonl'), f);
   s.limitSamples = [];
   s.completedAt = 0;
   let prev = null, limits = null, limitsTs = '';
   const userPrompts = [], promptIds = new Set();
+  const assistantReplies = [];
+  const asks = new Map();
+  const tests = new Map();
+  let turnTools = [];
   let currentTurn = 'initial', turnIndex = 0;
   const collectPrompt = (text, source, p, timestamp) => {
     if (!text) return;
@@ -49,6 +92,14 @@ function parseCodex(f) {
       && (turn !== 'initial' || Math.abs(Date.parse(timestamp) - Date.parse(m.timestamp)) < 1000));
     if (duplicate) duplicate.sources.add(source);
     else userPrompts.push({ text, turn, timestamp, sources: new Set([source]) });
+  };
+  const collectReply = (text, source, timestamp) => {
+    if (!text) return;
+    const at = codexTime(timestamp);
+    const dup = assistantReplies.find((m) => m.text === text && !m.sources.has(source) && Math.abs(at - m.at) < 5000);
+    if (dup) { dup.sources.add(source); return; }
+    assistantReplies.push({ text, at, tools: turnTools.slice(0, 6), sources: new Set([source]) });
+    turnTools = [];
   };
   let fallbackReply = '', fallbackReplyAt = '', legacyReplyAt = '';
   for (const line of readLines(f)) {
@@ -69,20 +120,52 @@ function parseCodex(f) {
       s.completedAt = codexTime(r.timestamp);
       currentTurn = `after:${++turnIndex}`;
     }
-    if (p.type === 'task_started') { s.lastStop = ''; currentTurn = p.turn_id || `turn:${++turnIndex}`; }
-    if (p.type === 'user_message' && p.message) collectPrompt(p.message, 'event', p, r.timestamp);
-    if (p.type === 'agent_message' && p.message) { s.lastReply = clip(p.message, 4000); legacyReplyAt = r.timestamp; s.lastReplyAt = codexTime(r.timestamp); }
+    if (p.type === 'task_started') { s.lastStop = ''; currentTurn = p.turn_id || `turn:${++turnIndex}`; turnTools = []; }
+    if (p.type === 'user_message' && p.message) { collectPrompt(p.message, 'event', p, r.timestamp); asks.clear(); }
+    if (p.type === 'agent_message' && p.message) {
+      s.lastReply = clip(p.message, 4000); legacyReplyAt = r.timestamp; s.lastReplyAt = codexTime(r.timestamp);
+      collectReply(p.message, 'event', r.timestamp);
+    }
     // Novos rollouts não duplicam as mensagens nos eventos user_message/agent_message.
     if (r.type === 'response_item' && p.type === 'message') {
       const text = codexText(p.content);
       const kinds = p.internal_chat_message_metadata_passthrough && p.internal_chat_message_metadata_passthrough.content_item_kinds;
       const userContent = kinds && kinds.length ? kinds.some((k) => /^user\./.test(k))
         : !/^(<environment_context>|<turn_aborted>|<external_codex_apps_open_page>|# AGENTS\.md instructions)/.test(text);
-      if (p.role === 'user' && userContent) collectPrompt(text, 'response', p, r.timestamp);
-      if (p.role === 'assistant' && text) { fallbackReply = text; fallbackReplyAt = r.timestamp; }
+      if (p.role === 'user' && userContent) { collectPrompt(text, 'response', p, r.timestamp); asks.clear(); }
+      if (p.role === 'assistant' && text) {
+        fallbackReply = text; fallbackReplyAt = r.timestamp;
+        collectReply(text, 'response', r.timestamp);
+      }
     }
     if (r.type === 'response_item' && /^(custom_tool_call|function_call|local_shell_call)$/.test(p.type)) {
-      toolCall(s, p.name || p.type);
+      const tname = p.name || p.type;
+      toolCall(s, tname);
+      turnTools.push(tname);
+      const callId = p.call_id || p.id || '';
+      if (tname === 'apply_patch') {
+        for (const fp of codexPatchFiles(p)) touchFile(s, fp);
+      } else if (/^(write_file|edit_file|create_file|replace_in_file)$/i.test(tname)) {
+        const args = typeof p.arguments === 'string' ? parse(p.arguments) : p.arguments;
+        if (args) touchFile(s, args.path || args.file_path || args.Path);
+      }
+      if (p.type === 'local_shell_call' || /^(shell|shell_command|exec_command|run_command|bash)$/i.test(tname)) {
+        const cmd = codexShellCommand(p);
+        if (callId && isTestCommand(cmd)) tests.set(callId, clip(cmd, 200));
+      }
+      if (tname === 'request_user_input') {
+        const args = typeof p.arguments === 'string' ? parse(p.arguments) : p.arguments;
+        const qs = normalizeQuestions(args);
+        if (qs.length) asks.set(callId || String(asks.size), qs);
+      }
+    }
+    if (r.type === 'response_item' && /^(custom_tool_call_output|function_call_output|local_shell_call_output)$/.test(p.type)) {
+      if (p.call_id && asks.has(p.call_id)) asks.delete(p.call_id);
+      if (p.call_id && tests.has(p.call_id)) {
+        const { text, isError } = codexShellResult(p.output);
+        s.testRun = { command: tests.get(p.call_id), at: codexTime(r.timestamp), ...testOutcome(text, isError) };
+        tests.delete(p.call_id);
+      }
     }
     if (p.type !== 'token_count') continue;
     if (p.rate_limits && r.timestamp > limitsTs) { limits = p.rate_limits; limitsTs = r.timestamp; }
@@ -108,6 +191,13 @@ function parseCodex(f) {
   s.limitsTs = limitsTs;
   for (const m of userPrompts) prompt(s, m.text);
   if (fallbackReply && fallbackReplyAt >= legacyReplyAt) { s.lastReply = clip(fallbackReply, 4000); s.lastReplyAt = codexTime(fallbackReplyAt); }
+  const timeline = [
+    ...userPrompts.map((m, idx) => ({ role: 'user', content: m.text, at: codexTime(m.timestamp), ord: idx * 2 })),
+    ...assistantReplies.map((m, idx) => ({ role: 'assistant', content: m.text, at: m.at, tools: m.tools, ord: idx * 2 + 1 })),
+  ].sort((a, b) => (a.at - b.at) || (a.ord - b.ord));
+  for (const item of timeline) pushHistory(s, item.role, item.content, item.at, item.tools);
+  const lastAsk = [...asks.values()].pop();
+  s.pendingQuestion = lastAsk || null;
   return s.start ? s : null;
 }
 
@@ -137,10 +227,10 @@ function codexData(root = CODEX_HOME) {
     if (thread.model) s.models.add(thread.model);
     if (sqliteOnly) {
       for (const m of messages) {
-        if (m.type === 'userMessage') { const text = codexText(m.content); if (text) prompt(s, text); }
-        if (m.type === 'agentMessage' && m.text) s.lastReply = clip(m.text, 4000);
+        if (m.type === 'userMessage') { const text = codexText(m.content); if (text) { prompt(s, text); pushHistory(s, 'user', text, m.created_at || s.end); } }
+        if (m.type === 'agentMessage' && m.text) { s.lastReply = clip(m.text, 4000); pushHistory(s, 'assistant', m.text, m.created_at || s.end); }
       }
-      if (!s.prompts && thread.first_user_message) prompt(s, thread.first_user_message);
+      if (!s.prompts && thread.first_user_message) { prompt(s, thread.first_user_message); pushHistory(s, 'user', thread.first_user_message, s.start); }
       s.lastStop = turn && turn.status === 'inProgress' ? '' : 'end_turn';
       s.completedAt = turn && turn.status === 'completed' ? codexTime(turn.completed_at) : 0;
     }

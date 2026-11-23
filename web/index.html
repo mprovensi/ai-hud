@@ -50,15 +50,37 @@
   </div>
   <p id="connectionInfo" class="connection-info" aria-live="polite">Aguardando a primeira atualização…</p>
   <div class="quotas">
-    <div class="panel" id="q-claude" role="button" tabindex="0" aria-label="Uso do Claude"></div>
-    <div class="panel" id="q-codex" role="button" tabindex="0" aria-label="Uso do Codex"></div>
-    <div class="panel" id="q-gemini" role="button" tabindex="0" aria-label="Uso do Gemini"></div>
+    <div class="panel" id="q-claude" role="button" tabindex="0" aria-label="Uso do Claude">
+      <div class="qhead row"><span class="dot c0"></span><span class="name">Claude</span><span class="grow"></span><span class="sk sk-pill" style="width:4em"></span><span class="chev">›</span></div>
+      <div class="gauge"><div class="row"><span class="lbl">5h</span><div class="track grow"><div class="sk" style="width:45%;height:100%"></div></div><span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div><div class="foot row"><span class="sk" style="width:4.5em;height:.85em"></span></div></div>
+      <div class="gauge"><div class="row"><span class="lbl">7d</span><div class="track grow"><div class="sk" style="width:65%;height:100%"></div></div><span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div><div class="foot row"><span class="sk" style="width:5.5em;height:.85em"></span></div></div>
+    </div>
+    <div class="panel" id="q-codex" role="button" tabindex="0" aria-label="Uso do Codex">
+      <div class="qhead row"><span class="dot c1"></span><span class="name">Codex</span><span class="grow"></span><span class="sk sk-pill" style="width:4em"></span><span class="chev">›</span></div>
+      <div class="gauge"><div class="row"><span class="lbl">5h</span><div class="track grow"><div class="sk" style="width:35%;height:100%"></div></div><span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div><div class="foot row"><span class="sk" style="width:4.5em;height:.85em"></span></div></div>
+      <div class="gauge"><div class="row"><span class="lbl">7d</span><div class="track grow"><div class="sk" style="width:55%;height:100%"></div></div><span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div><div class="foot row"><span class="sk" style="width:5.5em;height:.85em"></span></div></div>
+    </div>
+    <div class="panel" id="q-gemini" role="button" tabindex="0" aria-label="Uso do Gemini">
+      <div class="qhead row"><span class="dot c2"></span><span class="name">Gemini</span><span class="grow"></span><span class="sk sk-pill" style="width:4em"></span><span class="chev">›</span></div>
+      <div class="gauge"><div class="row"><span class="lbl">5h</span><div class="track grow"><div class="sk" style="width:30%;height:100%"></div></div><span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div><div class="foot row"><span class="sk" style="width:4.5em;height:.85em"></span></div></div>
+      <div class="gauge"><div class="row"><span class="lbl">7d</span><div class="track grow"><div class="sk" style="width:20%;height:100%"></div></div><span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div><div class="foot row"><span class="sk" style="width:5.5em;height:.85em"></span></div></div>
+    </div>
     <!-- Status do Ollama, visível também enquanto o PC está sem conexão. -->
     <!-- div (não button): o navegador centraliza na vertical o conteúdo de botões -->
-    <div class="panel olla" id="q-ollama" role="button" tabindex="0" aria-label="Estado do Ollama"><div class="qhead"><span class="name">Ollama</span></div><div class="empty">Aguardando informações…</div></div>
+    <div class="panel olla" id="q-ollama" role="button" tabindex="0" aria-label="Estado do Ollama">
+      <div class="qhead row"><span class="name ell grow">Ollama</span><span class="chev">›</span></div>
+      <div class="ostat"><span class="sk sk-line" style="width:72%"></span><span class="sk sk-line" style="width:54%"></span><span class="sk sk-line" style="width:84%;margin-top:10px"></span></div>
+    </div>
   </div>
-  <div class="gtitle" id="sessTitle">Sessões</div>
-  <div class="grid" id="sessList"></div>
+  <div class="gtitle" id="sessTitle">Últimas sessões</div>
+  <div class="grid" id="sessList" aria-busy="true">
+    <div class="card sk-card"><div class="in"><div class="row"><span class="sk" style="width:55%;height:1em"></span><span class="grow"></span><span class="sk sk-dot"></span></div><div class="sub row"><span class="sk sk-pill" style="width:45%"></span></div><span class="sk sk-line" style="width:85%;margin-top:10px"></span><span class="sk sk-line" style="width:65%"></span><div class="foot"><span class="sk" style="width:50%;height:.75em"></span></div></div></div>
+    <div class="card sk-card"><div class="in"><div class="row"><span class="sk" style="width:48%;height:1em"></span><span class="grow"></span><span class="sk sk-dot"></span></div><div class="sub row"><span class="sk sk-pill" style="width:40%"></span></div><span class="sk sk-line" style="width:78%;margin-top:10px"></span><span class="sk sk-line" style="width:60%"></span><div class="foot"><span class="sk" style="width:45%;height:.75em"></span></div></div></div>
+    <div class="card sk-card"><div class="in"><div class="row"><span class="sk" style="width:58%;height:1em"></span><span class="grow"></span><span class="sk sk-dot"></span></div><div class="sub row"><span class="sk sk-pill" style="width:48%"></span></div><span class="sk sk-line" style="width:82%;margin-top:10px"></span><span class="sk sk-line" style="width:55%"></span><div class="foot"><span class="sk" style="width:52%;height:.75em"></span></div></div></div>
+    <div class="card sk-card"><div class="in"><div class="row"><span class="sk" style="width:50%;height:1em"></span><span class="grow"></span><span class="sk sk-dot"></span></div><div class="sub row"><span class="sk sk-pill" style="width:42%"></span></div><span class="sk sk-line" style="width:80%;margin-top:10px"></span><span class="sk sk-line" style="width:62%"></span><div class="foot"><span class="sk" style="width:46%;height:.75em"></span></div></div></div>
+    <div class="card sk-card"><div class="in"><div class="row"><span class="sk" style="width:60%;height:1em"></span><span class="grow"></span><span class="sk sk-dot"></span></div><div class="sub row"><span class="sk sk-pill" style="width:38%"></span></div><span class="sk sk-line" style="width:76%;margin-top:10px"></span><span class="sk sk-line" style="width:58%"></span><div class="foot"><span class="sk" style="width:48%;height:.75em"></span></div></div></div>
+    <div class="card sk-card"><div class="in"><div class="row"><span class="sk" style="width:46%;height:1em"></span><span class="grow"></span><span class="sk sk-dot"></span></div><div class="sub row"><span class="sk sk-pill" style="width:44%"></span></div><span class="sk sk-line" style="width:84%;margin-top:10px"></span><span class="sk sk-line" style="width:52%"></span><div class="foot"><span class="sk" style="width:50%;height:.75em"></span></div></div></div>
+  </div>
 </div>
 <!-- Servidor fora do ar: cobre a página e tenta reconectar a cada 5 s -->
 <div id="offline"><div class="obox">
@@ -71,7 +93,7 @@
   <button class="btn" id="loginAgain" style="display:none">Entrar novamente</button>
 </div></div>
 <div id="backdrop"></div>
-<div id="overlay"><div id="overlayBody"></div></div>
+<div id="overlay" tabindex="-1"><div id="overlayBody"></div></div>
 <!-- O servidor acrescenta a versão por conteúdo também para o Safari 9, sem service worker. -->
 <script src="/app.js"></script>
 </body>

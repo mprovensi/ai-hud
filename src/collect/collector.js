@@ -13,22 +13,37 @@ const crypto = require('crypto');
 const CLOCK_KEYS = new Set(['now', 'at', 'errorAt', 'pace', 'burn']);
 const ignoreClock = (key, value) => (CLOCK_KEYS.has(key) ? undefined : value);
 
-function createCollector({ sources, build, intervalMs = 2000, idleMs = 60e3, now = () => Date.now() }) {
+function createCollector({ sources, build, buildLocal, intervalMs = 2000, idleMs = 60e3, now = () => Date.now() }) {
   // A versão muda a cada reinício (boot) e a cada mudança de conteúdo: um aparelho com a versão do
   // processo anterior recebe a resposta na hora
   const boot = crypto.randomBytes(3).toString('hex');
-  let count = 0, hash = '', at = 0, sessions = [], snapshot = null, version = `${boot}-0`, demand = 0, timer = null;
-  const waiters = new Set();
+  let count = 0, localCount = 0, hash = '', localHash = '', at = 0;
+  let sessions = [], snapshot = null, localSnapshot = null;
+  let version = `${boot}-0`, localVersion = `${boot}-L0`, demand = 0, timer = null;
+  const waiters = new Set(), localWaiters = new Set();
 
   function collect() {
     const t = now();
     sessions = sources.all();
-    snapshot = build(sessions, t);
+    if (buildLocal) {
+      localSnapshot = buildLocal(sessions, t);
+      snapshot = build(sessions, t, localSnapshot);
+      const lh = crypto.createHash('sha1').update(JSON.stringify(localSnapshot, ignoreClock)).digest('hex');
+      if (lh !== localHash) {
+        localHash = lh;
+        localVersion = `${boot}-L${++localCount}`;
+        for (const w of [...localWaiters]) w();
+      }
+    } else {
+      snapshot = build(sessions, t);
+      localSnapshot = snapshot;
+    }
     at = t;
     const h = crypto.createHash('sha1').update(JSON.stringify(snapshot, ignoreClock)).digest('hex');
     if (h !== hash) {
       hash = h;
       version = `${boot}-${++count}`;
+      if (!buildLocal) localVersion = version;
       for (const w of [...waiters]) w();
     }
   }
@@ -37,17 +52,20 @@ function createCollector({ sources, build, intervalMs = 2000, idleMs = 60e3, now
   function current(maxAgeMs = intervalMs) {
     demand = now();
     if (!snapshot || now() - at > maxAgeMs) collect();
-    return { sessions, snapshot, version };
+    return { sessions, snapshot, version, localSnapshot, localVersion };
   }
 
   // Resolve quando a versão for diferente de `since`, ou depois de timeoutMs
-  function waitChange(since, timeoutMs) {
+  function waitChange(since, timeoutMs, { local = false } = {}) {
     demand = now();
-    if (since !== version) return Promise.resolve();
+    const useLocal = local && !!buildLocal;
+    const cur = useLocal ? localVersion : version;
+    const pool = useLocal ? localWaiters : waiters;
+    if (since !== cur) return Promise.resolve();
     return new Promise((resolve) => {
-      const done = () => { clearTimeout(t); waiters.delete(done); resolve(); };
+      const done = () => { clearTimeout(t); pool.delete(done); resolve(); };
       const t = setTimeout(done, timeoutMs);
-      waiters.add(done);
+      pool.add(done);
     });
   }
 
@@ -58,10 +76,10 @@ function createCollector({ sources, build, intervalMs = 2000, idleMs = 60e3, now
     poke() { if (snapshot) collect(); },
     find(predicate) { return current().sessions.find(predicate); },
     start() {
-      timer = setInterval(() => { if (waiters.size || now() - demand < idleMs) collect(); }, intervalMs);
+      timer = setInterval(() => { if (waiters.size || localWaiters.size || now() - demand < idleMs) collect(); }, intervalMs);
       return timer;
     },
-    stop() { clearInterval(timer); for (const w of [...waiters]) w(); },
+    stop() { clearInterval(timer); for (const w of [...waiters]) w(); for (const w of [...localWaiters]) w(); },
   };
 }
 

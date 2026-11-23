@@ -44,10 +44,17 @@
     return '<img class="brand" src="/brand-' + slug + '.svg" alt="">';
   }
 
+  function gaugeSkeleton(label) {
+    return '<div class="gauge" aria-hidden="true"><div class="row"><span class="lbl">' + label + '</span>' +
+      '<div class="track grow"><div class="sk" style="width:42%;height:100%"></div></div>' +
+      '<span class="pct"><span class="sk" style="width:1.6em;height:.85em"></span></span></div>' +
+      '<div class="foot row"><span class="sk" style="width:4.8em;height:.85em"></span></div></div>';
+  }
+
   function quotaPanel(id, name, idx, q, now, used) {
     var html = '<div class="qhead row"' + (q && q.plan ? ' title="Plano ' + esc(q.plan) + '"' : '') + '>' + brandIcon(idx) + '<span class="name">' + name + '</span>' +
       '<span class="grow"></span><span class="tokens" title="Tokens usados hoje">' + k(used) + ' <small>hoje</small></span><span class="chev">›</span></div>';
-    if (!q) html += '<div class="empty">lendo…</div>';
+    if (!q) html += gaugeSkeleton('5h') + gaugeSkeleton('7d');
     else {
       var w = q.windows || {}, gauges = '';
       if (w.five_hour) gauges += gauge('5h', 'Janela de 5 horas', w.five_hour, now);

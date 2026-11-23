@@ -72,7 +72,15 @@ function quotasWithPace(quotas, history, now) {
     if (!q) { out[name] = null; continue; }
     const windows = {};
     for (const [key, w] of Object.entries(q.windows || {})) windows[key] = w && { ...w, pace: pace(history, name, key, w, now) };
-    out[name] = { ...q, windows };
+    const next = { ...q, windows };
+    if (Array.isArray(q.extraGroups)) {
+      next.extraGroups = q.extraGroups.map((g, idx) => {
+        const gw = {};
+        for (const [key, w] of Object.entries((g && g.windows) || {})) gw[key] = w && { ...w, pace: pace(history, `${name}.extra.${idx}`, key, w, now) };
+        return { ...g, windows: gw };
+      });
+    }
+    out[name] = next;
   }
   return out;
 }

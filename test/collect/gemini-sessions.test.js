@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { geminiSessions, geminiCliSessions, antigravitySessions } = require('../../src/collect/sources/gemini');
 const { sqlite } = require('../../src/collect/sources/common');
+const { buildSessionDetail } = require('../../src/views/session-detail');
 
 function tmpRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'hud-gemini-'));
@@ -38,7 +39,10 @@ test('Gemini CLI lê sessões .jsonl com $set, mensagens incrementais, tokens, t
             id: 'g1', type: 'gemini', model: 'gemini-2.5-pro', timestamp: t2,
             content: [{ text: 'Rodei os testes.' }],
             tokens: { input: 1000, cached: 600, output: 200, thoughts: 50, total: 1250 },
-            toolCalls: [{ id: 'tc1', name: 'run_shell_command', status: 'error', args: { command: 'npm test' }, resultDisplay: 'not ok 1 - falhou\n# fail 1' }],
+            toolCalls: [
+              { id: 'tc0', name: 'replace', status: 'success', args: { file_path: 'D:\\Projetos\\meu-app\\src\\api.js' } },
+              { id: 'tc1', name: 'run_shell_command', status: 'error', args: { command: 'npm test' }, resultDisplay: 'not ok 1 - falhou\n# fail 1' },
+            ],
           },
         ],
       },
@@ -80,8 +84,9 @@ test('Gemini CLI lê sessões .jsonl com $set, mensagens incrementais, tokens, t
   assert.equal(real.events.length, 2);
   assert.equal(real.events[0].fresh, 650);  // 400 + 250
   assert.equal(real.events[1].fresh, 900);  // 500 + 400
-  assert.equal(real.toolCalls, 1);
+  assert.equal(real.toolCalls, 2);
   assert.equal(real.testRun.ok, false);
+  assert.deepEqual(real.files, { 'src/api.js': 1 });
   assert.deepEqual([...real.models], ['gemini-2.5-pro']);
 
   const legacy = list.find((s) => s.id === 'session-2026-11-18T09-00-legado');
@@ -106,7 +111,11 @@ test('Antigravity lê transcript.jsonl, enriquece com conversation_summaries.db,
     JSON.stringify({
       step_index: 1, type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-11-23T13:00:05Z',
       input_tokens: 10000, cache_read_tokens: 0, output_tokens: 200,
-      tool_calls: [{ name: 'run_command', args: { CommandLine: '"npm test"' } }],
+      tool_calls: [
+        { name: 'edit_file', args: { Path: '"d:\\Projetos\\ai-hud\\web\\js\\app.js"' } },
+        { name: 'write_file', args: { Path: '"C:\\Users\\x\\.gemini\\antigravity\\brain\\conv-parent-1\\plan.md"', ArtifactMetadata: '{}' } },
+        { name: 'run_command', args: { CommandLine: '"npm test"' } },
+      ],
     }),
     JSON.stringify({
       step_index: 2, type: 'GENERIC', status: 'DONE', created_at: '2026-11-23T13:00:10Z',
@@ -171,6 +180,8 @@ test('Antigravity lê transcript.jsonl, enriquece com conversation_summaries.db,
     assert.equal(parent.title, 'Integrar Gemini no AI HUD');
     assert.equal(parent.subagents, 1);
     assert.equal(parent.subTokens, 650); // 500 + 150
+    const detail = buildSessionDetail(parent, Date.parse('2026-11-23T13:01:00Z'), () => ({}));
+    assert.deepEqual(detail.files, [['web/js/app.js', 1]]);
   }
 
   const legacy = all.find((s) => s.id === 'legacy-cli-1');

@@ -46,6 +46,21 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
           pro: { used: 42, resetsAt: now + 6 * 3600e3, modelId: 'gemini-2.5-pro', pace: { expected: 75, projected: 56, runsOutIn: null, basis: 'average' } },
           flash: { used: 12, resetsAt: now + 6 * 3600e3, modelId: 'gemini-2.5-flash', pace: { expected: 75, projected: 16, runsOutIn: null, basis: 'average' } },
         },
+        extraGroups: [
+          {
+            name: 'Claude and GPT models',
+            windows: {
+              five_hour: { used: 18, resetsAt: now + 3 * 3600e3, pace: { expected: 40, projected: 45, runsOutIn: null, basis: 'average' } },
+              seven_day: { used: 5, resetsAt: now + 5 * 86400e3, pace: { expected: 29, projected: 17, runsOutIn: null, basis: 'average' } },
+            },
+          },
+          {
+            name: 'Gemini 4 Argon',
+            windows: {
+              seven_day: { used: 30, resetsAt: now + 5 * 86400e3, pace: { expected: 29, projected: 100, runsOutIn: null, basis: 'average' } },
+            },
+          },
+        ],
       },
     },
     burn: {
@@ -56,7 +71,7 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
     hours: [{ t: now - 3600e3, 'Claude Code': 1000, Codex: 2000, Gemini: 158000 }],
     days: [{ t: now - 86400e3, 'Claude Code': 1000, Codex: 2000, Gemini: 158000 }],
     active: [{
-      tool: 'Gemini', id: 'ag-1', where: 'antigravity', project: 'ai-hud', title: 'Adicionar Gemini',
+      tool: 'Gemini', id: '00000000-0000-4000-8000-000000000001', where: 'antigravity', project: 'ai-hud', title: 'Adicionar Gemini',
       start: now - 600e3, end: now - 10e3, state: 'working', lastTool: 'edit_file',
       tokens: 158000, prompts: 2, lastPrompt: 'adicione gemini', lastReply: '', context: 150000, contextWindow: 1e6,
     }],
@@ -73,6 +88,7 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   assert.match(nodes['q-gemini'].innerHTML, /42%/);
   assert.match(nodes['q-gemini'].innerHTML, /Fla/);
   assert.match(nodes['q-gemini'].innerHTML, /brand-gemini\.svg/);
+  assert.doesNotMatch(nodes['q-gemini'].innerHTML, /Gemini 4 Argon/);
 
   // Cartão de sessão mostra tokens (não só "pedidos")
   assert.match(nodes.sessList.innerHTML, /158k tokens/);
@@ -86,6 +102,9 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   goHash('#uso=gemini');
   assert.match(nodes.overlayBody.innerHTML, /Cota diária · Pro/);
   assert.match(nodes.overlayBody.innerHTML, /gemini-2\.5-pro/);
+  assert.match(nodes.overlayBody.innerHTML, /Outras cotas do Antigravity/);
+  assert.match(nodes.overlayBody.innerHTML, /Claude e GPT \(Antigravity\)/);
+  assert.match(nodes.overlayBody.innerHTML, /Gemini 4 Argon/);
   assert.match(nodes.overlayBody.innerHTML, /Janela de 24h · uso e projeção/);
   assert.match(nodes.overlayBody.innerHTML, /158k/);
   assert.match(nodes.overlayBody.innerHTML, /Sessões ativas · 1/);
@@ -97,23 +116,47 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   assert.match(nodes.overlayBody.innerHTML, /158k/);
   assert.match(nodes.overlayBody.innerHTML, /#7d9bf0/);
 
-  // Gaveta #s=ag-1 mostra origem (Antigravity) e não exibe caixa de resposta
+  // Gaveta #s=<uuid> mostra origem (Antigravity), botão Abrir no PC e caixa de resposta
   const reqBefore = requests.length;
-  goHash('#s=ag-1');
+  goHash('#s=00000000-0000-4000-8000-000000000001');
   assert.equal(requests.length, reqBefore + 1);
   Object.assign(requests[reqBefore], {
     readyState: 4, status: 200,
     responseText: JSON.stringify({
-      tool: 'Gemini', id: 'ag-1', where: 'antigravity', project: 'ai-hud', title: 'Adicionar Gemini',
+      tool: 'Gemini', id: '00000000-0000-4000-8000-000000000001', key: '00000000-0000-4000-8000-000000000001',
+      where: 'antigravity', project: 'ai-hud', title: 'Adicionar Gemini',
       cwd: 'd:/Projetos/ai-hud', models: ['Gemini 3 Pro'], start: now - 600e3, end: now - 10e3,
       state: 'waiting', now, input: 145000, output: 13000, cacheRead: 1600000, cacheWrite: 0,
       context: 150000, contextWindow: 1e6, prompts: 2, toolCalls: 12, lastTool: 'edit_file',
-      tools: [['edit_file', 5]], lastPrompt: 'adicione gemini', lastReply: 'Pronto!', lastReplyAt: now - 10e3,
+      tools: [['edit_file', 5]], files: [['web/js/drawers/detail.js', 3], ['src/views/session-detail.js', 1]],
+      lastPrompt: 'adicione gemini', lastReply: 'Pronto!', lastReplyAt: now - 10e3,
       subagents: 0, subTokens: 0, turns: [{ t: now - 20e3, fresh: 5000, cacheRead: 100000 }], history: null,
     }),
   });
   requests[reqBefore].onreadystatechange();
   assert.match(nodes.overlayBody.innerHTML, /Gemini · Antigravity/);
   assert.match(nodes.overlayBody.innerHTML, /<span>Origem<\/span><span>Antigravity<\/span>/);
-  assert.doesNotMatch(nodes.overlayBody.innerHTML, /id="replyText"/);
+  assert.match(nodes.overlayBody.innerHTML, /Arquivos modificados · 2/);
+  assert.match(nodes.overlayBody.innerHTML, /web\/js\/drawers\/detail\.js/);
+  assert.match(nodes.overlayBody.innerHTML, /3×/);
+  assert.match(nodes.overlayBody.innerHTML, /id="focusPc"/);
+  assert.match(nodes.overlayBody.innerHTML, /id="replyText"/);
+
+  // Sessão de máquina Linux headless (canFocus: false) oculta o botão Abrir no PC
+  const reqLinux = requests.length;
+  goHash('#s=00000000-0000-4000-8000-000000000002');
+  Object.assign(requests[reqLinux], {
+    readyState: 4, status: 200,
+    responseText: JSON.stringify({
+      tool: 'Gemini', id: '00000000-0000-4000-8000-000000000002', key: '00000000-0000-4000-8000-000000000002',
+      where: 'gemini-cli', canFocus: false, project: 'vps-app', title: 'Sessão na VPS',
+      cwd: '/home/ubuntu/vps-app', models: ['gemini-2.5-pro'], start: now - 600e3, end: now - 10e3,
+      state: 'waiting', now, input: 1000, output: 200, cacheRead: 0, cacheWrite: 0,
+      context: 1200, contextWindow: 1e6, prompts: 1, toolCalls: 0, lastTool: '',
+      tools: [], files: [], lastPrompt: 'oi', lastReply: 'olá', lastReplyAt: now - 10e3,
+      subagents: 0, subTokens: 0, turns: [], history: null,
+    }),
+  });
+  requests[reqLinux].onreadystatechange();
+  assert.doesNotMatch(nodes.overlayBody.innerHTML, /id="focusPc"/);
 });

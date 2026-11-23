@@ -44,24 +44,35 @@ function findAgy() {
 
 const usedPct = (rem) => Math.round((1 - Math.max(0, Math.min(1, rem))) * 1000) / 10;
 
-// Converte a saída JSON de `agy --print /usage --output-format json` em { plan, windows }
-function parseAgyUsage(payload) {
-  if (!payload || typeof payload !== 'object') throw new Error('resposta inválida do Antigravity CLI');
-  if (payload.status && payload.status !== 'SUCCESS') throw new Error(payload.error || 'erro ao ler cota do Antigravity');
-  const groups = payload.command && payload.command.data && payload.command.data.groups;
-  if (!Array.isArray(groups) || !groups.length) return { plan: 'Antigravity', windows: {} };
-  const group = groups.find((g) => /^gemini models$/i.test(String(g.name || '')))
-    || groups.find((g) => /gemini/i.test(String(g.name || '')) && Array.isArray(g.buckets) && g.buckets.some((b) => b.window === '5h'))
-    || groups[0];
-  const buckets = Array.isArray(group.buckets) ? group.buckets : [];
+function bucketsToWindows(buckets) {
   const windows = {};
-  for (const b of buckets) {
+  for (const b of Array.isArray(buckets) ? buckets : []) {
     if (!b || typeof b.remaining_fraction !== 'number') continue;
     const w = { used: usedPct(b.remaining_fraction), resetsAt: b.reset_time ? Date.parse(b.reset_time) || 0 : 0 };
     if (b.window === '5h' || /5h/i.test(String(b.id || ''))) windows.five_hour = w;
     else if (b.window === 'weekly' || /weekly/i.test(String(b.id || ''))) windows.seven_day = w;
   }
-  return { plan: 'Antigravity', windows };
+  return windows;
+}
+
+// Converte a saída JSON de `agy --print /usage --output-format json` em { plan, windows, extraGroups }
+function parseAgyUsage(payload) {
+  if (!payload || typeof payload !== 'object') throw new Error('resposta inválida do Antigravity CLI');
+  if (payload.status && payload.status !== 'SUCCESS') throw new Error(payload.error || 'erro ao ler cota do Antigravity');
+  const groups = payload.command && payload.command.data && payload.command.data.groups;
+  if (!Array.isArray(groups) || !groups.length) return { plan: 'Antigravity', windows: {} };
+  const primary = groups.find((g) => /^gemini models$/i.test(String(g.name || '')))
+    || groups.find((g) => /gemini/i.test(String(g.name || '')) && Array.isArray(g.buckets) && g.buckets.some((b) => b.window === '5h'))
+    || groups[0];
+  const windows = bucketsToWindows(primary.buckets);
+  const extraGroups = [];
+  for (const g of groups) {
+    if (!g || g === primary) continue;
+    const gw = bucketsToWindows(g.buckets);
+    if (!Object.keys(gw).length) continue;
+    extraGroups.push({ name: String(g.name || 'Outros modelos'), windows: gw });
+  }
+  return extraGroups.length ? { plan: 'Antigravity', windows, extraGroups } : { plan: 'Antigravity', windows };
 }
 
 function runAgyUsage(exe, timeoutMs = 30000) {

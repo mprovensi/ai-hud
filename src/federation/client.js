@@ -1,13 +1,15 @@
-// Chamada HTTP a outro PC do HUD, pela mesma API pública que os aparelhos usam (token na URL).
+// Chamada HTTP/HTTPS a outro PC do HUD, pela mesma API pública que os aparelhos usam (token na URL).
 // Resolve { status, json, text }; rejeita se o PC não responder.
 const http = require('http');
+const https = require('https');
 
 function call(peer, method, route, body, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const url = new URL(route, peer.url);
     url.searchParams.set('t', peer.token);
     const data = body ? JSON.stringify(body) : '';
-    const req = http.request(url, { method, timeout: timeoutMs,
+    const lib = url.protocol === 'https:' ? https : http;
+    const req = lib.request(url, { method, timeout: timeoutMs,
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));

@@ -3,7 +3,7 @@
   body { font-size: 22px; padding: 0; }
   body.read-large { font-size: 25px; }
   body.read-larger { font-size: 28px; }
-  .rform textarea { font-size: 1em; }
+  .rform textarea, .qother { font-size: 1em; }
   .app { padding: 10px 14px 4px; }
   .top { margin-bottom: 6px; }
   .top .status, .btn { font-size: .8em; }
@@ -35,7 +35,7 @@
   .gauge .pct { width: 2.25em; font-size: 1.18em; }
   .track { height: 10px; margin: 2px 0; }
   .gauge .track { height: 15px; border-radius: 8px; margin: 0 0 0 6px; }
-  .gauge .track .fill, .gauge .track .fill:after { border-radius: 7px; }
+  .gauge .track .fill { border-radius: 7px; }
   .track .mark { height: 18px; }
   .gauge .track .mark { top: -4px; height: 23px; width: 3px; }
   .gauge .foot { padding-left: 1.85em; font-size: .74em; margin-top: 4px; }
@@ -56,7 +56,41 @@
   .t3 .in { background-image: linear-gradient(150deg, rgba(179, 157, 219, .24), rgba(179, 157, 219, .05) 70%, rgba(179, 157, 219, 0)); }
   .burnbox { height: 260px; }
   .burnbox text { font-size: 15px; }
-  #overlay { width: 62%; min-width: 560px; padding: 16px 20px 28px; }
+  #overlay { width: 68%; min-width: 560px; padding: 12px 16px 14px; }
   #overlay .stat { width: 50%; }
-  #overlay .dtitle { font-size: 1.3em; }
+  #overlay .dtitle { font-size: 1.15em; }
+  #overlay .dtop { margin-bottom: 4px; }
+  #overlay .dtop .dsub { font-size: .78em; margin: 1px 0 0; }
+  #overlay .dstate { font-size: .76em; margin-bottom: 6px; }
+  #overlay .pcmini { font-size: .86em; padding: .36em 1.25em; min-width: 10.5em; min-height: 44px; text-align: center; }
+  #overlay .dtabs { margin-bottom: 8px; padding: 2px; }
+  #overlay .dtab { font-size: .78em; padding: .3em .5em; min-height: 36px; }
+  #overlay .convpanel { padding: 8px 12px; margin-bottom: 8px; }
+  #overlay .chead { margin-bottom: 5px; }
+  /* iPad mini (768px): cabe cabeçalho + abas + conversa + atalhos + responder sem rolar a gaveta */
+  #overlay .convo { max-height: 38vh; }
+  #overlay .convpanel.has-q .convo { max-height: 23vh; }
+  #overlay .msg { font-size: .82em; line-height: 1.42; padding: 7px 10px; margin-bottom: 7px; }
+  #overlay .md-p { margin-bottom: 6px; }
+  #overlay .md-h { margin: 7px 0 4px; }
+  #overlay .md-ul, #overlay .md-ol { margin-bottom: 6px; }
+  #overlay .md-pre { font-size: .78em; padding: 7px 9px; margin: 5px 0 6px; }
+  #overlay .mtools { font-size: .68em; margin: 1px 0 5px 2px; }
+  #overlay .qbox { padding: 9px 12px; margin-bottom: 8px; }
+  #overlay .qprompt { font-size: .84em; }
+  #overlay .qhint { font-size: .68em; margin-bottom: 6px; }
+  #overlay .qopt { padding: 7px 10px; margin-bottom: 5px; }
+  #overlay .qopt-lbl { font-size: .82em; }
+  #overlay .qopt-desc { font-size: .72em; }
+  #overlay .qother { font-size: .8em; padding: 6px 9px; }
+  #overlay .qactions { margin-top: 8px; }
+  #overlay .qactions .pbtn { font-size: .82em; padding: .42em; }
+  #overlay .reply { padding: 8px 12px; margin-bottom: 0; }
+  #overlay .rhead { margin-bottom: 5px; }
+  #overlay .schips { margin-bottom: 6px; }
+  #overlay .schip { font-size: .74em; padding: .22em .68em; min-height: 36px; }
+  #overlay .rform textarea { font-size: .84em; padding: 6px 9px; line-height: 1.3; }
+  #overlay .send, #overlay .mic { font-size: .84em; padding: .4em .85em; }
+  body.read-large #overlay .rform textarea, body.read-larger #overlay .rform textarea,
+  body.read-large #overlay .qother, body.read-larger #overlay .qother { font-size: 1em; }
 }

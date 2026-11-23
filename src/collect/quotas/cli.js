@@ -95,6 +95,6 @@ async function codexQuota() {
     resetCredits: resets ? resets.availableCount : 0 };
 }
 
-const { geminiQuota } = require('./gemini');
+const { geminiQuota, findAgy } = require('./gemini');
 
-module.exports = { claudeQuota, codexQuota, geminiQuota, CODEX };
+module.exports = { claudeQuota, codexQuota, geminiQuota, findAgy, CODEX };

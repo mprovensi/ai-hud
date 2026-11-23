@@ -45,10 +45,10 @@
     var h = Math.floor(m / 60);
     return h < 24 ? h + 'h' + pad(m % 60) : Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
   }
-  // Cores de estado: nenhuma é cor de IA (COLORS). O azul do normal é menos saturado que o do Antigravity
-  var STATUS = { ok: '#5d86bd', warn: '#ecd13a', crit: '#e82e3c' };
-  // Azul até metade da cota; de 50% em diante vai virando vermelho aos poucos, cheio a partir de 80%
-  var LEVEL_STOPS = [[0, STATUS.ok], [50, STATUS.ok], [80, STATUS.crit]];
+  // Cores de estado: nenhuma é cor de IA (COLORS). Transição suave verde → âmbar → coral, sólida (sem degradê)
+  var STATUS = { ok: '#5ea87e', warn: '#d9a441', crit: '#d95b5b' };
+  // Verde até 30%, já amarelado em 50% (âmbar cheio em 55%) e chega ao coral cheio em 80%
+  var LEVEL_STOPS = [[0, STATUS.ok], [30, STATUS.ok], [55, STATUS.warn], [80, STATUS.crit], [100, STATUS.crit]];
   function levelColor(p) {
     var s = LEVEL_STOPS, i = 1;
     p = Math.max(0, Math.min(100, p || 0));
@@ -61,11 +61,8 @@
     }
     return out;
   }
-  // Barra que enche como líquido: transparente no começo e com a cor do nível na ponta
-  function levelFill(p) {
-    var n = parseInt(levelColor(p).slice(1), 16), rgb = (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
-    return 'linear-gradient(90deg, rgba(' + rgb + ',0.08), rgba(' + rgb + ',0.55) 55%, rgb(' + rgb + '))';
-  }
+  // Preenchimento sólido chapado (sem degradê)
+  function levelFill(p) { return levelColor(p); }
   // Preferências do aparelho; localStorage pode falhar (aba privada no iOS)
   function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) {} }
   // Só classes e ES5: funciona também no Safari 9, sem service worker ou APIs modernas.

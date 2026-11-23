@@ -4,8 +4,9 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { readLines, parse, cached, emptySession, clip, prompt, toolCall, touch, dbSignature, sqlite } = require('../common');
+const { readLines, parse, cached, emptySession, touchFile, pushHistory, clip, prompt, toolCall, touch, dbSignature, sqlite } = require('../common');
 const { isTestCommand, testOutcome } = require('../../../core/tests');
+const { normalizeQuestions } = require('../../../core/questions');
 
 const GEMINI_HOME = process.env.GEMINI_HOME || path.join(os.homedir(), '.gemini');
 const day = (ts) => new Date(ts).toLocaleDateString('sv-SE'); // YYYY-MM-DD no fuso local
@@ -106,6 +107,7 @@ function parseTranscript(file, convId) {
   const s = emptySession('Gemini', convId, file);
   s.where = 'antigravity';
   let pendingTestCmd = null;
+  let turnTools = [];
   for (const line of readLines(file)) {
     const r = parse(line);
     if (!r || typeof r !== 'object') continue;
@@ -118,6 +120,9 @@ function parseTranscript(file, convId) {
       const text = extractUserText(r.content);
       if (text) {
         prompt(s, text);
+        pushHistory(s, 'user', text, ts);
+        turnTools = [];
+        s.pendingQuestion = null;
         s.lastStop = '';
       }
       continue;
@@ -136,18 +141,31 @@ function parseTranscript(file, convId) {
       if (fresh > 0 || cacheRead > 0) s.events.push({ ts, fresh, cacheRead });
 
       const calls = Array.isArray(r.tool_calls) ? r.tool_calls : [];
+      s.pendingQuestion = null;
       for (const tc of calls) {
         if (!tc || !tc.name) continue;
         toolCall(s, tc.name);
+        turnTools.push(tc.name);
         if (tc.name === 'run_command' && tc.args && tc.args.CommandLine) {
           const cmd = unquoteArg(tc.args.CommandLine);
           if (isTestCommand(cmd)) pendingTestCmd = cmd;
+        }
+        if (/^(write_file|edit_file|multi_edit_file|replace_file_content|multi_replace_file_content)$/i.test(tc.name) && tc.args && !tc.args.ArtifactMetadata) {
+          const target = unquoteArg(tc.args.Path || tc.args.TargetFile || tc.args.file_path || tc.args.path || '');
+          if (target && !/[\\/]\.gemini[\\/]antigravity[\\/]brain[\\/]/i.test(target)) touchFile(s, target);
+        }
+        if (tc.name === 'ask_question' && tc.args) {
+          const rawQ = typeof tc.args.questions === 'string' ? parse(tc.args.questions) : tc.args.questions;
+          const qs = normalizeQuestions({ questions: rawQ });
+          if (qs.length) s.pendingQuestion = qs;
         }
       }
       const replyText = typeof r.content === 'string' ? r.content.trim() : '';
       if (replyText) {
         s.lastReply = clip(replyText, 4000);
         s.lastReplyAt = Date.parse(ts) || 0;
+        pushHistory(s, 'assistant', replyText, ts, turnTools);
+        turnTools = [];
       }
       if (!calls.length && r.status === 'DONE') {
         s.lastStop = 'end_turn';
@@ -158,13 +176,16 @@ function parseTranscript(file, convId) {
       continue;
     }
 
-    if (r.type === 'GENERIC' && pendingTestCmd && r.status && r.status !== 'RUNNING') {
-      s.testRun = {
-        command: clip(pendingTestCmd, 200),
-        at: Date.parse(ts) || 0,
-        ...testOutcome(r.content || '', r.status === 'ERROR'),
-      };
-      pendingTestCmd = null;
+    if (r.type === 'GENERIC') {
+      if (r.status && r.status !== 'RUNNING') s.pendingQuestion = null;
+      if (pendingTestCmd && r.status && r.status !== 'RUNNING') {
+        s.testRun = {
+          command: clip(pendingTestCmd, 200),
+          at: Date.parse(ts) || 0,
+          ...testOutcome(r.content || '', r.status === 'ERROR'),
+        };
+        pendingTestCmd = null;
+      }
     }
   }
   if (s.context > 0) s.contextWindow = contextWindowFor(s.models, s.context);
@@ -172,7 +193,7 @@ function parseTranscript(file, convId) {
 }
 
 function cloneSession(s) {
-  return { ...s, models: new Set(s.models), tools: { ...s.tools }, events: s.events };
+  return { ...s, models: new Set(s.models), tools: { ...s.tools }, files: { ...s.files }, events: s.events };
 }
 
 function antigravitySessions(rootOrHome = GEMINI_HOME) {

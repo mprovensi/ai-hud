@@ -1,15 +1,17 @@
-# Serviço do usuário (systemd) para rodar o AI HUD no Linux e reiniciar se cair.
-# Instalação (ajuste WorkingDirectory se o projeto estiver em outra pasta):
-#   mkdir -p ~/.config/systemd/user && cp linux/ai-hud.service ~/.config/systemd/user/
+# Serviço do usuário (systemd) para rodar o AI HUD no Linux (ex.: VPS Oracle) e reiniciar se cair.
+# Instalação (ajuste WorkingDirectory e TZ se necessário):
+#   mkdir -p ~/.config/systemd/user && cp platform/linux/ai-hud.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload && systemctl --user enable --now ai-hud
-#   loginctl enable-linger "$USER"     # opcional: roda mesmo sem sessão aberta
+#   loginctl enable-linger "$USER"     # mantém rodando 24/7 mesmo sem SSH aberto
 # Log: journalctl --user -u ai-hud -f
 [Unit]
-Description=AI HUD (sessões e cotas do Claude Code e Codex)
+Description=AI HUD (sessões e cotas de Claude Code, Codex, Gemini e Ollama)
+Wants=network-online.target
 After=network-online.target
 
 [Service]
 WorkingDirectory=%h/ai-hud
+Environment=TZ=America/Sao_Paulo
 ExecStart=/usr/bin/env node server.js
 Restart=on-failure
 RestartSec=5

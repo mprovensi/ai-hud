@@ -28,6 +28,11 @@
 
   function usageRow(label, value) { return '<div class="dl"><span>' + esc(label) + '</span><span>' + value + '</span></div>'; }
 
+  function extraGroupLabel(name) {
+    if (/^claude and gpt models$/i.test(String(name || ''))) return 'Claude e GPT (Antigravity)';
+    return String(name || 'Outros modelos');
+  }
+
   // Uma janela de cota: %, barra com a marca do ritmo uniforme, uma frase com o que importa e os detalhes
   function usageWindow(title, w, now) {
     if (!w) return '';
@@ -68,6 +73,16 @@
       usageWindow('Cota diária · Flash' + (w.flash && w.flash.modelId ? ' (' + esc(w.flash.modelId) + ')' : ''), w.flash, now) +
       usageWindow('Cota diária' + (w.daily && w.daily.modelId ? ' (' + esc(w.daily.modelId) + ')' : ''), w.daily, now);
     if (q && q.resetCredits) html += '<div class="panel">' + usageRow('Resets de cota disponíveis', q.resetCredits) + '</div>';
+    if (q && q.extraGroups && q.extraGroups.length) {
+      var egHtml = '';
+      for (i = 0; i < q.extraGroups.length; i++) {
+        var g = q.extraGroups[i], gw = g && g.windows || {}, gg = '';
+        if (gw.five_hour) gg += gauge('5h', 'Janela de 5 horas', gw.five_hour, now);
+        if (gw.seven_day) gg += gauge('7d', 'Semana', gw.seven_day, now);
+        if (gg) egHtml += '<div class="egroup"><div class="ename">' + esc(extraGroupLabel(g.name)) + '</div>' + gg + '</div>';
+      }
+      if (egHtml) html += '<div class="panel"><h2>Outras cotas do Antigravity</h2>' + egHtml + '</div>';
+    }
     // Janela principal ao longo do tempo, só desta IA
     if (s.burn && s.burn[usageName]) {
       var burnTitle = s.burn[usageName].window && s.burn[usageName].window !== 'five_hour' ? 'Janela de 24h · uso e projeção' : 'Janela de 5h · uso e projeção';

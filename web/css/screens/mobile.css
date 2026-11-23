@@ -12,6 +12,23 @@
   .reading-options .btn { margin: 4px 2px; padding-left: .5em; padding-right: .5em; }
   body.read-large .rform textarea, body.read-larger .rform textarea { font-size: 1em; }
   .stat { width: 50%; }
+  /* Gaveta de sessão no celular: conversa mais compacta para manter atalhos e Responder visíveis */
+  #overlay { padding: 10px 12px 14px; }
+  #overlay .dtop { margin-bottom: 4px; }
+  #overlay .dtitle { font-size: 1.2em; }
+  #overlay .dtop .dsub { font-size: .82em; margin: 1px 0 0; }
+  #overlay .dstate { font-size: .8em; margin-bottom: 6px; }
+  #overlay .dtabs { margin-bottom: 8px; }
+  #overlay .dtab { min-height: 36px; padding: .35em .5em; font-size: .84em; }
+  #overlay .convpanel { padding: 8px 10px; margin-bottom: 8px; }
+  #overlay .chead { margin-bottom: 5px; }
+  #overlay .convo { max-height: 34vh; }
+  #overlay .convpanel.has-q .convo { max-height: 20vh; }
+  #overlay .msg { font-size: .88em; padding: 7px 10px; margin-bottom: 7px; }
+  #overlay .reply { padding: 8px 10px; margin-bottom: 0; }
+  #overlay .rhead { margin-bottom: 5px; }
+  #overlay .schips { margin-bottom: 5px; }
+  #overlay .rform textarea { padding: 6px 9px; }
 }
 @media (max-width: 420px) {
   /* Celular estreito (~360px): do "ao vivo" fica só a bolinha */
@@ -22,5 +39,5 @@
 body.read-large .dtitle, body.read-larger .dtitle { white-space: normal; word-wrap: break-word; }
 @media (prefers-reduced-motion: reduce) {
   #overlay { -webkit-transition: none; transition: none; }
-  .ping .in, .pulse, .mic.on { -webkit-animation: none; animation: none; }
+  .ping .in, .pulse, .mic.on, .sk { -webkit-animation: none; animation: none; }
 }

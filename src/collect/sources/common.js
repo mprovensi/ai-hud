@@ -38,7 +38,32 @@ function cached(file, parser) {
 function emptySession(tool, id, file) {
   return { tool, id, file, cwd: '', start: null, end: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
     models: new Set(), subagent: false, context: 0, contextWindow: 0, lastStop: '', events: [],
-    title: '', prompts: 0, firstPrompt: '', lastPrompt: '', lastReply: '', toolCalls: 0, lastTool: '', tools: {} };
+    title: '', prompts: 0, firstPrompt: '', lastPrompt: '', lastReply: '', toolCalls: 0, lastTool: '', tools: {},
+    files: {}, history: [], pendingQuestion: null };
+}
+
+// Registra arquivo modificado na sessão (relativo ao cwd quando possível; mais recente por último)
+function touchFile(s, rawPath) {
+  let p = String(rawPath || '').trim().replace(/^["']|["']$/g, '').replace(/\\/g, '/');
+  if (!p) return;
+  const cwd = String(s.cwd || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (cwd && p.toLowerCase().startsWith(cwd.toLowerCase() + '/')) p = p.slice(cwd.length + 1);
+  p = p.replace(/^\.\//, '');
+  if (!p) return;
+  const count = (s.files[p] || 0) + 1;
+  delete s.files[p]; // mantém ordem de modificação mais recente
+  s.files[p] = count;
+}
+
+// Registra uma mensagem na linha do tempo da sessão (mantém as últimas 24 para o detalhe)
+function pushHistory(s, role, content, ts, tools) {
+  const text = String(content || '').trim();
+  if (!text) return;
+  const at = typeof ts === 'number' ? ts : Date.parse(ts) || 0;
+  const msg = { role, content: cut(text, 4000), at };
+  if (Array.isArray(tools) && tools.length) msg.tools = tools.slice(0, 6);
+  s.history.push(msg);
+  if (s.history.length > 24) s.history.splice(0, s.history.length - 24);
 }
 
 // Corta textos longos com reticências; clip também tira espaços das pontas
@@ -83,4 +108,4 @@ function dbSignature(file) {
 let sqlite = null;
 try { sqlite = require('node:sqlite'); } catch {} // Node 22.5+; sem ele, as fontes em SQLite ficam vazias
 
-module.exports = { walk, readLines, parse, cached, emptySession, clip, cut, prompt, toolCall, touch, toMs, dbSignature, sqlite };
+module.exports = { walk, readLines, parse, cached, emptySession, touchFile, pushHistory, clip, cut, prompt, toolCall, touch, toMs, dbSignature, sqlite };

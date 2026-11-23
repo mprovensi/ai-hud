@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { claudeSessions } = require('../../src/collect/sources/claude');
 const { buildSnapshot } = require('../../src/views/snapshot');
+const { buildSessionDetail } = require('../../src/views/session-detail');
 
 // Log do Claude Code com um comando por turno: [comando, saída, is_error]
 function writeSession(home, runs) {
@@ -42,4 +43,24 @@ test('um teste que passa depois da falha tira o vermelho', (t) => {
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   writeSession(home, [['npm test', '# pass 3\n# fail 1', true], ['npm test 2>&1 | tail -2', '# pass 4\n# fail 0', false]]);
   assert.equal(snapshotCard(home).card.testFailed, false);
+});
+
+test('Claude registra arquivos modificados (Edit/Write) em ordem do mais recente no detalhe da sessão', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-hud-files-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const dir = path.join(home, '.claude', 'projects', 'app');
+  fs.mkdirSync(dir, { recursive: true });
+  const ts = '2026-11-05T12:00:00.000Z';
+  const lines = [
+    { type: 'assistant', timestamp: ts, cwd: '/app', requestId: 'r1', message: { id: 'm1', model: 'claude-x', usage: { input_tokens: 1, output_tokens: 1 },
+      content: [
+        { type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: '/app/src/a.js' } },
+        { type: 'tool_use', id: 't2', name: 'Write', input: { file_path: '/app/src/b.js' } },
+        { type: 'tool_use', id: 't3', name: 'Edit', input: { file_path: '/app/src/a.js' } },
+      ] } },
+  ];
+  fs.writeFileSync(path.join(dir, 'sess.jsonl'), lines.map((l) => JSON.stringify(l)).join('\n'));
+  const s = claudeSessions({ home })[0];
+  const detail = buildSessionDetail(s, Date.parse(ts) + 1000, () => ({}));
+  assert.deepEqual(detail.files, [['src/a.js', 2], ['src/b.js', 1]]);
 });

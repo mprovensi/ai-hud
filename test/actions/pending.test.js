@@ -65,3 +65,19 @@ test('um pedido de permissão em espera sobrevive ao reinício do servidor', () 
   assert.equal(after.decide(id, 'deny'), 'ok');
   assert.deepEqual(after.poll(id), { decision: 'deny' });
 });
+
+test('permissão AskUserQuestion guarda perguntas normalizadas e entrega respostas estruturadas', () => {
+  const perms = createPermissions({ store: createPendingStore(tempFile()), remoteMode: true });
+  const id = perms.open('s1', 'AskUserQuestion', 'Qual layout?', {
+    questions: [{
+      header: 'Layout', question: 'Qual layout?', multiSelect: false,
+      options: [{ label: 'Abas', description: 'Separado' }, { label: 'Rolagem', description: 'Junto' }],
+    }],
+  });
+  const pending = perms.pendingFor('s1', Date.now());
+  assert.equal(pending.questions.length, 1);
+  assert.equal(pending.questions[0].options[0].label, 'Abas');
+  assert.equal(perms.decide(id, 'answer', {}), 'invalid');
+  assert.equal(perms.decide(id, 'answer', { answers: { 'Qual layout?': 'Abas' }, text: 'Abas' }), 'ok');
+  assert.deepEqual(perms.poll(id), { decision: 'answer', answers: { 'Qual layout?': 'Abas' }, text: 'Abas' });
+});

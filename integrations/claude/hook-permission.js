@@ -36,15 +36,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Resumo legível do que a ferramenta quer fazer
 function summary(tool, input) {
   input = input || {};
+  if (tool === 'AskUserQuestion' && Array.isArray(input.questions) && input.questions.length) {
+    return input.questions.map((q) => q && q.question).filter(Boolean).join(' · ').slice(0, 400);
+  }
   const text = input.command || input.file_path || input.url || input.pattern || input.prompt || JSON.stringify(input);
   return String(text).slice(0, 400);
 }
 
 async function main(input) {
   if (!input.session_id || !input.tool_name) return;
+  const payload = { session: input.session_id, tool: input.tool_name, summary: summary(input.tool_name, input.tool_input) };
+  if (input.tool_name === 'AskUserQuestion' && input.tool_input && Array.isArray(input.tool_input.questions)) {
+    payload.questions = input.tool_input.questions;
+  }
   let open;
   try {
-    open = await call('POST', '/hook/permission', { session: input.session_id, tool: input.tool_name, summary: summary(input.tool_name, input.tool_input) });
+    open = await call('POST', '/hook/permission', payload);
   } catch { return; }
   if (!open.json || !open.json.hold) return; // modo remoto desligado: segue o fluxo normal no PC
 
@@ -54,6 +61,18 @@ async function main(input) {
     let r;
     try { r = await call('GET', `/hook/permission?id=${encodeURIComponent(open.json.id)}`); } catch { return; }
     const decision = r.json && r.json.decision;
+    if (decision === 'answer') {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PermissionRequest',
+          decision: {
+            behavior: 'allow',
+            updatedInput: { ...(input.tool_input || {}), answers: r.json.answers || {} },
+          },
+        },
+      }));
+      return;
+    }
     if (decision === 'allow' || decision === 'deny') {
       process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest',
         decision: decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Negado pelo usuário no AI HUD.' } } }));

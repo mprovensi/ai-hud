@@ -20,6 +20,7 @@
     }
     for (i = 0; i < fill.length; i++) html += sessCard(fill[i], s.now);
     $('sessList').innerHTML = html || '<div class="empty">Nenhuma sessão recente.</div>';
+    if ($('sessList').removeAttribute) $('sessList').removeAttribute('aria-busy');
     $('sessTitle').innerHTML = 'Últimas sessões · ' + active.length + (active.length === 1 ? ' ativa' : ' ativas') +
       (waiting ? ' · <span style="color:#b3c6ff">' + waiting + ' esperando você</span>' : '');
     if (view === 'recent') renderRecent();

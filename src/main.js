@@ -36,7 +36,9 @@ function createApp({
   focus = createFocus(),
   close = createClose(),
   codexExe = 'codex',
+  agyExe = '',
   exec,
+  spawn,
   brands = true,
   log = console.log,
 }) {
@@ -63,20 +65,23 @@ function createApp({
 
   // federation: este PC junta as sessões e tokens dos secundários (config.peers) e repassa a eles as ações das sessões deles
   const machineName = config.name || os.hostname();
-  const peers = new Peers(config.peers, path.join(dataDir, 'peer-ollamas.json'));
+  const peers = new Peers(config.peers, path.join(dataDir, 'peer-ollamas.json'), path.join(dataDir, 'peer-cache.json'));
 
-  // O snapshot que os aparelhos recebem: este PC (views) + secundários (federation)
-  function build(sessions, now) {
+  // Snapshot local (usado quando outro hub pede ?local=1, evitando loop de federação)
+  function buildLocal(sessions, now) {
     if (quotas.expired(now) && quotas.sinceRefresh(now) > 60e3) quotas.refreshAll();
     // Releitura do log cria um objeto novo: reaplica o fim das sessões encerradas pelo HUD
     for (const s of sessions) if (!s.endedAt && close.endedAt) s.endedAt = close.endedAt(s.id);
-    const local = buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode,
+    return buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode,
       ollamaState: () => (showOllama ? ollama.state : null) });
-    return peers.merge(local, machineName);
   }
-  const collector = createCollector({ sources, build });
+  // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation)
+  function build(sessions, now, local) {
+    return peers.merge(local || buildLocal(sessions, now), machineName);
+  }
+  const collector = createCollector({ sources, buildLocal, build });
 
-  const reply = createReplies({ queue, codexExe, exec, findSession: (p) => collector.find(p),
+  const reply = createReplies({ queue, codexExe, agyExe, exec, spawn, findSession: (p) => collector.find(p),
     ollamaReply: (s, text, url) => sources.ollamaReply(s, text, url), ollamaUrl: () => ollama.url });
 
   // api

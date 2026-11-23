@@ -3,7 +3,7 @@
 module.exports = ({ permissions, queue, collector, json, send }) => [
   // hook-permission.js: segura o pedido no modo remoto e consulta a decisão
   { method: 'POST', path: '/hook/permission', json: true, handler: ({ res, body }) => {
-    const id = permissions.open(body.session, body.tool, body.summary);
+    const id = permissions.open(body.session, body.tool, body.summary, { questions: body.questions });
     if (id) collector.poke();
     json(res, id ? { hold: true, id } : { hold: false });
   } },

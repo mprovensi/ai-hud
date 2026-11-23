@@ -1,15 +1,24 @@
   // ---- Resposta rápida (hook-stop.js entrega à sessão parada) ----------------
   var QUICK = ['Continue', 'Sim, implemente', 'Resuma', 'Não, pare aqui', 'Faça o commit', 'Rode os testes', 'Explique melhor'];
+  var chipsOpen = false;
 
   function replyBox(d) {
-    // Um status curto: chega na hora (hook ouvindo, ou Codex livre) ou espera a sessão parar
-    var live = d.tool === 'Codex' || d.tool === 'Ollama' ? d.state !== 'working' : !!d.listening;
-    var html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
-      (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">vai para a fila</span>') + '</div>';
+    // Um status curto: chega na hora (hook ouvindo, ou Codex/Gemini/Ollama livre) ou espera a sessão parar
+    var live = d.tool === 'Codex' || d.tool === 'Ollama' || d.tool === 'Gemini' ? d.state !== 'working' : !!d.listening;
+    var sugg = d.suggestions && d.suggestions.length ? d.suggestions : [];
+    var i, html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
+      (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">vai para a fila</span>') +
+      '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
+      (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button></div>';
     if (d.tool === 'Ollama') html += '<div class="rnote">A resposta é gerada no Ollama e fica no HUD; não aparece no app do Ollama.</div>';
     if (d.queued) html += '<div class="rqueued">Na fila: “' + esc(d.queued) + '” <button class="link" id="cancelReply">cancelar</button></div>';
-    html += '<div class="chips">';
-    for (var i = 0; i < QUICK.length; i++) html += '<button class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
+    if (sugg.length) {
+      html += '<div class="schips" id="suggChips">';
+      for (i = 0; i < sugg.length; i++) html += '<button type="button" class="schip" data-chip="' + esc(sugg[i]) + '">' + esc(sugg[i]) + '</button>';
+      html += '</div>';
+    }
+    html += '<div class="chips' + (chipsOpen ? ' open' : '') + '" id="quickChips">';
+    for (i = 0; i < QUICK.length; i++) html += '<button type="button" class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
     return html + '</div><div class="row rform"><textarea id="replyText" rows="2" placeholder="Escreva ou fale uma resposta…"></textarea>' +
       (Speech ? '<button class="mic' + (rec ? ' on' : '') + '" id="micReply" aria-label="Falar a resposta" title="Falar a resposta">🎤</button>' : '') +
       '<button class="send" id="sendReply">Enviar</button></div></div>';
@@ -63,12 +72,16 @@
 
   function sendReply(d, text) {
     stopMic();
-    $('sendReply').disabled = true;
+    if ($('sendReply')) $('sendReply').disabled = true;
     request('POST', '/api/reply', function (err, r) {
-      if (err) { $('sendReply').disabled = false; return alert('Não enviado: ' + err.message); }
-      $('replyText').value = '';
-      $('replyText').blur();
-      if (r.sent) { $('sendReply').disabled = false; return flash(d.tool === 'Ollama' ? 'Enviado: o Ollama está gerando a resposta.' : 'Enviado ao Codex.'); }
+      if (err) { if ($('sendReply')) $('sendReply').disabled = false; return alert('Não enviado: ' + err.message); }
+      if ($('replyText')) { $('replyText').value = ''; $('replyText').blur(); }
+      if (r.sent) {
+        if ($('sendReply')) $('sendReply').disabled = false;
+        flash(d.tool === 'Ollama' ? 'Enviado: o Ollama está gerando a resposta.' : d.tool === 'Gemini' ? 'Enviado ao Gemini.' : 'Enviado ao Codex.');
+        renderDetail(d);
+        return;
+      }
       d.queued = r.queued;
       d.listening = r.listening;
       renderDetail(d);
@@ -78,10 +91,21 @@
 
   function bindReply(d) {
     if (!$('replyText')) return;
+    if ($('toggleChips')) $('toggleChips').onclick = function () {
+      chipsOpen = !chipsOpen;
+      this.className = 'qchips-btn' + (chipsOpen ? ' on' : '');
+      this.setAttribute('aria-expanded', chipsOpen ? 'true' : 'false');
+      if ($('quickChips')) $('quickChips').className = 'chips' + (chipsOpen ? ' open' : '');
+    };
     var chips = $('overlayBody').getElementsByTagName('button');
     for (var i = 0; i < chips.length; i++) {
       if (!chips[i].getAttribute('data-chip')) continue;
-      chips[i].onclick = function () { $('replyText').value = this.getAttribute('data-chip'); };
+      chips[i].onclick = function () {
+        $('replyText').value = this.getAttribute('data-chip');
+        chipsOpen = false;
+        if ($('toggleChips')) { $('toggleChips').className = 'qchips-btn'; $('toggleChips').setAttribute('aria-expanded', 'false'); }
+        if ($('quickChips')) $('quickChips').className = 'chips';
+      };
     }
     $('sendReply').onclick = function () {
       var text = $('replyText').value.replace(/^\s+|\s+$/g, '');
@@ -99,6 +123,16 @@
     setTimeout(function () { el.className = ''; }, 3000);
   }
 
-  // Não redesenha a gaveta enquanto o usuário escreve (apagaria o texto e fecharia o teclado)
-  function typing() { var t = $('replyText'); return t && (t.value || document.activeElement === t || !!rec); }
-
+  // Não redesenha a gaveta enquanto o usuário escreve ou marca opções de múltipla escolha
+  function typing() {
+    var t = $('replyText');
+    if (t && (t.value || document.activeElement === t || !!rec)) return true;
+    if (qState) {
+      var qi, k2;
+      for (qi in qState.others) if (qState.others[qi]) return true;
+      for (qi in qState.sel) for (k2 in qState.sel[qi]) if (qState.sel[qi][k2]) return true;
+    }
+    var ae = document.activeElement;
+    if (ae && ae.className && ae.className.indexOf('qother') >= 0) return true;
+    return false;
+  }

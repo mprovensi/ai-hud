@@ -18,7 +18,7 @@ function createFocus({ terminal = createTerminalFocus(), platform = process.plat
   return async function focusSession(s) {
     // Trazer janelas para frente usa PowerShell/Win32 (focus.ps1): só no Windows por enquanto
     if (platform !== 'win32') return { ok: false, message: 'Abrir no PC ainda só funciona em PCs com Windows.' };
-    if (s.where === 'terminal' || s.where === 'ollama-run') {
+    if (s.where === 'terminal' || s.where === 'ollama-run' || s.where === 'antigravity-cli' || s.where === 'gemini-cli') {
       const result = await terminal(s);
       if (result.ok && result.host === 'vscode') {
         const folders = result.folders || [];
@@ -42,7 +42,15 @@ function createFocus({ terminal = createTerminalFocus(), platform = process.plat
       await focusWindow(plan);
       return { ok: true, message: plan.label };
     }
-    if (!(await focusWindow(plan))) return { ok: false, message: `Nenhuma janela aberta no PC para ${base(s.cwd) || 'esta sessão'}.` };
+    if (!(await focusWindow(plan))) {
+      if (plan.fallbackUri) {
+        await openUri(plan.fallbackUri);
+        await wait(800);
+        await focusWindow(plan);
+        return { ok: true, message: plan.label || 'Aplicativo aberto.' };
+      }
+      return { ok: false, message: `Nenhuma janela aberta no PC para ${base(s.cwd) || 'esta sessão'}.` };
+    }
     if (!plan.uri) return { ok: true, message: plan.label || 'Janela em primeiro plano.' };
     // VS Code: o link vai para a última janela ativa; dá tempo de registrar o foco antes
     await wait(500);

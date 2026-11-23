@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { geminiQuota, parseAgyUsage, parseGeminiBuckets } = require('../../src/collect/quotas/gemini');
-const { pace, burn } = require('../../src/core/quota-pace');
+const { pace, burn, quotasWithPace } = require('../../src/core/quota-pace');
 
 function tmpRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'hud-gemini-quota-'));
@@ -27,7 +27,14 @@ test('parseAgyUsage extrai janelas de 5h e 7 dias do grupo Gemini Models', () =>
           {
             name: 'Claude and GPT models',
             buckets: [
-              { id: '3p-5h', window: '5h', remaining_fraction: 1, reset_time: '2026-11-23T19:00:00Z' },
+              { id: '3p-5h', window: '5h', remaining_fraction: 0.8, reset_time: '2026-11-23T19:00:00Z' },
+              { id: '3p-weekly', window: 'weekly', remaining_fraction: 0.95, reset_time: '2026-11-30T19:00:00Z' },
+            ],
+          },
+          {
+            name: 'Gemini 4 Argon',
+            buckets: [
+              { id: 'gemini-argon-wtu-weekly', window: 'weekly', remaining_fraction: 0.6, reset_time: '2026-11-30T19:00:00Z' },
             ],
           },
         ],
@@ -39,6 +46,17 @@ test('parseAgyUsage extrai janelas de 5h e 7 dias do grupo Gemini Models', () =>
   assert.equal(q.windows.five_hour.resetsAt, Date.parse('2026-11-23T18:41:59Z'));
   assert.equal(q.windows.seven_day.used, 8);
   assert.equal(q.windows.seven_day.resetsAt, Date.parse('2026-11-30T13:41:59Z'));
+  assert.equal(q.extraGroups.length, 2);
+  assert.equal(q.extraGroups[0].name, 'Claude and GPT models');
+  assert.equal(q.extraGroups[0].windows.five_hour.used, 20);
+  assert.equal(q.extraGroups[0].windows.seven_day.used, 5);
+  assert.equal(q.extraGroups[1].name, 'Gemini 4 Argon');
+  assert.equal(q.extraGroups[1].windows.seven_day.used, 40);
+
+  const now = Date.parse('2026-11-23T16:00:00Z');
+  const withPace = quotasWithPace({ gemini: q }, {}, now);
+  assert.equal(typeof withPace.gemini.extraGroups[0].windows.five_hour.pace.expected, 'number');
+  assert.equal(typeof withPace.gemini.extraGroups[1].windows.seven_day.pace.expected, 'number');
 });
 
 test('geminiQuota prioriza Antigravity CLI (agy) sem depender de oauth_creds.json', async () => {

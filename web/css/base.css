@@ -54,3 +54,15 @@ body.read-larger { font-size: 19px; }
 .quotas { display: -webkit-flex; display: flex; }
 .quotas .panel { -webkit-flex: 1 1 0%; flex: 1 1 0%; min-width: 0; }
 .quotas .panel + .panel { margin-left: 10px; }
+/* Skeletons leves (só opacity, sem gradiente animado caro no iPad mini 1) */
+.sk { display: inline-block; background: #292926; border-radius: 6px; vertical-align: middle;
+  -webkit-animation: skpulse 1.5s ease-in-out infinite; animation: skpulse 1.5s ease-in-out infinite; }
+.sk-line { display: block; height: .8em; margin-top: 6px; }
+.sk-pill { height: 1.15em; border-radius: 10px; }
+.sk-dot { width: 1.5em; height: 1.5em; border-radius: 50%; margin-left: 8px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.sk-card { pointer-events: none; }
+.sk-card .in { border-color: #252522; }
+.sk-input { height: 48px; border-radius: 10px; -webkit-flex: 1; flex: 1; }
+.sk-btn { height: 48px; width: 4.5em; border-radius: 10px; margin-left: 8px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+@-webkit-keyframes skpulse { 50% { opacity: .45; } }
+@keyframes skpulse { 50% { opacity: .45; } }

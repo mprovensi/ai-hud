@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { readLines, parse, cached, emptySession, clip, prompt, toolCall, touch } = require('../common');
+const { readLines, parse, cached, emptySession, touchFile, pushHistory, clip, prompt, toolCall, touch } = require('../common');
 const { readJson } = require('../../../infra/store');
 const { isTestCommand, testOutcome } = require('../../../core/tests');
 
@@ -105,6 +105,7 @@ function parseGeminiCli(file, cwd, slug = '') {
       const text = textOf(m.content).trim();
       if (text && !SYSTEM_PREFIX.test(text)) {
         prompt(s, text);
+        pushHistory(s, 'user', text, ts);
         s.lastStop = '';
       }
       continue;
@@ -112,22 +113,28 @@ function parseGeminiCli(file, cwd, slug = '') {
     if (m.type !== 'gemini' && m.type !== 'model') continue;
     if (m.model) s.models.add(m.model);
     const text = textOf(m.content).trim();
-    if (text) {
-      s.lastReply = clip(text, 4000);
-      s.lastReplyAt = Date.parse(ts) || 0;
-    }
+    const turnTools = [];
     let pendingTools = false;
     for (const tc of Array.isArray(m.toolCalls) ? m.toolCalls : []) {
       const name = tc.name || (tc.functionCall && tc.functionCall.name) || 'tool';
       toolCall(s, name);
+      turnTools.push(name);
       if (tc.status === 'executing' || tc.status === 'scheduled' || tc.status === 'validating' || tc.status === 'awaiting_approval') {
         pendingTools = true;
       }
       const args = tc.args || (tc.functionCall && tc.functionCall.args) || {};
+      if (/^(write_file|replace|edit_file|edit|save_file|multi_edit)$/i.test(name)) {
+        touchFile(s, args.file_path || args.path || args.filePath || args.target_file);
+      }
       const cmd = args.command || args.cmd || '';
       if (isTestCommand(cmd) && tc.status !== 'executing' && tc.status !== 'scheduled') {
         s.testRun = { command: clip(cmd, 200), at: Date.parse(ts) || 0, ...testOutcome(toolResultText(tc), tc.status === 'error') };
       }
+    }
+    if (text) {
+      s.lastReply = clip(text, 4000);
+      s.lastReplyAt = Date.parse(ts) || 0;
+      pushHistory(s, 'assistant', text, ts, turnTools);
     }
     if (text && !pendingTools) {
       s.lastStop = 'end_turn';

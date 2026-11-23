@@ -8,17 +8,39 @@
 
   function setOverlay(html) { $('overlayBody').innerHTML = html; $('back').onclick = closeOverlay; }
 
-  // Abre na hora com o que o snapshot já tem; os números completos chegam em seguida
+  // Abre na hora com o skeleton na mesma estrutura da gaveta (abas + conversa + responder)
   var detailCache = {};
   function quickDetail(id) {
     if (detailCache[id]) return renderDetail(detailCache[id]);
     var all = snap ? snap.active.concat(snap.recent) : [], x = null, i;
     for (i = 0; i < all.length; i++) if (all[i].id === id) x = all[i];
-    if (!x) return setOverlay(head('Sessão') + '<p class="empty">carregando…</p>');
-    setOverlay(sessHead(x) + '<div class="dstate">' + badge(x, snap.now) + '</div>' +
-      (x.lastPrompt ? '<div class="panel"><h2>Seu último pedido</h2><div class="quote">' + esc(x.lastPrompt) + '</div></div>' : '') +
-      '<p class="empty">carregando detalhes…</p>');
-    rememberViewed(x);
+    var topHtml = x
+      ? sessHead(x) + '<div class="dstate row">' + badge(x, snap.now) + '<span class="muted grow ell">' + dur(snap.now - x.start) + '</span>' +
+        '<span class="sk sk-pill" style="width:6.5em;height:2em"></span></div>'
+      : head('<span class="sk" style="width:7em;height:.9em"></span>', '<span class="sk" style="width:12em;height:.8em"></span>') +
+        '<div class="dstate row"><span class="sk sk-pill" style="width:6em;height:1.4em"></span><span class="grow"></span><span class="sk sk-pill" style="width:6.5em;height:2em"></span></div>';
+    var convoHtml = '<div class="panel convpanel"><div class="row chead"><h2 class="grow">Conversa</h2><span class="sk" style="width:3.5em;height:.8em"></span></div>' +
+      '<div class="convo lastreply" id="lastReply" tabindex="-1">';
+    if (x && x.lastPrompt) {
+      convoHtml += '<div class="msg me"><div class="mtxt">' + esc(x.lastPrompt) + '</div></div>';
+    } else {
+      convoHtml += '<div class="msg me"><span class="sk sk-line" style="width:14em;margin-top:0"></span><span class="sk sk-line" style="width:9em"></span></div>';
+    }
+    if (x && x.lastReply) {
+      convoHtml += '<div class="msg ai"><div class="mtxt">' + esc(x.lastReply) + '</div><span class="sk sk-line" style="width:65%;margin-top:8px"></span></div>';
+    } else {
+      convoHtml += '<div class="msg ai"><span class="sk sk-line" style="width:92%;margin-top:0"></span><span class="sk sk-line" style="width:84%"></span><span class="sk sk-line" style="width:60%"></span></div>';
+    }
+    convoHtml += '</div></div>';
+    var replyHtml = (!x || x.where !== 'ollama-run')
+      ? '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2><span class="sk sk-pill" style="width:4.5em"></span></div>' +
+        '<div class="schips"><span class="sk sk-pill" style="width:6.5em;height:2em;margin-right:6px"></span><span class="sk sk-pill" style="width:7.5em;height:2em;margin-right:6px"></span><span class="sk sk-pill" style="width:5.5em;height:2em"></span></div>' +
+        '<div class="row rform"><span class="sk sk-input"></span><span class="sk sk-btn"></span></div></div>'
+      : '';
+    setOverlay(topHtml +
+      '<div class="dtabs row" role="tablist"><button type="button" class="dtab active" disabled>Conversa</button><button type="button" class="dtab" disabled>Detalhes</button></div>' +
+      convoHtml + replyHtml);
+    if (x) rememberViewed(x);
   }
 
   function loadDetail() {
@@ -54,8 +76,13 @@
     usageName = usage ? usage[1] : null;
     view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : usage ? 'usage' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
-    if (view) $('overlay').scrollTop = 0;
-    else if (snap) render(snap); // o fundo não é redesenhado com a gaveta aberta
+    if (view) {
+      $('overlay').scrollTop = 0;
+      if ($('overlay').focus) { try { $('overlay').focus({ preventScroll: true }); } catch (e) { try { $('overlay').focus(); } catch (e2) {} } }
+    } else {
+      detailFocusedId = '';
+      if (snap) render(snap); // o fundo não é redesenhado com a gaveta aberta
+    }
     if (view === 'detail') { quickDetail(decodeURIComponent(h.slice(3))); loadDetail(); }
     if (view === 'recent') renderRecent();
     // A gaveta precisa estar visível para o gráfico medir a própria largura

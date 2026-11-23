@@ -95,6 +95,30 @@ test('extractTextQuestions não dispara em listas informativas sem pergunta ou d
     '```',
   ].join('\n');
   assert.deepEqual(extractTextQuestions(inCode), []);
+
+  // Lista de "O que foi feito" seguida de pergunta de fechamento não é múltipla escolha
+  const changelogWithFollowUp = [
+    '### O que foi feito',
+    '',
+    '1. **Hook Stop do Antigravity:**',
+    '   - Registrado globalmente em hooks.json.',
+    '   - Consulta o HUD a cada 2 s.',
+    '2. **Roteamento no HUD:**',
+    '   - Sessões da IDE usam a fila do hook.',
+    '',
+    '> Para testar já: reinicie o AI HUD na bandeja.',
+    '',
+    'Quer testar o envio pelo celular/iPad agora ou já posso iniciar a Fase 2?',
+  ].join('\n');
+  assert.deepEqual(extractTextQuestions(changelogWithFollowUp), []);
+
+  const summaryThenCommit = [
+    'Resumo das alterações:',
+    '1. Corrigi o timeout.',
+    '2. Adicionei testes.',
+    'Posso fazer o commit agora?',
+  ].join('\n');
+  assert.deepEqual(extractTextQuestions(summaryThenCommit), []);
 });
 
 test('suggestReplies propõe atalhos contextuais conforme a última resposta e estado da sessão', () => {

@@ -71,6 +71,8 @@ function normalizeQuestions(input) {
 }
 
 const DECISION_CUE = /\?|qual\b|quais\b|prefere|preferir|escolha|escolher|opç|deseja|quer que|como prefere|como quer|vamos de|seguir com|which\b|choose\b|prefer\b|option|select\b|would you like/i;
+const AFTER_OPTION_CUE = /\b(qual|quais|opç(?:ão|ões)|escolha|escolher|prefere|preferir|acima|del[ea]s|alguma|which|choose|prefer|option|options|above|select)\b/i;
+const SUMMARY_HEADING_CUE = /\b(o que foi feito|o que mudou|o que entrou|resumo|altera[çc][õo]es|mudan[çc]as|implementad[oa]s?|conclu[ií]d[oa]s?|corrigid[oa]s?|como funciona|como funcionaria|por que|causa|passos|verifica[çc][ãa]o|entreg[au]s?|what was done|what changed|summary|changes|done|implemented|fixed|how it works)\b/i;
 const MULTI_CUE = /múltipl|vári[ao]s|mais de uma|uma ou mais|select all|multiple|all that apply/i;
 
 function matchOptionLine(line) {
@@ -118,11 +120,17 @@ function extractTextQuestions(text) {
       }
       if (cur && cur.items.length >= 2 && cur.items.length <= 6) best = { ...cur, items: cur.items.slice() };
     } else if (line.trim() && cur) {
-      // Sublinha indentada (descrição continuação da opção) não quebra o bloco
+      // Sublinha indentada (descrição continuação da opção) não quebra o bloco,
+      // mas sub-bullets (`- ...`) marcam lista hierárquica de relatório/changelog
       if (/^\s{2,}/.test(line) && cur.items.length) {
+        if (/^\s{2,}[-*•]\s+/.test(line)) {
+          cur.hasSubBullets = true;
+          if (best && best.startLine === cur.startLine) best.hasSubBullets = true;
+        }
         const last = cur.items[cur.items.length - 1];
         last.body += ' — ' + line.trim();
         cur.endLine = i;
+        if (best && best.startLine === cur.startLine) best.endLine = i;
       } else {
         cur = null;
       }
@@ -132,14 +140,30 @@ function extractTextQuestions(text) {
 
   // Procura pergunta/enunciado imediatamente antes ou depois do bloco de opções
   const before = lines.slice(Math.max(0, best.startLine - 4), best.startLine).map((l) => l.trim()).filter(Boolean);
-  const after = lines.slice(best.endLine + 1, Math.min(lines.length, best.endLine + 4)).map((l) => l.trim()).filter(Boolean);
-  const contextText = [...before, ...after].join(' ');
+  // Para de olhar depois do bloco ao encontrar separador estrutural (citação, divisor ou novo título)
+  const after = [];
+  for (let i = best.endLine + 1; i < Math.min(lines.length, best.endLine + 5); i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    if (/^(>|#{1,6}\s|([-*_])\1{2,}$)/.test(t)) break;
+    after.push(t);
+  }
+  const beforeLead = before[before.length - 1] || '';
+  const beforeHasCue = DECISION_CUE.test(before.join(' '));
+  // Ignora listas de resumo/changelog (ex.: "### O que foi feito\n1. ...\n2. ...")
+  if (SUMMARY_HEADING_CUE.test(beforeLead) && !beforeHasCue) return [];
+  // Listas com sub-bullets aninhados são quase sempre relatórios/resumos, salvo se precedidas por pergunta explícita
+  if (best.hasSubBullets && !beforeHasCue) return [];
+
+  const afterText = after.join(' ');
+  const afterHasOptionCue = after.length > 0 && /\?/.test(afterText) && AFTER_OPTION_CUE.test(afterText);
   const optionsText = best.items.map((x) => x.body).join(' ');
-  if (!DECISION_CUE.test(contextText) && !/\?/.test(optionsText)) return [];
+  if (!beforeHasCue && !afterHasOptionCue && !/\?/.test(optionsText)) return [];
 
   // Evita disparar em listas de passos já concluídos sem pergunta real perto
   if (after.length > 3) return [];
 
+  const contextText = [...before, ...after].join(' ');
   const promptLine = after.find((l) => /\?/.test(l)) || before.slice().reverse().find((l) => /\?|:$/.test(l)) || before[before.length - 1] || 'Escolha uma opção';
   const multiSelect = MULTI_CUE.test(contextText);
   const options = best.items.map((x) => {

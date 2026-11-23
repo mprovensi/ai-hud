@@ -127,10 +127,16 @@
 .npill.off { opacity: .45; cursor: default; }
 .npill small { font-weight: 400; color: #8d8d87; margin-left: 4px; }
 .npill .brand { width: 1.1em; height: 1.1em; margin-right: 6px; }
-.nsel { display: block; width: 100%; font: inherit; font-size: 16px; color: #ecece8; background: #141413;
-  border: 1px solid #3a3a36; border-radius: 10px; padding: 9px 11px; margin-bottom: 6px; }
+.nsel { display: block; width: 100%; font: inherit; font-size: 16px; line-height: 1.35; min-height: 42px;
+  color: #ecece8; background-color: #141413; border: 1px solid #3a3a36; border-radius: 10px;
+  padding: 9px 11px; margin-bottom: 6px; -webkit-appearance: none; appearance: none; }
+select.nsel { padding-right: 34px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%238d8d87' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1.5 1.5L6 6l4.5-4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px; }
+select.nsel option { background: #1c1c1a; color: #ecece8; }
+.nsel:focus, .ntext:focus { outline: none; border-color: #5fb8a4; }
 .ntext { display: block; width: 100%; font: inherit; font-size: 16px; color: #ecece8; background: #141413;
-  border: 1px solid #3a3a36; border-radius: 10px; padding: 9px 11px; resize: vertical; -webkit-appearance: none; }
+  border: 1px solid #3a3a36; border-radius: 10px; padding: 9px 11px; resize: vertical; -webkit-appearance: none; appearance: none; }
 .nperm { font-size: .76em; color: #9fe0b4; background: #1d2b22; border: 1px solid #2f4d3a; border-radius: 8px;
   padding: 6px 9px; margin-top: 8px; }
 .nactions { margin-top: 12px; }

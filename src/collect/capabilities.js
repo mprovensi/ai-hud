@@ -8,6 +8,7 @@ const { execFile } = require('child_process');
 const { ROOT } = require('../infra/paths');
 
 const AGY_CACHE_MS = 10 * 60e3;
+const AGY_RETRY_MS = 30e3;
 const CLAUDE_PRESETS = [
   { id: '', label: 'Padrão' },
   { id: 'sonnet', label: 'Sonnet (mais recente)' },
@@ -87,19 +88,27 @@ function recentCwds(sessions) {
 function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = true, exec = execFile } = {}) {
   let agyModels = [];
   let agyAt = 0;
+  let agyRetryAt = 0;
   let agyPending = null;
 
   function refreshAgyModels() {
     if (!hasExe(agyExe)) return Promise.resolve([]);
     if (agyPending) return agyPending;
     agyPending = new Promise((resolve) => {
-      exec(agyExe, ['models'], { windowsHide: true, cwd: ROOT, timeout: 12e3, maxBuffer: 512 * 1024 }, (err, stdout) => {
+      exec(agyExe, ['models'], { windowsHide: true, cwd: ROOT, timeout: 25e3, maxBuffer: 512 * 1024 }, (err, stdout) => {
         agyPending = null;
+        const now = Date.now();
         if (!err && stdout) {
           const parsed = parseAgyModels(stdout);
-          if (parsed.length) agyModels = parsed;
+          if (parsed.length) {
+            agyModels = parsed;
+            agyAt = now;
+            agyRetryAt = 0;
+            return resolve(agyModels);
+          }
         }
-        agyAt = Date.now();
+        // Em erro/timeout (ex.: cold start em VPS Micro), tenta de novo em 30s em vez de travar por 10 min
+        agyRetryAt = now + AGY_RETRY_MS;
         resolve(agyModels);
       });
     });
@@ -114,7 +123,8 @@ function createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama = 
     const hasClaude = hasExe(claudeExe);
     const hasCodex = hasExe(codexExe);
     const hasAgy = hasExe(agyExe);
-    if (hasAgy && Date.now() - agyAt > AGY_CACHE_MS) refreshAgyModels();
+    const now = Date.now();
+    if (hasAgy && ((agyAt && now - agyAt > AGY_CACHE_MS) || (!agyAt && now >= agyRetryAt))) refreshAgyModels();
 
     const claudeRecent = new Set();
     const codexRecent = new Set();

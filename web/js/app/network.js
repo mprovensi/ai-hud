@@ -20,7 +20,7 @@
         finish(null, data, x.responseText); return;
       }
       var err = new Error(x.status === 401 ? 'sessão expirada: entre novamente' : x.status === 403 ? 'acesso não permitido' : x.status === 404 ? 'sessão não encontrada' : x.status === 429 ? 'aguarde antes de atualizar novamente' : x.status >= 500 ? 'erro do servidor (HTTP ' + x.status + ')' : 'falha na consulta (HTTP ' + x.status + ')');
-      if (x.status >= 400 && x.status < 500 && x.status !== 401 && x.status !== 403 && x.status !== 429 && x.responseText && x.responseText.charAt(0) !== '<') err.message = x.responseText.slice(0, 300);
+      if (((x.status >= 400 && x.status < 500) || x.status === 502) && x.status !== 401 && x.status !== 403 && x.status !== 429 && x.responseText && x.responseText.charAt(0) !== '<') err.message = x.responseText.slice(0, 300);
       err.status = x.status;
       finish(err);
     };

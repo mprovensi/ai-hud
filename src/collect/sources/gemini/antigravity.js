@@ -258,9 +258,12 @@ function antigravitySessions(rootOrHome = GEMINI_HOME) {
 
   // Histórico do Antigravity CLI (~/.gemini/antigravity-cli/history.jsonl):
   // completa o workspace das sessões já lidas e mantém conversas sem transcript.jsonl
+  const CLI_SLASH_RE = /^\/(exit|quit|login|logout|help|usage|clear|models|status)\b/i;
   for (const line of readLines(path.join(root, 'antigravity-cli', 'history.jsonl'))) {
     const r = parse(line);
     if (!r || !r.timestamp) continue;
+    const display = String(r.display || '').trim();
+    if (!r.conversationId && (!display || CLI_SLASH_RE.test(display))) continue;
     const id = r.conversationId || `sem-id-${day(r.timestamp)}`;
     const existing = byId.get(id);
     if (existing && existing.file) {
@@ -270,7 +273,7 @@ function antigravitySessions(rootOrHome = GEMINI_HOME) {
     const ts = new Date(r.timestamp).toISOString();
     const s = existing || Object.assign(emptySession('Gemini', id, ''), { cwd: r.workspace || '', where: 'antigravity-cli' });
     touch(s, ts);
-    prompt(s, r.display || '');
+    prompt(s, display);
     s.mtime = new Date(s.end).getTime();
     byId.set(id, s);
   }

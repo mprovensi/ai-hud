@@ -50,7 +50,7 @@
     request('GET', '/api/session?id=' + encodeURIComponent(id), function (err, d) {
       if (location.hash !== '#s=' + encodeURIComponent(id)) return;
       if (err) {
-        if (typeof pendingNewId !== 'undefined' && id === pendingNewId && new Date().getTime() < pendingNewUntil) {
+        if (err.status === 404 && typeof pendingNewId !== 'undefined' && id === pendingNewId && new Date().getTime() < pendingNewUntil) {
           setOverlay(head('Iniciando sessão…', 'aguardando a IA responder') +
             '<div class="panel"><span class="sk sk-line" style="width:75%;margin-top:0"></span><span class="sk sk-line" style="width:55%"></span></div>');
           setTimeout(loadDetail, 1200);
@@ -59,6 +59,13 @@
         return setOverlay(head('Sessão') + '<p class="empty">' + esc(err.message) + '</p>');
       }
       if (typeof pendingNewId !== 'undefined' && id === pendingNewId) pendingNewId = '';
+      // Se abriu por UUID curto (ex.: Codex recém-criado), alinha a URL e o cache ao id completo do cartão
+      if (d && d.id && d.id !== id) {
+        id = d.id;
+        if (typeof history !== 'undefined' && history && history.replaceState) {
+          history.replaceState(null, '', '#s=' + encodeURIComponent(id));
+        }
+      }
       if (d.tool === 'Ollama') d.ollama = ollamaRuntime(d);
       // Só redesenha se algo mudou ("now" sempre muda), preservando a rolagem da última resposta
       var sig = JSON.stringify(d).replace(/"now":\d+/, '');

@@ -18,6 +18,7 @@ const { createPendingStore } = require('./actions/pending');
 const { createReplyQueue, replyKey } = require('./actions/reply/claude-queue');
 const { createReplies } = require('./actions/reply');
 const { createSessionLauncher } = require('./actions/spawn');
+const { createRunning } = require('./actions/running');
 const { createPermissions } = require('./actions/permissions');
 const { createFocus } = require('./actions/focus');
 const { createClose } = require('./actions/close');
@@ -36,7 +37,7 @@ function createApp({
   sources = createSources({ dataDir }),
   quotaFetchers,
   focus = createFocus(),
-  close = createClose(),
+  close,
   claudeExe = '',
   codexExe = 'codex',
   agyExe = '',
@@ -56,6 +57,8 @@ function createApp({
   const ollama = new Ollama(config.ollamaUrl);
   const showOllama = config.ollama !== false;
 
+  const running = createRunning();
+  const closeFn = close || createClose({ running });
   // actions
   const pending = createPendingStore(path.join(dataDir, 'pending.json'));
   const queue = createReplyQueue(pending);
@@ -74,7 +77,7 @@ function createApp({
   function buildLocal(sessions, now) {
     if (quotas.expired(now) && quotas.sinceRefresh(now) > 60e3) quotas.refreshAll();
     // Releitura do log cria um objeto novo: reaplica o fim das sessões encerradas pelo HUD
-    for (const s of sessions) if (!s.endedAt && close.endedAt) s.endedAt = close.endedAt(s.id);
+    for (const s of sessions) if (!s.endedAt && closeFn.endedAt) s.endedAt = closeFn.endedAt(s.id);
     return buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode,
       ollamaState: () => (showOllama ? ollama.state : null) });
   }
@@ -86,14 +89,14 @@ function createApp({
 
   const capabilities = createCapabilities({ claudeExe, codexExe, agyExe, ollama, showOllama, exec });
   const reply = createReplies({ queue, claudeExe, codexExe, agyExe, exec, spawn, findSession: (p) => collector.find(p),
-    ollamaReply: (s, text, url) => sources.ollamaReply(s, text, url), ollamaUrl: () => ollama.url });
+    ollamaReply: (s, text, url) => sources.ollamaReply(s, text, url), ollamaUrl: () => ollama.url, running });
   const launch = createSessionLauncher({ claudeExe, codexExe, agyExe, spawn,
     ollamaCreate: (model, text, url) => sources.ollamaCreate && sources.ollamaCreate(model, text, url),
-    ollamaUrl: () => ollama.url });
+    ollamaUrl: () => ollama.url, running });
 
   // api
   const routes = createRoutes({ send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, capabilities, queue, permissions, focus, close, peers, quotas, machineName });
+    reply, launch, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName });
   const serveStatic = createStatic({ webDir, webAssets, send, brands, dataDir });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, routes, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez

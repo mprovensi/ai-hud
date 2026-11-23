@@ -4,7 +4,7 @@
 const { spawn } = require('child_process');
 const { ROOT } = require('../../infra/paths');
 
-function geminiReply({ exe, key, text, cwd, spawnFn = spawn }) {
+function geminiReply({ exe, key, text, cwd, spawnFn = spawn, running = null }) {
   return new Promise((resolve, reject) => {
     if (!exe) return reject(new Error('Antigravity CLI (agy) não encontrado neste PC.'));
     const child = spawnFn(exe, ['--conversation', key, `--print=${text}`, '--dangerously-skip-permissions', '--output-format', 'json'], {
@@ -12,6 +12,7 @@ function geminiReply({ exe, key, text, cwd, spawnFn = spawn }) {
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
+    if (running) running.track(key, child);
     let stderr = '', settled = false;
     const done = (err) => {
       if (settled) return;

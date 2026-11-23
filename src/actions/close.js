@@ -20,7 +20,7 @@ function claudeProcess(home, id) {
   return null;
 }
 
-function createClose({ home = os.homedir(), platform = process.platform, exec = execFile } = {}) {
+function createClose({ home = os.homedir(), platform = process.platform, exec = execFile, running = null } = {}) {
   const run = (cmd, args) => new Promise((resolve) => exec(cmd, args, { windowsHide: true, timeout: 15e3 },
     (err, out) => resolve({ ok: !err, out: String(out || '').trim() })));
   // Hora de início do processo em FILETIME (como o procStart do Claude); '' = processo não existe
@@ -42,16 +42,45 @@ function createClose({ home = os.homedir(), platform = process.platform, exec = 
 
   // Sessões encerradas por aqui: id → quando. O log não registra o fim, então o estado vem daqui (endedAt)
   const ended = new Map();
-
-  async function closeSession(s) {
-    let proc = null;
-    if (s.tool === 'Claude Code') proc = claudeProcess(home, s.id);
-    else if (s.where === 'ollama-run' && Number.isInteger(s.pid)) proc = { pid: s.pid, procStart: '' };
-    else return { ok: false, message: 'Encerrar pelo HUD funciona para sessões do Claude Code e do ollama run.' };
-    if (!proc || !(await kill(proc.pid, proc.procStart))) return { ok: false, message: 'Essa sessão não está mais aberta no PC.' };
+  const markEnded = (s) => {
     ended.set(s.id, Date.now());
     s.endedAt = ended.get(s.id);
-    return { ok: true, message: 'Sessão encerrada.' };
+  };
+
+  async function closeSession(s) {
+    // 1. Se o próprio HUD disparou o processo (via + Nova ou Responder headless), mata o processo conhecido
+    const hudPid = running && running.getPid(s.id);
+    if (Number.isInteger(hudPid)) {
+      await kill(hudPid, '');
+      running.drop(s.id);
+      markEnded(s);
+      return { ok: true, message: 'Sessão encerrada.' };
+    }
+    // 2. Processos externos com PID registrado (Claude Code e `ollama run`)
+    if (s.tool === 'Claude Code' || s.where === 'ollama-run') {
+      const proc = s.tool === 'Claude Code' ? claudeProcess(home, s.id)
+        : (Number.isInteger(s.pid) ? { pid: s.pid, procStart: '' } : null);
+      if (proc) {
+        if (await kill(proc.pid, proc.procStart)) {
+          markEnded(s);
+          return { ok: true, message: 'Sessão encerrada.' };
+        }
+        // PID registrado não corresponde mais ao processo (ou já terminou): nunca mata PID herdado
+        return { ok: false, message: 'Essa sessão não está mais aberta no PC.' };
+      }
+      // Sem processo aberto (ex.: sessão headless criada via `claude -p` já finalizada): arquiva no HUD
+      if (s.tool === 'Claude Code' && s.state !== 'working') {
+        markEnded(s);
+        return { ok: true, message: 'Sessão encerrada no HUD.' };
+      }
+      return { ok: false, message: 'Essa sessão não está mais aberta no PC.' };
+    }
+    // 3. Codex, Gemini e Ollama (app/API/HUD): encerra/arquiva no HUD (move para Recentes)
+    if (s.tool === 'Codex' || s.tool === 'Gemini' || s.tool === 'Ollama') {
+      markEnded(s);
+      return { ok: true, message: 'Sessão encerrada no HUD.' };
+    }
+    return { ok: false, message: 'Ferramenta sem suporte para encerrar pelo HUD.' };
   }
   closeSession.endedAt = (id) => ended.get(id) || 0;
   return closeSession;

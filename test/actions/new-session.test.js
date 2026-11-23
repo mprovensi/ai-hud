@@ -8,6 +8,7 @@ const path = require('node:path');
 const { createCapabilities, parseAgyModels } = require('../../src/collect/capabilities');
 const { createSessionLauncher } = require('../../src/actions/spawn');
 const { createReplies } = require('../../src/actions/reply');
+const { createRunning } = require('../../src/actions/running');
 const { createOllamaSource } = require('../../src/collect/sources/ollama');
 const { createApp } = require('../../src/main');
 
@@ -160,6 +161,41 @@ test('createReplies continua Claude sem terminal via claude -p --resume e Codex 
   assert.equal(rx.status, 200);
   assert.deepEqual(rx.body, { sent: true });
   assert.deepEqual(s.calls[1].args, ['exec', 'resume', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', uuid, 'rode os testes']);
+});
+
+test('running bloqueia respostas concorrentes na mesma sessão (409) e expõe erro tardio no /api/session', async () => {
+  const running = createRunning();
+  const s = fakeSpawn();
+  const uuid = '00000000-0000-4000-8000-000000000088';
+  const reply = createReplies({
+    queue: { set() {}, listenState: () => null },
+    claudeExe: 'claude.exe',
+    spawn: s.spawn,
+    running,
+    findSession: () => ({ tool: 'Claude Code', id: uuid, cwd: '/proj' }),
+  });
+
+  const first = await reply({ key: uuid, text: 'primeira', tool: 'Claude Code' });
+  assert.equal(first.status, 200);
+  const second = await reply({ key: uuid, text: 'segunda', tool: 'Claude Code' });
+  assert.equal(second.status, 409);
+
+  // Quando o processo encerra, libera a trava
+  s.calls[0].child.emit('exit', 0);
+  assert.equal(running.isBusy(uuid), false);
+
+  // Erro tardio após launch fica disponível em running.lastError
+  const sErr = fakeSpawn(({ child }) => {
+    setTimeout(() => {
+      child.stderr.emit('data', 'erro de autenticacao\n');
+      child.emit('exit', 1);
+    }, 300);
+  });
+  const launch = createSessionLauncher({ claudeExe: 'claude.exe', spawn: sErr.spawn, running });
+  const started = await launch({ tool: 'Claude Code', prompt: 'oi' });
+  assert.equal(started.status, 200);
+  await new Promise((r) => setTimeout(r, 360));
+  assert.equal(running.lastError(started.body.id), 'erro de autenticacao');
 });
 
 test('hub agrega GET /api/capabilities dos peers e repassa POST /api/new prefixando o id com m0:', async (t) => {

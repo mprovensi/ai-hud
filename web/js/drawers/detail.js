@@ -449,8 +449,8 @@
         '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
     }
     html += '</div>';
-    // Encerrar fica na aba Detalhes, longe dos botões de uso frequente; só para sessões com processo conhecido
-    if (d.state !== 'closed' && (d.tool === 'Claude Code' || d.where === 'ollama-run')) {
+    // Encerrar fica na aba Detalhes, longe dos botões de uso frequente (para todas as IAs ativas)
+    if (d.state !== 'closed') {
       html += '<button class="pcaction danger" id="closeSess">⏹ Encerrar sessão</button>';
     }
     html += '</div>';
@@ -501,7 +501,11 @@
       }, { id: d.id });
     };
     if ($('closeSess')) $('closeSess').onclick = function () {
-      if (!confirm('Encerrar a sessão "' + (d.title || d.project) + '"?\n\nO processo dela no PC será finalizado.')) return;
+      var hasProc = d.tool === 'Claude Code' || d.where === 'ollama-run';
+      var note = hasProc
+        ? 'Se houver processo aberto no PC, ele será finalizado e a sessão irá para Recentes.'
+        : 'Se estiver rodando pelo HUD, o processo será interrompido e a sessão irá para Recentes.';
+      if (!confirm('Encerrar a sessão "' + (d.title || d.project) + '"?\n\n' + note)) return;
       var b = this;
       b.disabled = true;
       request('POST', '/api/close', function (err, r) {

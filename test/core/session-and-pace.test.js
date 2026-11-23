@@ -30,7 +30,7 @@ test('ritmo da cota: projeta pelo uso da última hora e diz quando acaba', () =>
 });
 
 test('tokens de hoje e por hora somam só o que é novo (sem leitura de cache), incluindo Gemini', () => {
-  const now = Date.now();
+  const now = new Date(2026, 10, 23, 15, 30, 0).getTime();
   const ts = new Date(now - 60e3).toISOString();
   const codex = { tool: 'Codex', end: ts, subagent: false, events: [{ ts, fresh: 100, cacheRead: 900 }] };
   const gemini = { tool: 'Gemini', end: ts, subagent: false, events: [{ ts, fresh: 250, cacheRead: 1200 }] };

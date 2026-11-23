@@ -33,7 +33,7 @@ function extractIdFromJsonLine(line) {
 }
 
 // Dispara um CLI em segundo plano; opcionalmente espera até `waitMs` por um UUID (stdout JSON ou pasta nova)
-function launchCli({ exe, args, cwd, spawnFn, waitForId = null, waitMs = 4000, quickMs = 250 }) {
+function launchCli({ exe, args, cwd, spawnFn, waitForId = null, waitMs = 4000, quickMs = 250, running = null, trackKey = '' }) {
   return new Promise((resolve, reject) => {
     if (!exe) return reject(new Error('CLI não encontrado neste PC.'));
     const child = spawnFn(exe, args, {
@@ -41,12 +41,15 @@ function launchCli({ exe, args, cwd, spawnFn, waitForId = null, waitMs = 4000, q
       windowsHide: true,
       stdio: ['ignore', waitForId ? 'pipe' : 'ignore', 'pipe'],
     });
-    let stderr = '', buf = '', settled = false, poll = null;
+    const tempKey = trackKey || `launch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    if (running) running.track(tempKey, child);
+    let stderr = '', buf = '', settled = false, poll = null, currentKey = tempKey;
     const finish = (err, id = null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (poll) clearInterval(poll);
+      if (id && running) { running.rekey(tempKey, id); currentKey = id; }
       // Continua drenando stdout em segundo plano para o processo nunca levar SIGPIPE
       if (child.stdout) {
         child.stdout.removeAllListeners('data');
@@ -74,10 +77,19 @@ function launchCli({ exe, args, cwd, spawnFn, waitForId = null, waitMs = 4000, q
         if (found) finish(null, found);
       }, 250);
     }
-    child.on('error', (e) => finish(new Error(e.code === 'ENOENT' ? `${exe} não encontrado neste PC.` : e.message)));
+    child.on('error', (e) => {
+      const msg = e.code === 'ENOENT' ? `${exe} não encontrado neste PC.` : e.message;
+      if (running) running.recordError(currentKey, msg);
+      finish(new Error(msg));
+    });
     child.on('exit', (code) => {
-      if (code && code !== 0) finish(new Error(stderr.trim().split(/\r?\n/)[0] || `processo encerrou com código ${code}`));
-      else finish(null, typeof waitForId === 'function' ? waitForId() : null);
+      if (code && code !== 0) {
+        const msg = stderr.trim().split(/\r?\n/)[0] || `processo encerrou com código ${code}`;
+        if (running) running.recordError(currentKey, msg);
+        finish(new Error(msg));
+      } else {
+        finish(null, typeof waitForId === 'function' ? waitForId() : null);
+      }
     });
     const timer = setTimeout(() => finish(null, typeof waitForId === 'function' ? waitForId() : null), waitForId ? waitMs : quickMs);
   });
@@ -90,6 +102,7 @@ function createSessionLauncher({
   spawn = nodeSpawn,
   ollamaCreate,
   ollamaUrl,
+  running = null,
   geminiHome = process.env.GEMINI_HOME || path.join(os.homedir(), '.gemini'),
 } = {}) {
   return async function launch({ tool, model = '', cwd = '', prompt = '' }) {
@@ -114,7 +127,7 @@ function createSessionLauncher({
       const args = ['-p', cleanPrompt, '--session-id', id, '--dangerously-skip-permissions'];
       if (cleanModel) args.push('--model', cleanModel);
       try {
-        await launchCli({ exe: claudeExe, args, cwd: targetCwd, spawnFn: spawn });
+        await launchCli({ exe: claudeExe, args, cwd: targetCwd, spawnFn: spawn, running, trackKey: id });
         return { status: 200, body: { ok: true, id, tool: 'Claude Code' } };
       } catch (e) { return { status: 502, body: e.message }; }
     }
@@ -125,7 +138,7 @@ function createSessionLauncher({
       if (cleanModel) args.push('-m', cleanModel);
       args.push(cleanPrompt);
       try {
-        const id = await launchCli({ exe: codexExe, args, cwd: targetCwd, spawnFn: spawn, waitForId: true });
+        const id = await launchCli({ exe: codexExe, args, cwd: targetCwd, spawnFn: spawn, waitForId: true, running });
         return { status: 200, body: { ok: true, id, tool: 'Codex' } };
       } catch (e) { return { status: 502, body: e.message }; }
     }
@@ -147,7 +160,7 @@ function createSessionLauncher({
       const args = [`--print=${cleanPrompt}`, '--dangerously-skip-permissions', '--output-format', 'stream-json'];
       if (cleanModel) args.push('--model', cleanModel);
       try {
-        const id = await launchCli({ exe: agyExe, args, cwd: targetCwd, spawnFn: spawn, waitForId: detectNewBrain });
+        const id = await launchCli({ exe: agyExe, args, cwd: targetCwd, spawnFn: spawn, waitForId: detectNewBrain, running });
         return { status: 200, body: { ok: true, id, tool: 'Gemini' } };
       } catch (e) { return { status: 502, body: e.message }; }
     }

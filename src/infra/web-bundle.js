@@ -13,7 +13,7 @@ const APP_SCRIPTS = [
   'app/alerts',
   'home/ollama', 'home/render',
   'drawers/detail', 'drawers/reply', 'drawers/new-session', 'drawers/overlays',
-  'app/network', 'app/main',
+  'app/network', 'app/bio', 'app/main',
 ];
 const APP_STYLES = ['base', 'home/panels', 'home/cards', 'drawers/detail', 'home/gauges', 'drawers/overlay', 'screens/ipad', 'screens/mobile'];
 

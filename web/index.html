@@ -35,6 +35,7 @@
     <button class="btn" id="openStats" aria-label="Estatísticas"><span class="lbl"> Estatísticas</span></button>
     <button class="btn" id="openRecent" aria-label="Recentes"><span class="lbl"> Recentes</span></button>
     <button class="btn" id="sound" aria-label="Som dos alertas"></button>
+    <button class="btn" id="bioBtn" style="display:none" aria-label="Bloqueio por digital" title="Bloqueio por digital" aria-expanded="false"></button>
     <button class="btn" id="reading" aria-label="Ajustar tamanho da leitura" title="Tamanho da leitura" aria-expanded="false"></button>
     <button class="btn" id="refresh" aria-label="Atualizar cotas" title="Atualizar cotas"></button>
     </div>
@@ -44,6 +45,21 @@
     <button class="btn" id="textNormal" aria-pressed="true">Normal</button>
     <button class="btn" id="textLarge" aria-pressed="false">Grande</button>
     <button class="btn" id="textLarger" aria-pressed="false">Maior</button>
+  </div>
+  <div id="bioOptions" class="reading-options bio-options" style="display:none" role="group" aria-label="Bloqueio por digital">
+    <div id="bioStateText" class="bio-state">Bloqueio por digital neste celular</div>
+    <div id="bioTimeGroup" class="bio-times" style="display:none">
+      <span>Bloquear após</span>
+      <button class="btn" id="bioT0" aria-pressed="false">Imediato</button>
+      <button class="btn" id="bioT60000" aria-pressed="false">1 min</button>
+      <button class="btn" id="bioT120000" aria-pressed="true">2 min</button>
+      <button class="btn" id="bioT300000" aria-pressed="false">5 min</button>
+    </div>
+    <div class="bio-actions">
+      <button class="btn" id="bioEnable">Ativar digital</button>
+      <button class="btn" id="bioLockNow" style="display:none">Trancar agora</button>
+      <button class="btn bio-danger" id="bioDisable" style="display:none">Desativar</button>
+    </div>
   </div>
   <div id="updateNotice" class="update-notice" style="display:none" role="status">
     <span>Nova versão do AI HUD disponível.</span>
@@ -92,6 +108,18 @@
   <p class="muted osmall" id="olast"></p>
   <button class="btn" id="oretryNow">Tentar agora</button>
   <button class="btn" id="loginAgain" style="display:none">Entrar novamente</button>
+</div></div>
+<div id="bioLock" role="dialog" aria-modal="true" aria-labelledby="bioLockTitle"><div class="obox bio-box">
+  <div class="bio-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg></div>
+  <h2 id="bioLockTitle">AI HUD bloqueado</h2>
+  <p class="muted">Confirme sua impressão digital para continuar.</p>
+  <button class="btn bio-primary" id="bioUnlockBtn">Desbloquear com digital</button>
+  <button class="btn bio-alt" id="bioUsePinBtn" type="button">Usar PIN</button>
+  <form id="bioPinForm" method="POST" action="/login">
+    <input name="pin" type="tel" pattern="[0-9]*" maxlength="8" placeholder="PIN">
+    <button class="btn bio-primary" type="submit">Entrar com PIN</button>
+  </form>
+  <p class="bio-msg" id="bioLockMsg"></p>
 </div></div>
 <div id="backdrop"></div>
 <div id="overlay" tabindex="-1"><div id="overlayBody"></div></div>

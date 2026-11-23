@@ -32,6 +32,7 @@ const { createSend } = require('./api/utils');
 const { createStatic } = require('./api/static');
 const { createRoutes } = require('./api/routes');
 const { createHandler } = require('./api/handler');
+const { createWebAuthn } = require('./api/webauthn');
 
 const QUOTA_EVERY_MS = 5 * 60 * 1000;
 const QUOTA_BUSY_MS = 60 * 1000;
@@ -128,7 +129,8 @@ function createApp({
     dataDir, config, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
-  const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, log }));
+  const webauthn = createWebAuthn({ dataDir, config });
+  const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, webauthn, log }));
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)
   server.keepAliveTimeout = 65e3;

@@ -84,9 +84,15 @@
 
   window.addEventListener('resize', function () { if (snap) burnChart(snap, view === 'usage' ? usageName : null); });
   $('oretryNow').onclick = function () { poll(); tick(); };
-  syncHash(); poll(); tick();
+  var lockedAtBoot = typeof bioInit === 'function' ? bioInit() : false;
+  syncHash();
+  if (!lockedAtBoot) poll();
+  tick();
   setInterval(tick, 1000);
-  // Ao voltar do bloqueio de tela o iOS congela timers; atualiza na hora
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+  // Ao voltar do bloqueio de tela o iOS congela timers; atualiza na hora (ou tranca com digital no celular)
+  document.addEventListener('visibilitychange', function () {
+    if (typeof bioOnVisibilityChange === 'function' && bioOnVisibilityChange()) return;
+    if (!document.hidden) poll();
+  });
   // PWA: só em HTTPS/localhost (Chrome no Android via Tailscale); o iOS 9 não tem service worker
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});

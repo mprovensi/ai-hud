@@ -22,6 +22,7 @@
       var err = new Error(x.status === 401 ? 'sessão expirada: entre novamente' : x.status === 403 ? 'acesso não permitido' : x.status === 404 ? 'sessão não encontrada' : x.status === 429 ? 'aguarde antes de atualizar novamente' : x.status >= 500 ? 'erro do servidor (HTTP ' + x.status + ')' : 'falha na consulta (HTTP ' + x.status + ')');
       if (((x.status >= 400 && x.status < 500) || x.status === 502) && x.status !== 401 && x.status !== 403 && x.status !== 429 && x.responseText && x.responseText.charAt(0) !== '<') err.message = x.responseText.slice(0, 300);
       err.status = x.status;
+      try { if (x.status === 401 && x.getResponseHeader && x.getResponseHeader('X-AI-HUD-Auth') === 'biometric') err.auth = 'biometric'; } catch (e) {}
       finish(err);
     };
     x.onerror = function () { networkError('sem conexão com o servidor'); };
@@ -47,7 +48,17 @@
       paintConnection(new Date().getTime());
       return;
     }
-    if (err) { failures = 0; setOffline(connection.kind === 'auth'); paintConnection(new Date().getTime()); return; }
+    if (err) {
+      failures = 0;
+      if (connection.kind === 'auth' && (err.auth === 'biometric' || (typeof bioActive !== 'undefined' && bioActive)) && typeof bioOnUnauthorized === 'function' && bioOnUnauthorized()) {
+        setOffline(false);
+        paintConnection(new Date().getTime());
+        return;
+      }
+      setOffline(connection.kind === 'auth');
+      paintConnection(new Date().getTime());
+      return;
+    }
     failures = 0;
     connection = { kind: 'live', message: '' };
     setOffline(false);
@@ -109,7 +120,7 @@
   var version = null;
 
   function poll() {
-    if (inFlight || connection.kind === 'auth') return;
+    if (inFlight || connection.kind === 'auth' || (typeof bioLocked !== 'undefined' && bioLocked)) return;
     inFlight = true;
     lastAttempt = new Date().getTime();
     var waiting = !!version && connection.kind === 'live' && !offline;
@@ -130,7 +141,7 @@
     $('clock').innerHTML = hm(t + skew);
     paintConnection(t);
     var wait = (offline ? RETRY_MS : POLL_MS) - (t - lastAttempt);
-    if (wait <= 0 && connection.kind !== 'auth') poll();
+    if (wait <= 0 && connection.kind !== 'auth' && !(typeof bioLocked !== 'undefined' && bioLocked)) poll();
     if (offline && connection.kind !== 'auth') {
       $('oretry').innerHTML = inFlight ? '<span class="pulse">●</span> Tentando reconectar…'
         : 'Nova tentativa em ' + Math.max(1, Math.ceil(wait / 1000)) + 's';

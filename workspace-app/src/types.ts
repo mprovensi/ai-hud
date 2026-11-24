@@ -88,11 +88,14 @@ export interface MemoryData {
 
 export interface QuotaWindow {
   used: number;
-  resetsAt?: number;
+  resetsAt?: number | string;
+  pace?: number;
 }
 
 export interface QuotaTool {
   plan?: string;
+  at?: number;
+  error?: string;
   windows?: Record<string, QuotaWindow>;
 }
 
@@ -121,6 +124,16 @@ export interface SessionCard {
   group?: string;
 }
 
+export interface BurnSeries {
+  start?: number;
+  end?: number;
+  used?: number;
+  window?: string;
+  points?: { t: number; used: number }[];
+  projected?: number | null;
+  runsOutIn?: number | null;
+}
+
 export interface Snapshot {
   now: number;
   version?: string;
@@ -130,6 +143,13 @@ export interface Snapshot {
     codex?: QuotaTool;
     gemini?: QuotaTool;
   };
+  burn?: {
+    claude?: BurnSeries | null;
+    codex?: BurnSeries | null;
+    gemini?: BurnSeries | null;
+  };
+  today?: Record<string, { fresh: number; cacheRead: number }>;
+  sessionsToday?: Record<string, number>;
   active: SessionCard[];
   recent: SessionCard[];
   machines?: { name: string; ok: boolean; error?: string }[];

@@ -57,6 +57,9 @@ export const api = {
   getSnapshot: (version?: string) =>
     apiFetch<Snapshot>(version ? `/api/snapshot?desde=${encodeURIComponent(version)}&espera=25` : '/api/snapshot'),
 
+  refreshQuotas: () =>
+    apiFetch<Snapshot>('/api/refresh', { method: 'POST', body: '{}' }),
+
   getSession: (id: string) =>
     apiFetch<SessionDetail>(`/api/session?id=${encodeURIComponent(id)}`),
 

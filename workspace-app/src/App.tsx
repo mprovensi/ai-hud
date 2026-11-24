@@ -32,6 +32,7 @@ import { MemoryPanel } from './components/MemoryPanel';
 import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjectDrawer';
 import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
+import { QuotaDrawer, type QuotaProvider } from './components/QuotaDrawer';
 import { TerminalPane } from './components/TerminalPane';
 import { WorkspaceHome } from './components/WorkspaceHome';
 import type { Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
@@ -84,6 +85,9 @@ export function App() {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatPrompt, setNewChatPrompt] = useState('');
   const [newChatLocked, setNewChatLocked] = useState(false);
+
+  // Gaveta lateral direita com detalhes de uso da assinatura de IA
+  const [quotaProvider, setQuotaProvider] = useState<QuotaProvider | null>(null);
 
   // Gaveta lateral esquerda em altura total para Criar / Editar Projeto ou Workspace
   const [projectDrawer, setProjectDrawer] = useState<{
@@ -268,20 +272,6 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [itemMenu]);
 
-  async function handleChangeEntityGroup(entity: WorkspaceEntity, nextGroup: string) {
-    if (nextGroup === '__new__') {
-      openNewGroup();
-      return;
-    }
-    try {
-      await api.updateEntity({ id: entity.id, group: nextGroup });
-      await loadWorkspace();
-      notify(nextGroup ? `Movido para "${nextGroup}".` : 'Removido do workspace.');
-    } catch (e) {
-      notify((e as Error).message, true);
-    }
-  }
-
   async function executeConfirmDelete() {
     if (!confirmDelete || deleting) return;
     setDeleting(true);
@@ -420,28 +410,40 @@ export function App() {
           <Search size={13} /> Buscar ou ir para… <span className="kbd">Ctrl+K</span>
         </button>
 
-        {/* Item 5: Indicadores de uso 5h (negrito) • semanal (normal) */}
+        {/* Item 5: Indicadores de uso 5h (negrito) • semanal (normal) — clicáveis para abrir detalhes */}
         <div className="quota-strip">
           {cQ && (
-            <span className="qchip" title="Claude: janela 5h (negrito) • semanal (normal)">
+            <button
+              className="qchip"
+              onClick={() => setQuotaProvider('claude')}
+              title="Claude: 5h (negrito) • semanal (normal) — clique para ver detalhes"
+            >
               <span className="qdot" style={{ background: 'var(--claude)' }} />
               Claude <b>{cQ.primary}</b>
               {cQ.secondary && <><span className="q-sep">•</span><span className="q-sec">{cQ.secondary}</span></>}
-            </span>
+            </button>
           )}
           {xQ && (
-            <span className="qchip" title="Codex: janela 5h (negrito) • semanal (normal)">
+            <button
+              className="qchip"
+              onClick={() => setQuotaProvider('codex')}
+              title="Codex: 5h (negrito) • semanal (normal) — clique para ver detalhes"
+            >
               <span className="qdot" style={{ background: 'var(--codex)' }} />
               Codex <b>{xQ.primary}</b>
               {xQ.secondary && <><span className="q-sep">•</span><span className="q-sec">{xQ.secondary}</span></>}
-            </span>
+            </button>
           )}
           {gQ && (
-            <span className="qchip" title="Gemini: janela 5h/pro (negrito) • diária/semanal (normal)">
+            <button
+              className="qchip"
+              onClick={() => setQuotaProvider('gemini')}
+              title="Gemini: 5h/pro (negrito) • diária/semanal (normal) — clique para ver detalhes"
+            >
               <span className="qdot" style={{ background: 'var(--gemini)' }} />
               Gemini <b>{gQ.primary}</b>
               {gQ.secondary && <><span className="q-sep">•</span><span className="q-sec">{gQ.secondary}</span></>}
-            </span>
+            </button>
           )}
           {syncSt && (
             <button
@@ -646,17 +648,6 @@ export function App() {
                     <h1 className="stage-title ell">{selectedEntity.title}</h1>
                     {selectedEntity.description && <p className="stage-desc ell">{selectedEntity.description}</p>}
                   </div>
-                  <select
-                    className="sel"
-                    style={{ width: 'auto', minWidth: 140, maxWidth: 200, padding: '4px 8px', fontSize: 12 }}
-                    title="Workspace deste projeto"
-                    value={selectedEntity.group || ''}
-                    onChange={(e) => handleChangeEntityGroup(selectedEntity, e.target.value)}
-                  >
-                    <option value="">Sem workspace</option>
-                    {allGroups.map((g) => <option key={g} value={g}>📁 {g}</option>)}
-                    <option value="__new__">+ Novo workspace…</option>
-                  </select>
                   {activeBinding && (
                     <span className="badge mono">{activeBinding.machine}: {activeBinding.cwd}</span>
                   )}
@@ -893,6 +884,16 @@ export function App() {
         snapshot={snap}
         initialPrompt={newChatPrompt}
         onCreated={() => pollNowRef.current()}
+        onNotify={notify}
+      />
+
+      {/* Gaveta lateral direita: Detalhes de uso da assinatura de IA */}
+      <QuotaDrawer
+        provider={quotaProvider}
+        snapshot={snap}
+        onChangeProvider={setQuotaProvider}
+        onClose={() => setQuotaProvider(null)}
+        onPollNow={() => pollNowRef.current()}
         onNotify={notify}
       />
 

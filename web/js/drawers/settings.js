@@ -2,14 +2,20 @@
   function renderSettings() {
     var html = head('Configurações', 'preferências deste aparelho');
 
-    // Modo remoto (mantém Antigravity IDE ouvindo o celular/iPad e encaminha permissões para o HUD)
-    var remoteOn = !!(snap && snap.remoteMode);
+    // Modo remoto (padrão ligado: encaminha pedidos de permissão do Claude Code para o HUD)
+    var remoteOn = !snap || snap.remoteMode !== false;
+    var ideListenOn = !!(snap && snap.ideListen);
     html += '<div class="panel cfg-panel">' +
-      '<h2>Modo remoto</h2>' +
-      '<p class="cfg-desc">Mantém sessões da IDE Antigravity ouvindo respostas do celular/iPad e encaminha pedidos de permissão para o HUD. Desligue ao voltar para o PC para não segurar o chat da IDE.</p>' +
+      '<h2>Modo remoto & IDE</h2>' +
+      '<p class="cfg-desc">Modo remoto (padrão ligado) encaminha permissões para o HUD. A escuta da IDE Antigravity mantém a janela aberta no PC aguardando o celular/iPad (desligue ao digitar no PC).</p>' +
       '<div class="cfg-row">' +
         '<button type="button" class="btn cfg-toggle' + (remoteOn ? ' on' : '') + '" id="cfgRemote" aria-pressed="' + (remoteOn ? 'true' : 'false') + '">' +
           '<span>' + (remoteOn ? '📡 Modo remoto ligado' : 'Modo remoto desligado') + '</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="cfg-row" style="margin-top:8px">' +
+        '<button type="button" class="btn cfg-toggle' + (ideListenOn ? ' on' : '') + '" id="cfgIdeListen" aria-pressed="' + (ideListenOn ? 'true' : 'false') + '">' +
+          '<span>' + (ideListenOn ? '🎧 Escuta IDE Antigravity ligada' : 'Escuta IDE Antigravity desligada') + '</span>' +
         '</button>' +
       '</div></div>';
 
@@ -65,13 +71,26 @@
 
     if ($('cfgRemote')) {
       $('cfgRemote').onclick = function () {
-        var b = this, next = !(snap && snap.remoteMode);
+        var b = this, next = !(!snap || snap.remoteMode !== false);
         b.disabled = true;
         request('POST', '/api/remote', function (err, r) {
           b.disabled = false;
           if (err) return flash('Falhou: ' + err.message, false);
           if (snap) snap.remoteMode = !!(r && r.remoteMode);
-          flash(next ? 'Modo remoto ligado (IDE Antigravity pronta para celular/iPad).' : 'Modo remoto desligado (IDE Antigravity liberada no PC).');
+          flash(next ? 'Modo remoto ligado.' : 'Modo remoto desligado.');
+          renderSettings();
+        }, { on: next });
+      };
+    }
+    if ($('cfgIdeListen')) {
+      $('cfgIdeListen').onclick = function () {
+        var b = this, next = !(snap && snap.ideListen);
+        b.disabled = true;
+        request('POST', '/api/ide-listen', function (err, r) {
+          b.disabled = false;
+          if (err) return flash('Falhou: ' + err.message, false);
+          if (snap) snap.ideListen = !!(r && r.ideListen);
+          flash(next ? 'Escuta da IDE Antigravity ligada (ao vivo no celular/iPad).' : 'Escuta da IDE Antigravity desligada (chat local liberado).');
           renderSettings();
         }, { on: next });
       };

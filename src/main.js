@@ -70,7 +70,19 @@ function createApp({
   // actions
   const pending = createPendingStore(path.join(dataDir, 'pending.json'));
   const queue = createReplyQueue(pending);
-  const permissions = createPermissions({ store: pending, remoteMode: config.remoteMode, onRemoteChange: (on) => { config.remoteMode = on; saveConfig(); } });
+  const permissions = createPermissions({
+    store: pending,
+    remoteMode: config.remoteMode !== false,
+    onRemoteChange: (on) => { config.remoteMode = on; saveConfig(); },
+  });
+  let ideListen = !!config.ideListen;
+  const setIdeListen = (on) => {
+    ideListen = !!on;
+    config.ideListen = ideListen;
+    saveConfig();
+    return ideListen;
+  };
+  const getIdeListen = () => ideListen;
   // O que está pendente para uma sessão: aparece no cartão e na gaveta
   const pendingInfo = (s, now) => {
     const key = replyKey(s);
@@ -92,7 +104,7 @@ function createApp({
     if (quotas.expired(now) && quotas.sinceRefresh(now) > 60e3) quotas.refreshAll();
     // Releitura do log cria um objeto novo: reaplica o fim das sessões encerradas pelo HUD
     for (const s of sessions) if (!s.endedAt && closeFn.endedAt) s.endedAt = closeFn.endedAt(s.id);
-    return buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode,
+    return buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode, ideListen,
       ollamaState: () => (showOllama ? ollama.state : null) });
   }
   // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation)
@@ -126,7 +138,7 @@ function createApp({
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
     reply, launch, handoff, setProjectPin, workspace, memory, filePreview, fileList, projectGit,
-    dataDir, config, capabilities, running, queue, permissions, focus, close: closeFn, peers, quotas, machineName,
+    dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
   const webauthn = createWebAuthn({ dataDir, config });

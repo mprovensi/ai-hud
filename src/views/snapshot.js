@@ -6,7 +6,7 @@ const { usage } = require('../core/usage');
 
 // quotas: { view(now), burn(now, codexSessions) }; pendingInfo(s, now): resposta na fila, hook escutando,
 // permissão aberta; ollamaState(): cartão do Ollama deste PC (null = não mostrar)
-function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remoteMode }) {
+function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remoteMode, ideListen = false }) {
   const card = (s) => ({
     tool: s.tool, id: s.id, where: s.where || '', project: s.project || base(s.cwd) || '—', title: s.title || s.firstPrompt,
     start: Date.parse(s.start), end: Date.parse(s.end), state: sessionState(s, now), lastTool: s.lastTool,
@@ -28,7 +28,7 @@ function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remote
 
   return {
     // tz: fuso do PC em minutos; os aparelhos mostram os horários no fuso e no relógio do PC
-    now, tz: -new Date(now).getTimezoneOffset(), remoteMode, quotas: quotas.view(now),
+    now, tz: -new Date(now).getTimezoneOffset(), remoteMode, ideListen: !!ideListen, quotas: quotas.view(now),
     ...usage(sessions, now), ollama: ollamaState(),
     burn: quotas.burn(now, sessions.filter((s) => s.tool === 'Codex')),
     // Permissões pendentes primeiro; os demais cards seguem a última atividade.

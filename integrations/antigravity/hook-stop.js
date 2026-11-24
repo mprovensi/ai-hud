@@ -80,19 +80,19 @@ async function main(input) {
   if (!token) return writeOut({});
 
   // 1. Verifica imediatamente se já existe mensagem enfileirada pelo celular/iPad (0 ms de bloqueio)
-  let remoteMode = false;
+  let ideListen = false;
   try {
     const first = await call(PORT, token, 'GET', `/hook/next?session=${encodeURIComponent(session)}`);
     if (first.status === 200 && first.json && first.json.text) {
       return writeOut({ decision: 'continue', reason: first.json.text });
     }
-    remoteMode = first.headers['x-ai-hud-remote'] === '1';
+    ideListen = first.headers['x-ai-hud-ide-listen'] === '1';
   } catch {
     return writeOut({});
   }
 
-  // 2. Com Modo remoto desligado (usuário no PC), libera a IDE imediatamente para não travar o chat local
-  if (!remoteMode) return writeOut({});
+  // 2. Com "Escuta da IDE" desligada (padrão no PC), libera a IDE imediatamente para não travar o chat local
+  if (!ideListen) return writeOut({});
 
   const transcript = input.transcriptPath || '';
   let from = 0;
@@ -103,8 +103,8 @@ async function main(input) {
   const until = Date.now() + waitMs;
 
   try {
-    const r = await call(PORT, token, 'POST', '/hook/listen', { session, tool: 'Gemini', until, requireRemote: true });
-    if (r.status !== 200 || (r.json && r.json.remoteMode === false)) return writeOut({});
+    const r = await call(PORT, token, 'POST', '/hook/listen', { session, tool: 'Gemini', until, requireIdeListen: true });
+    if (r.status !== 200 || (r.json && r.json.ideListen === false)) return writeOut({});
   } catch { return writeOut({}); }
 
   while (Date.now() < until) {
@@ -113,8 +113,8 @@ async function main(input) {
       if (r.status === 200 && r.json && r.json.text) {
         return writeOut({ decision: 'continue', reason: r.json.text });
       }
-      // Se o usuário desligou o Modo remoto, libera a IDE imediatamente
-      if (r.headers && r.headers['x-ai-hud-remote'] === '0') break;
+      // Se o usuário desligou a Escuta da IDE, libera o chat local imediatamente
+      if (r.headers && r.headers['x-ai-hud-ide-listen'] === '0') break;
     } catch { return writeOut({}); }
     if (transcript && typedLocally(transcript, from)) break;
     await sleep(pollMs);

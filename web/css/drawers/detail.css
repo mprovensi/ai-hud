@@ -4,6 +4,7 @@
 .pcmini { margin-left: 8px; padding: .3em .75em; border-radius: 10px; background: #26304d; border: 1px solid #3b4a7a;
   color: #d0dcff; font-size: .86em; font-weight: 700; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .pcmini:active { background: #2f3b60; }
+.pcmini.on { background: #223b34; border-color: #4a8c7a; color: #bfe8db; }
 .pcmini:disabled { opacity: .6; }
 .stopmini { background: #432828; border-color: #824040; color: #f5b4b4; }
 .stopmini:active { background: #593333; }

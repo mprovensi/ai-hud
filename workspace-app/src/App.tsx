@@ -718,6 +718,7 @@ export function App() {
                       filePath={activeStep.path}
                       hasProjectCwd={!!activeBinding}
                       reloadKey={boardReloadKey}
+                      snapshotVersion={snap?.version}
                       onNotify={notify}
                       onSendPrompt={(p) => setDraftPrompt(p)}
                       onOpenDoc={(p) => { setActiveProjectDoc(p); setEntityTab('docs'); }}

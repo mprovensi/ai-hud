@@ -329,6 +329,29 @@ button.qchip:hover { border-color: var(--border-hi); background: var(--card-hove
 .card-item.dragging { opacity: .45; }
 .card-item[draggable="true"] { cursor: grab; }
 .card-item[draggable="true"]:active { cursor: grabbing; }
+
+@keyframes ws-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: ws-spin .8s linear infinite; }
+
+@keyframes ws-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes ws-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.board-fade-in { animation: ws-fade-in .18s ease-out; }
+.skel {
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.09) 50%, rgba(255,255,255,.04) 75%);
+  background-size: 200% 100%;
+  animation: ws-shimmer 1.35s ease-in-out infinite;
+}
+.skel-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 11px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px;
+}
 .usage-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .usage-table th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .usage-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }

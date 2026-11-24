@@ -131,7 +131,14 @@ test('MCP memory-server: initialize, tools/list, memory_search, memory_read com 
   assert.equal(init.result.serverInfo.name, 'ai-hud-memory');
 
   const tools = handleRpc({ id: 2, method: 'tools/list' }, ws);
-  assert.deepEqual(tools.result.tools.map((t) => t.name), ['memory_search', 'memory_read', 'workspace_list']);
+  assert.deepEqual(tools.result.tools.map((t) => t.name), [
+    'memory_search',
+    'memory_read',
+    'workspace_list',
+    'board_read',
+    'board_update_status',
+    'board_add_item',
+  ]);
 
   const search = handleRpc({ id: 3, method: 'tools/call', params: { name: 'memory_search', arguments: { query: 'VAPID' } } }, ws);
   const parsed = JSON.parse(search.result.content[0].text);

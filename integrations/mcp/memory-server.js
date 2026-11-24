@@ -7,6 +7,9 @@
 //   pinned.md, episodic/*.md e docs do AI Workspace.
 // - memory_read(project, file?): lê um arquivo específico da memória do projeto.
 // - workspace_list(): lista projetos/entidades do Workspace e projetos com memória compartilhada.
+// - board_read(cwd, status?): lê visão compacta de <cwd>/.ai-workspace/board.card.json (baixo custo de tokens).
+// - board_update_status(cwd, updates, syncDocs?): atualiza status de tarefas no board com backup e sync `- [x]` em docs/.
+// - board_add_item(cwd, title, ...): adiciona novo item válido ao board com backup prévio.
 
 const fs = require('fs');
 const path = require('path');
@@ -130,6 +133,166 @@ function listWorkspace(wsRoot) {
   return { workspaceRoot: wsRoot, entities, memoryProjects };
 }
 
+const VALID_BOARD_STATUSES = new Set(['idea', 'spec', 'in-progress', 'review', 'done']);
+
+function resolveBoardFile(cwd) {
+  const clean = String(cwd || '').trim();
+  if (!clean) return { error: 'Informe o caminho da pasta do projeto (cwd).' };
+  const abs = path.resolve(clean);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
+    return { error: `Pasta do projeto não encontrada: ${abs}` };
+  }
+  return { root: abs, boardFile: path.join(abs, '.ai-workspace', 'board.card.json') };
+}
+
+function backupAndWriteBoard(projectRoot, boardFile, obj) {
+  const backupDir = path.join(projectRoot, '.ai-workspace', 'backups', 'cards');
+  fs.mkdirSync(backupDir, { recursive: true });
+  if (fs.existsSync(boardFile)) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    try { fs.copyFileSync(boardFile, path.join(backupDir, `${stamp}_board.card.json.bak`)); } catch {}
+  }
+  const tmp = `${boardFile}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+  fs.renameSync(tmp, boardFile);
+}
+
+function syncMarkdownCheckboxStandalone(projectRoot, docRef, title, done) {
+  try {
+    const parts = String(docRef || '').split('#');
+    const rel = (parts[0] || '').trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!rel) return false;
+    const target = path.resolve(projectRoot, rel);
+    if (!isWithin(projectRoot, target) || !fs.existsSync(target)) return false;
+    const raw = fs.readFileSync(target, 'utf8');
+    const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+    const lines = raw.split(/\r?\n/);
+    const lineMatch = /^L(\d+)$/i.exec((parts[1] || '').trim());
+    const lineNo = lineMatch ? Number(lineMatch[1]) : 0;
+    const cbRe = /^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.+?)\s*$/;
+    const normTitle = String(title || '').trim().toLowerCase();
+
+    let hit = -1;
+    if (lineNo >= 1 && lineNo <= lines.length && cbRe.test(lines[lineNo - 1])) {
+      hit = lineNo - 1;
+    } else if (normTitle) {
+      hit = lines.findIndex((l) => {
+        const m = cbRe.exec(l);
+        return m && m[4].toLowerCase().includes(normTitle.slice(0, 40));
+      });
+    }
+    if (hit < 0) return false;
+    const m = cbRe.exec(lines[hit]);
+    const mark = done ? 'x' : ' ';
+    if (m[2].toLowerCase() === mark) return false;
+    lines[hit] = `${m[1]}${mark}${m[3]}${m[4]}`;
+    fs.writeFileSync(target, lines.join(eol), 'utf8');
+    return true;
+  } catch { return false; }
+}
+
+function readBoardCompact({ cwd = '', status = '' } = {}) {
+  const r = resolveBoardFile(cwd);
+  if (r.error) return r;
+  if (!fs.existsSync(r.boardFile)) {
+    return { error: `Quadro não encontrado em ${r.boardFile}. Abra o projeto no AI Workspace primeiro.` };
+  }
+  let board;
+  try { board = JSON.parse(fs.readFileSync(r.boardFile, 'utf8')); } catch {
+    return { error: 'board.card.json contém JSON inválido.' };
+  }
+  const counts = { idea: 0, spec: 0, 'in-progress': 0, review: 0, done: 0 };
+  const all = Array.isArray(board.items) ? board.items : [];
+  for (const it of all) {
+    const st = VALID_BOARD_STATUSES.has(it.status) ? it.status : 'idea';
+    counts[st]++;
+  }
+  const filterSt = VALID_BOARD_STATUSES.has(status) ? status : '';
+  const items = all
+    .filter((it) => !filterSt || (it.status || 'idea') === filterSt)
+    .map((it) => ({
+      id: it.id,
+      status: it.status || 'idea',
+      title: it.title,
+      ...(it.phase ? { phase: it.phase } : {}),
+      ...(it.docRef ? { docRef: it.docRef } : {}),
+      ...(it.review && it.review.status ? { review: it.review.status } : {}),
+    }));
+  return { cwd: r.root, title: board.title || path.basename(r.root), counts, total: all.length, items };
+}
+
+function updateBoardStatus({ cwd = '', updates = [], syncDocs = true } = {}) {
+  const r = resolveBoardFile(cwd);
+  if (r.error) return r;
+  if (!fs.existsSync(r.boardFile)) return { error: `Quadro não encontrado em ${r.boardFile}.` };
+  if (!Array.isArray(updates) || !updates.length) return { error: 'Informe ao menos um item em updates: [{ id, status, note? }].' };
+
+  let board;
+  try { board = JSON.parse(fs.readFileSync(r.boardFile, 'utf8')); } catch {
+    return { error: 'board.card.json contém JSON inválido.' };
+  }
+  const items = Array.isArray(board.items) ? board.items.slice() : [];
+  const applied = [];
+  const notFound = [];
+
+  for (const u of updates) {
+    if (!u || !u.id || !VALID_BOARD_STATUSES.has(u.status)) continue;
+    const idx = items.findIndex((it) => it.id === u.id);
+    if (idx < 0) { notFound.push(u.id); continue; }
+    const cur = items[idx];
+    const prevStatus = cur.status || 'idea';
+    const nextBody = u.note
+      ? `${String(cur.body || '').trimEnd()}${cur.body ? '\n\n' : ''}- ${String(u.note).trim()}`
+      : cur.body;
+    items[idx] = { ...cur, status: u.status, ...(nextBody !== undefined ? { body: nextBody } : {}) };
+    let docSynced = false;
+    if (syncDocs !== false && cur.docRef && (prevStatus === 'done') !== (u.status === 'done')) {
+      docSynced = syncMarkdownCheckboxStandalone(r.root, cur.docRef, cur.title, u.status === 'done');
+    }
+    applied.push({ id: cur.id, title: cur.title, from: prevStatus, to: u.status, docSynced });
+  }
+
+  if (applied.length) {
+    backupAndWriteBoard(r.root, r.boardFile, { ...board, items });
+  }
+  return { ok: true, updated: applied.length, applied, notFound };
+}
+
+function addBoardItem({ cwd = '', title = '', body = '', status = 'idea', phase = '', docRef = '' } = {}) {
+  const r = resolveBoardFile(cwd);
+  if (r.error) return r;
+  const cleanTitle = String(title || '').trim();
+  if (!cleanTitle) return { error: 'Informe o título da tarefa.' };
+  const cleanStatus = VALID_BOARD_STATUSES.has(status) ? status : 'idea';
+
+  let board;
+  if (fs.existsSync(r.boardFile)) {
+    try { board = JSON.parse(fs.readFileSync(r.boardFile, 'utf8')); } catch {
+      return { error: 'board.card.json contém JSON inválido.' };
+    }
+  } else {
+    board = { format: 'ai-card', version: 1, template: 'board', title: path.basename(r.root), summary: '', items: [] };
+  }
+  const items = Array.isArray(board.items) ? board.items.slice() : [];
+  const used = new Set(items.map((i) => i.id));
+  const slug = cleanTitle.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 36) || 'item';
+  let id = `ai-${slug}`;
+  let n = 2;
+  while (used.has(id)) id = `ai-${slug}-${n++}`;
+
+  const item = {
+    id,
+    title: cleanTitle.slice(0, 200),
+    body: String(body || '').slice(0, 10000),
+    status: cleanStatus,
+    ...(phase ? { phase: String(phase).slice(0, 120) } : {}),
+    ...(docRef ? { docRef: String(docRef).replace(/\\/g, '/').replace(/^\/+/, '').slice(0, 400) } : {}),
+  };
+  items.push(item);
+  backupAndWriteBoard(r.root, r.boardFile, { ...board, items });
+  return { ok: true, item };
+}
+
 const TOOLS = [
   {
     name: 'memory_search',
@@ -161,6 +324,58 @@ const TOOLS = [
     description: 'Lista projetos/entidades registrados no AI Workspace e projetos que possuem memória compartilhada.',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'board_read',
+    description: 'Lê de forma compacta (econômica em tokens) o Quadro do projeto em <cwd>/.ai-workspace/board.card.json com contagem por coluna e itens.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Caminho absoluto da pasta do projeto' },
+        status: { type: 'string', description: 'Filtro opcional de coluna: idea, spec, in-progress, review ou done' },
+      },
+      required: ['cwd'],
+    },
+  },
+  {
+    name: 'board_update_status',
+    description: 'Atualiza o status de uma ou mais tarefas em <cwd>/.ai-workspace/board.card.json com backup automático (reversível no botão Desfazer) e sincronização `- [x]` em docs/.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Caminho absoluto da pasta do projeto' },
+        updates: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              status: { type: 'string', enum: ['idea', 'spec', 'in-progress', 'review', 'done'] },
+              note: { type: 'string', description: 'Observação curta opcional adicionada ao corpo do card' },
+            },
+            required: ['id', 'status'],
+          },
+        },
+        syncDocs: { type: 'boolean', description: 'Se true (padrão), marca/desmarca `- [x]` no Markdown vinculado em docRef' },
+      },
+      required: ['cwd', 'updates'],
+    },
+  },
+  {
+    name: 'board_add_item',
+    description: 'Adiciona uma nova tarefa ao Quadro do projeto em <cwd>/.ai-workspace/board.card.json com backup prévio.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string' },
+        title: { type: 'string' },
+        body: { type: 'string' },
+        status: { type: 'string', enum: ['idea', 'spec', 'in-progress', 'review', 'done'] },
+        phase: { type: 'string' },
+        docRef: { type: 'string' },
+      },
+      required: ['cwd', 'title'],
+    },
+  },
 ];
 
 function handleRpc(msg, wsRoot) {
@@ -186,6 +401,9 @@ function handleRpc(msg, wsRoot) {
     if (name === 'memory_search') out = searchMemory(wsRoot, args);
     else if (name === 'memory_read') out = readMemoryFile(wsRoot, args);
     else if (name === 'workspace_list') out = listWorkspace(wsRoot);
+    else if (name === 'board_read') out = readBoardCompact(args);
+    else if (name === 'board_update_status') out = updateBoardStatus(args);
+    else if (name === 'board_add_item') out = addBoardItem(args);
     else return { jsonrpc: '2.0', id, error: { code: -32601, message: `Ferramenta desconhecida: ${name}` } };
 
     return {
@@ -237,4 +455,4 @@ function startStdio(wsRoot = resolveWorkspaceRoot()) {
 
 if (require.main === module) startStdio();
 
-module.exports = { searchMemory, readMemoryFile, listWorkspace, handleRpc, resolveWorkspaceRoot };
+module.exports = { searchMemory, readMemoryFile, listWorkspace, readBoardCompact, updateBoardStatus, addBoardItem, handleRpc, resolveWorkspaceRoot };

@@ -243,6 +243,31 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(migratedItem.status, 'spec');
     assert.equal(migratedItem.review.status, 'approved');
     assert.equal(migratedItem.review.reportPath, rev.json.reportPath);
+
+    // 7. MCP standalone: board_read, board_update_status (com backup + sync `- [x]` em docs/) e board_add_item
+    const mcp = require('../../integrations/mcp/memory-server');
+    const rList = mcp.handleRpc({ id: 1, method: 'tools/list' }, path.join(dataDir, 'workspace'));
+    assert.ok(rList.result.tools.some((t) => t.name === 'board_read'));
+    assert.ok(rList.result.tools.some((t) => t.name === 'board_update_status'));
+    assert.ok(rList.result.tools.some((t) => t.name === 'board_add_item'));
+
+    const bRead = mcp.readBoardCompact({ cwd: projDir });
+    assert.equal(bRead.total, 3);
+    assert.equal(bRead.counts.spec, 1);
+
+    const item3 = bRead.items[2];
+    const bUpd = mcp.updateBoardStatus({
+      cwd: projDir,
+      updates: [{ id: item3.id, status: 'done', note: 'Verificado pelo agente.' }],
+    });
+    assert.equal(bUpd.ok, true);
+    assert.equal(bUpd.updated, 1);
+    assert.equal(bUpd.applied[0].docSynced, true);
+    assert.match(fs.readFileSync(path.join(projDir, 'docs', 'plano-v2.md'), 'utf8'), /- \[x\] Revisar segurança/);
+
+    const bAdd = mcp.addBoardItem({ cwd: projDir, title: 'Nova tarefa via MCP', status: 'idea' });
+    assert.equal(bAdd.ok, true);
+    assert.equal(mcp.readBoardCompact({ cwd: projDir }).total, 4);
   } finally {
     app.server.close();
   }

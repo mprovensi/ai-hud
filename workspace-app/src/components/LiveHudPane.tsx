@@ -69,7 +69,7 @@ export function LiveHudPane({
   const [handoffOpen, setHandoffOpen] = useState(false);
   const [handoffTool, setHandoffTool] = useState('Claude Code');
   const [handoffNote, setHandoffNote] = useState('');
-  const [skills, setSkills] = useState<{ cmd: string; name: string; description: string; source: string }[]>([]);
+  const [skills, setSkills] = useState<{ cmd: string; name: string; description: string; prompt?: string; source: string }[]>([]);
   const [uploading, setUploading] = useState(false);
 
   // Modo do PTY quando em aba Terminal: CLI nativa da sessão (resume) ou Shell na pasta
@@ -464,7 +464,7 @@ export function LiveHudPane({
                           key={sk.cmd}
                           className="sb-item"
                           style={{ margin: 0, borderRadius: 0 }}
-                          onClick={() => setReplyText(`${sk.cmd} `)}
+                          onClick={() => setReplyText(sk.prompt || `${sk.cmd} `)}
                         >
                           <strong className="mono">{sk.cmd}</strong>
                           <span className="ell" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{sk.description}</span>

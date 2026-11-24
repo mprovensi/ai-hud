@@ -109,7 +109,7 @@ export const api = {
     }),
 
   getSkills: (cwd = '') =>
-    apiFetch<{ skills: { cmd: string; name: string; description: string; source: string }[] }>(
+    apiFetch<{ skills: { cmd: string; name: string; description: string; prompt?: string; source: string }[] }>(
       `/api/skills${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''}`,
     ),
 

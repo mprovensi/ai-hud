@@ -5,6 +5,20 @@ const os = require('os');
 const path = require('path');
 
 const BUILTIN_COMMANDS = [
+  {
+    cmd: '/board-sync',
+    name: 'board-sync',
+    description: 'Auditar .ai-workspace/board.card.json contra o código/git e atualizar status',
+    prompt: 'Leia `.ai-workspace/board.card.json` (ou use a tool MCP `board_read`), compare as tarefas em `idea`, `spec` e `in-progress` com o código e o git atual do projeto, liste quais já foram concluídas com evidência curta e atualize os status delas (usando `board_update_status` ou editando `.ai-workspace/board.card.json` mantendo o schema `ai-card` v1 e sincronizando `- [x]` nos docs vinculados).',
+    source: 'workspace',
+  },
+  {
+    cmd: '/board-status',
+    name: 'board-status',
+    description: 'Resumir rapidamente o Quadro (.ai-workspace/board.card.json) e sugerir próxima tarefa',
+    prompt: 'Leia `.ai-workspace/board.card.json` (ou use `board_read`) e faça um resumo curto por coluna (Ideia, Spec, Em andamento, Revisão, Concluído) indicando qual é a próxima tarefa mais prioritária.',
+    source: 'workspace',
+  },
   { cmd: '/plan', name: 'plan', description: 'Planejar passo a passo antes de implementar', source: 'builtin' },
   { cmd: '/compact', name: 'compact', description: 'Compactar contexto da conversa', source: 'builtin' },
   { cmd: '/review', name: 'review', description: 'Revisar alterações e buscar falhas/melhorias', source: 'builtin' },

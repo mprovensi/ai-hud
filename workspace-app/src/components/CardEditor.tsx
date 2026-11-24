@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   ArrowDown,
   ArrowUp,
+  Bot,
   CheckCircle2,
   Columns3,
   Download,
@@ -16,6 +17,7 @@ import {
   List,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   ShieldAlert,
@@ -47,10 +49,14 @@ interface Props {
   filePath: string;
   hasProjectCwd?: boolean;
   reloadKey?: number;
+  snapshotVersion?: string;
   onNotify: (msg: string, err?: boolean) => void;
   onSendPrompt: (prompt: string) => void;
   onOpenDoc?: (docPath: string) => void;
 }
+
+const AUDIT_BOARD_PROMPT =
+  'Leia `.ai-workspace/board.card.json` (ou use a tool MCP `board_read`), compare as tarefas em `idea`, `spec` e `in-progress` com o código e o git atual do projeto, liste quais já foram concluídas com evidência curta e atualize os status delas (usando `board_update_status` ou editando `.ai-workspace/board.card.json` mantendo o schema `ai-card` v1 e sincronizando `- [x]` nos docs vinculados).';
 
 function fmtTok(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
@@ -61,6 +67,7 @@ export function CardEditor({
   filePath,
   hasProjectCwd = false,
   reloadKey = 0,
+  snapshotVersion = '',
   onNotify,
   onSendPrompt,
   onOpenDoc,
@@ -71,7 +78,9 @@ export function CardEditor({
   const [storage, setStorage] = useState<'in-project' | 'hub' | 'hub-cache'>('hub');
   const [offlineFallback, setOfflineFallback] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [loadingBoard, setLoadingBoard] = useState(true);
   const [saving, setSaving] = useState(false);
+  const loadSeqRef = useRef(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentContent: CardDoc; currentHash: string } | null>(null);
 
@@ -104,13 +113,25 @@ export function CardEditor({
   } | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
 
-  // Drag-and-drop entre colunas
+  // Drag-and-drop entre colunas + refresh automático sem F5
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<CardStatus | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [recentImportCount, setRecentImportCount] = useState<number | null>(null);
+  const [externalUpdateBanner, setExternalUpdateBanner] = useState<'applied' | 'pending' | null>(null);
+  const baseHashRef = useRef('');
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+  const editingRef = useRef<string | null>(null);
+  baseHashRef.current = baseHash;
+  dirtyRef.current = dirty;
+  savingRef.current = saving;
+  editingRef.current = editingId;
 
-  async function load(ignoreDraft = false) {
+  async function load(ignoreDraft = false, showSkeleton = false) {
+    const seq = ++loadSeqRef.current;
+    if (showSkeleton) setLoadingBoard(true);
     setConflict(null);
     try {
       const r = hasProjectCwd
@@ -123,6 +144,7 @@ export function CardEditor({
             content: f.content,
             hash: f.hash,
           }));
+      if (seq !== loadSeqRef.current) return;
       setStorage(r.storage);
       setOfflineFallback(!!r.offlineFallback);
       const serverCard: CardDoc = r.content || {
@@ -148,7 +170,9 @@ export function CardEditor({
       }
       setBaseHash(r.hash || '');
     } catch (e) {
-      onNotify((e as Error).message, true);
+      if (seq === loadSeqRef.current) onNotify((e as Error).message, true);
+    } finally {
+      if (seq === loadSeqRef.current) setLoadingBoard(false);
     }
   }
 
@@ -176,9 +200,73 @@ export function CardEditor({
     setAiStructEstimate(null);
     setAiProposed(null);
     setReviewModal(null);
-    load();
+    setExternalUpdateBanner(null);
+    setRecentImportCount(null);
+    load(false, true);
     refreshProjectDocs();
   }, [entityId, filePath, hasProjectCwd, reloadKey]);
+
+  // Verifica silenciosamente se o board mudou em disco (ex.: atualizado por uma IA via arquivo ou MCP)
+  async function checkExternalUpdate(manual = false) {
+    if (savingRef.current) return;
+    if (manual) setRefreshing(true);
+    try {
+      const r = hasProjectCwd
+        ? await api.getProjectBoard(entityId)
+        : await api.getEntityFile<CardDoc>(entityId, filePath).then((f) => ({
+            ok: true,
+            exists: true,
+            storage: 'hub' as const,
+            offlineFallback: false,
+            content: f.content,
+            hash: f.hash,
+          }));
+      setStorage(r.storage);
+      setOfflineFallback(!!r.offlineFallback);
+      const nextHash = r.hash || '';
+      const changed = !!(nextHash && baseHashRef.current && nextHash !== baseHashRef.current);
+
+      if (manual) {
+        if (r.content) {
+          setCard(r.content);
+          setBaseHash(nextHash);
+          setDirty(false);
+          setConflict(null);
+          setExternalUpdateBanner(null);
+          sessionStorage.removeItem(draftKey);
+          onNotify(changed ? 'Quadro atualizado com as alterações do disco.' : 'Quadro já está atualizado.');
+        }
+        return;
+      }
+
+      if (changed && r.content) {
+        if (!dirtyRef.current && !editingRef.current) {
+          setCard(r.content);
+          setBaseHash(nextHash);
+          setConflict(null);
+          setExternalUpdateBanner('applied');
+        } else {
+          setExternalUpdateBanner('pending');
+        }
+      }
+    } catch (e) {
+      if (manual) onNotify((e as Error).message, true);
+    } finally {
+      if (manual) setRefreshing(false);
+    }
+  }
+
+  // Polling leve a cada 5s + verificação imediata quando snapshot de sessões muda (fim de turno da IA)
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') checkExternalUpdate(false);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [entityId, filePath, hasProjectCwd]);
+
+  useEffect(() => {
+    if (snapshotVersion && baseHashRef.current) checkExternalUpdate(false);
+  }, [snapshotVersion]);
 
   function updateCard(next: CardDoc) {
     setCard(next);
@@ -226,7 +314,43 @@ export function CardEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [card, baseHash, saving, offlineFallback]);
 
-  if (!card) return <div className="empty">Carregando quadro…</div>;
+  if (loadingBoard || !card) {
+    return (
+      <div className="card-editor-root" aria-busy="true" aria-label="Carregando quadro do projeto">
+        <div className="toolbar">
+          <div className="skel" style={{ width: 170, height: 28 }} />
+          <div className="skel" style={{ width: 92, height: 28 }} />
+          <div className="skel" style={{ width: 120, height: 28 }} />
+          <div className="skel" style={{ width: 110, height: 28, marginLeft: 'auto' }} />
+        </div>
+        <div className="board-scroll">
+          <div className="board-grid">
+            {STATUSES.map((col, colIdx) => (
+              <div key={col.id} className="board-col">
+                <div className="board-col-head">
+                  <span>{col.label}</span>
+                  <div className="skel" style={{ width: 22, height: 16 }} />
+                </div>
+                <div className="board-col-body">
+                  {Array.from({ length: colIdx === 0 ? 3 : colIdx === 4 ? 2 : 1 }).map((_, k) => (
+                    <div key={k} className="skel-card">
+                      <div className="skel" style={{ width: `${72 + ((colIdx + k) % 3) * 8}%`, height: 14 }} />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <div className="skel" style={{ width: 64, height: 16 }} />
+                        <div className="skel" style={{ width: 52, height: 16 }} />
+                      </div>
+                      <div className="skel" style={{ width: '92%', height: 10 }} />
+                      <div className="skel" style={{ width: '65%', height: 10 }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function addItem(status: CardStatus = 'idea') {
     if (!card) return;
@@ -678,7 +802,7 @@ export function CardEditor({
   const totalTasksInDocs = projectDocs.reduce((acc, d) => acc + (d.taskCount || 0), 0);
 
   return (
-    <div className="card-editor-root">
+    <div key={entityId} className="card-editor-root board-fade-in">
       {conflict && (
         <div className="conflict-box">
           <h4>Conflito 409 — o quadro mudou em disco</h4>
@@ -871,14 +995,32 @@ export function CardEditor({
             </button>
             <button
               className="btn btn-sm"
+              onClick={() => onSendPrompt(AUDIT_BOARD_PROMPT)}
+              disabled={offlineFallback}
+              title="Pedir à IA no chat para auditar .ai-workspace/board.card.json contra o código/git e atualizar os status"
+            >
+              <Bot size={13} /> Auditar com IA
+            </button>
+            <button
+              className="btn btn-sm"
               onClick={() => handleUndoBoard(false)}
               disabled={undoing || offlineFallback}
-              title="Restaurar versão anterior do Quadro (desfazer importação ou última gravação)"
+              title="Restaurar versão anterior do Quadro (desfazer importação ou alteração da IA)"
             >
               <RotateCcw size={13} /> {undoing ? 'Desfazendo…' : 'Desfazer'}
             </button>
           </>
         )}
+
+        <button
+          className="btn btn-sm btn-icon"
+          onClick={() => checkExternalUpdate(true)}
+          disabled={refreshing}
+          title="Atualizar quadro do disco sem recarregar a página"
+          aria-label="Atualizar quadro"
+        >
+          <RefreshCw size={13} className={refreshing ? 'spin' : ''} />
+        </button>
 
         <span className="badge" title={storage === 'in-project' ? 'Salvo em .ai-workspace/board.card.json dentro da pasta do projeto (portátil entre workspaces)' : 'Salvo no Hub do AI Workspace'}>
           <HardDrive size={11} /> {storage === 'in-project' ? '.ai-workspace (portátil)' : storage === 'hub-cache' ? 'Cache offline' : 'Hub'}
@@ -891,6 +1033,34 @@ export function CardEditor({
           </button>
         </div>
       </div>
+
+      {/* Banner discreto quando o quadro foi atualizado em disco (ex.: por uma IA via MCP ou arquivo) */}
+      {externalUpdateBanner === 'applied' && (
+        <div className="docs-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px' }}>
+          <span style={{ fontSize: 12.5 }}>
+            🔄 Quadro sincronizado automaticamente com alterações em disco (ex.: atualizadas pela IA).
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {hasProjectCwd && (
+              <button className="btn btn-sm" disabled={undoing} onClick={() => { setExternalUpdateBanner(null); handleUndoBoard(true); }}>
+                <RotateCcw size={12} /> Desfazer
+              </button>
+            )}
+            <button className="btn btn-sm btn-primary" onClick={() => setExternalUpdateBanner(null)}>Ok</button>
+          </div>
+        </div>
+      )}
+      {externalUpdateBanner === 'pending' && (
+        <div className="docs-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderColor: 'rgba(229, 192, 99, .45)', background: 'rgba(229, 192, 99, .10)' }}>
+          <span style={{ fontSize: 12.5 }}>
+            🔄 O quadro mudou em disco enquanto você editava.
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-sm btn-primary" onClick={() => checkExternalUpdate(true)}>Recarregar do disco</button>
+            <button className="btn btn-sm" onClick={() => setExternalUpdateBanner(null)}>Ignorar</button>
+          </div>
+        </div>
+      )}
 
       {/* Banner de desfazer rápido logo após importação de docs/ */}
       {recentImportCount !== null && hasProjectCwd && !offlineFallback && (

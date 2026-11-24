@@ -318,9 +318,10 @@ function buildBridgeSnippet(memoryRelDir = '.ai-memory') {
   const dir = normalizePath(memoryRelDir, 'linux').replace(/\/+$/, '');
   return [
     '<!-- ai-hud-memory-bridge:start -->',
-    '## Memória Compartilhada do Projeto (AI HUD)',
+    '## Memória Compartilhada e Quadro do Projeto (AI HUD)',
     `Antes de iniciar, consulte \`${dir}/pinned.md\`, \`${dir}/MEMORY.md\` e \`${dir}/current-state.md\`.`,
     `Quando relevante, consulte histórico em \`${dir}/decisions.md\`, \`${dir}/pitfalls.md\` e \`${dir}/sessions/\`.`,
+    'O Quadro do projeto fica em `.ai-workspace/board.card.json` (`ai-card` v1; status: `idea`, `spec`, `in-progress`, `review`, `done`). Quando solicitado a auditar ou concluir tarefas, prefira as tools MCP `board_read` / `board_update_status` (ou atualize o JSON preservando o schema e os checkboxes `- [x]` em `docRef`).',
     '<!-- ai-hud-memory-bridge:end -->',
   ].join('\n');
 }

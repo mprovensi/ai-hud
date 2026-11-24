@@ -8,6 +8,13 @@ export interface CardReviewMeta {
   reportPath?: string;
 }
 
+export interface CardCommitMeta {
+  hash?: string;
+  branch?: string;
+  message?: string;
+  at?: number;
+}
+
 export interface CardItem {
   id: string;
   title: string;
@@ -23,6 +30,7 @@ export interface CardItem {
   docRef?: string;
   phase?: string;
   review?: CardReviewMeta | null;
+  commit?: CardCommitMeta | null;
   updatedAt?: number;
 }
 

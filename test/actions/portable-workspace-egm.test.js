@@ -355,6 +355,18 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     });
     assert.equal(commitAgain.status, 200);
     assert.equal(commitAgain.json.nothingToCommit, true);
+
+    // 12. Salvar metadado `commit` vinculado a um card concluído no Board portátil
+    const bNow = await reqJson(port, 'GET', `/api/workspace/project/board?entityId=${recreated.json.entity.id}`, tok);
+    const itemsWithCommit = bNow.json.content.items.map((it, idx) => (
+      idx === 0 ? { ...it, status: 'done', commit: { hash: commitRes.json.hash, branch: commitRes.json.branch || 'main', message: 'feat: concluir tarefa de teste', at: Date.now() } } : it
+    ));
+    const saveCommitMeta = await reqJson(port, 'PUT', '/api/workspace/project/board', tok, {
+      entityId: recreated.json.entity.id,
+      content: { ...bNow.json.content, items: itemsWithCommit },
+      baseHash: bNow.json.hash,
+    });
+    assert.equal(saveCommitMeta.status, 200);
   } finally {
     app.server.close();
   }

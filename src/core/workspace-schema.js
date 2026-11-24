@@ -78,7 +78,7 @@ function validateCard(value, { draft = false } = {}) {
   for (const item of value.items) {
     assertKeys(
       item,
-      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review', 'updatedAt'],
+      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review', 'commit', 'updatedAt'],
       'Um item do card',
     );
     if (typeof item.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(item.id) || seen.has(item.id)) {
@@ -112,6 +112,15 @@ function validateCard(value, { draft = false } = {}) {
       assertText(item.review.summary, 'Resumo da revisão', 400);
       if (item.review.reportPath !== undefined && item.review.reportPath !== '' && !isSafeRelativePath(item.review.reportPath)) {
         throw fail(`Caminho de parecer inválido no item "${item.id}".`);
+      }
+    }
+    if (item.commit !== undefined && item.commit !== null) {
+      assertKeys(item.commit, ['hash', 'branch', 'message', 'at'], 'commit');
+      assertText(item.commit.hash, 'Hash do commit', 40);
+      assertText(item.commit.branch, 'Branch do commit', 120);
+      assertText(item.commit.message, 'Mensagem do commit', 500);
+      if (item.commit.at !== undefined && (typeof item.commit.at !== 'number' || !Number.isFinite(item.commit.at))) {
+        throw fail(`Timestamp de commit inválido no item "${item.id}".`);
       }
     }
     if (item.image !== undefined && item.image !== '' && !isSafeRelativePath(item.image)) {

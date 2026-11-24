@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { isWithinRoot, isSecretPath, isSafeRelativePath, toSafeRelPath, resolveContainedPath } = require('../core/path-guard');
+const { normalizePath, isWithinRoot, isSecretPath, isSafeRelativePath, toSafeRelPath, resolveContainedPath } = require('../core/path-guard');
 const { redactSecrets } = require('../core/redact');
 
 const DEFAULT_MAX_BYTES = 256 * 1024;
@@ -128,16 +128,17 @@ async function readFilePreview({ cwd, relPath, mode = 'diff', maxBytes = DEFAULT
 
 async function readProjectGit(cwd, exec = execFile) {
   if (!cwd) return { status: 400, error: 'Pasta do projeto não informada.' };
+  const cleanCwd = normalizePath(cwd);
   let realCwd;
   try {
-    realCwd = fs.realpathSync(cwd);
+    realCwd = fs.realpathSync(cleanCwd);
     if (!fs.statSync(realCwd).isDirectory()) return { status: 400, error: 'Pasta não existe.' };
   } catch { return { status: 404, error: 'Pasta não encontrada neste PC.' }; }
 
   const [branch, statusRaw, logRaw] = await Promise.all([
     runGit(realCwd, ['rev-parse', '--abbrev-ref', 'HEAD'], exec),
     runGit(realCwd, ['status', '--short'], exec),
-    runGit(realCwd, ['log', '-n', '10', '--pretty=format:%h\t%ci\t%s'], exec),
+    runGit(realCwd, ['log', '-n', '30', '--pretty=format:%h\t%ci\t%s'], exec),
   ]);
   const modified = statusRaw.split(/\r?\n/).filter(Boolean).map((line) => ({
     code: line.slice(0, 2).trim(),

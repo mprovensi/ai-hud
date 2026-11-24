@@ -32,6 +32,7 @@ import type {
   CardStatus,
   CardTemplate,
   ConflictError,
+  GitInfo,
   GoldfishEstimate,
   GoldfishReviewResult,
   ProjectDocEntry,
@@ -58,7 +59,7 @@ interface Props {
   hasProjectCwd?: boolean;
   projectCwd?: string;
   projectMachine?: string;
-  lastAutoDone?: { entityId: string; title: string; ts: number } | null;
+  lastAutoDone?: { entityId: string; itemId?: string; title: string; ts: number } | null;
   reloadKey?: number;
   snapshotVersion?: string;
   onNotify: (msg: string, err?: boolean) => void;
@@ -82,6 +83,136 @@ function sortRecentFirst(items: CardItem[]): CardItem[] {
       return diff !== 0 ? diff : a.idx - b.idx;
     })
     .map((x) => x.item);
+}
+
+const COMMIT_STOPWORDS = new Set([
+  'para', 'com', 'sem', 'uma', 'uns', 'umas', 'dos', 'das', 'que', 'por', 'pela', 'pelo',
+  'como', 'mais', 'sobre', 'entre', 'apos', 'antes', 'the', 'and', 'for', 'with', 'from', 'feat', 'fix', 'chore', 'docs',
+]);
+
+function normCommitText(raw: string): string {
+  return String(raw || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function commitKeywords(raw: string): string[] {
+  return normCommitText(raw)
+    .split(' ')
+    .filter((w) => w.length >= 3 && !COMMIT_STOPWORDS.has(w));
+}
+
+interface CardCommitStatus {
+  state: 'committed' | 'pending' | 'clean' | 'unknown';
+  hash?: string;
+  message?: string;
+  branch?: string;
+  source?: 'card' | 'git-log';
+  pendingFiles: number;
+  docDirty: boolean;
+  reason?: string;
+}
+
+function resolveCardCommitStatus(item: CardItem, gitInfo: GitInfo | null): CardCommitStatus {
+  const docClean = (item.docRef || '').split('#')[0].replace(/\\/g, '/').trim().toLowerCase();
+  const modified = gitInfo?.modified || [];
+  const docDirty = !!(
+    docClean &&
+    modified.some((m) => {
+      const mp = String(m.path || '').replace(/\\/g, '/').replace(/^"|"$/g, '').trim().toLowerCase();
+      return mp === docClean || mp.endsWith(`/${docClean}`);
+    })
+  );
+
+  // 1. Commit salvo explicitamente no card
+  if (item.commit?.hash) {
+    if (docDirty) {
+      return {
+        state: 'pending',
+        hash: item.commit.hash,
+        message: item.commit.message || '',
+        branch: item.commit.branch || gitInfo?.branch || '',
+        pendingFiles: modified.length,
+        docDirty: true,
+        reason: `O documento vinculado (${item.docRef}) foi alterado após o commit ${item.commit.hash}.`,
+      };
+    }
+    return {
+      state: 'committed',
+      hash: item.commit.hash,
+      message: item.commit.message || '',
+      branch: item.commit.branch || gitInfo?.branch || '',
+      source: 'card',
+      pendingFiles: modified.length,
+      docDirty: false,
+    };
+  }
+
+  // 2. Cruzamento determinístico com os últimos 30 commits do repositório (0 tokens)
+  if (gitInfo?.isRepo && gitInfo.commits && gitInfo.commits.length > 0) {
+    const titleNorm = normCommitText(item.title);
+    const titleKw = commitKeywords(item.title);
+    const idLower = (item.id || '').toLowerCase();
+    const matched = gitInfo.commits.find((c) => {
+      const msgNorm = normCommitText(c.message);
+      if (!msgNorm) return false;
+      if (idLower.length >= 6 && !idLower.startsWith('item-') && msgNorm.includes(idLower)) return true;
+      if (titleNorm.length >= 8 && msgNorm.includes(titleNorm)) return true;
+      if (titleKw.length === 1) return titleKw[0].length >= 6 && msgNorm.includes(titleKw[0]);
+      if (titleKw.length >= 2) {
+        const msgSet = new Set(msgNorm.split(' '));
+        const hits = titleKw.filter((w) => msgSet.has(w)).length;
+        return hits >= 2 && hits / titleKw.length >= 0.6;
+      }
+      return false;
+    });
+    if (matched) {
+      if (docDirty) {
+        return {
+          state: 'pending',
+          hash: matched.hash,
+          message: matched.message,
+          branch: gitInfo.branch || '',
+          pendingFiles: modified.length,
+          docDirty: true,
+          reason: `Detectado commit ${matched.hash}, mas ${item.docRef} tem novas alterações pendentes.`,
+        };
+      }
+      return {
+        state: 'committed',
+        hash: matched.hash,
+        message: matched.message,
+        branch: gitInfo.branch || '',
+        source: 'git-log',
+        pendingFiles: modified.length,
+        docDirty: false,
+      };
+    }
+  }
+
+  if (!gitInfo || !gitInfo.isRepo) {
+    return { state: 'unknown', pendingFiles: 0, docDirty: false };
+  }
+  if (modified.length > 0) {
+    return {
+      state: 'pending',
+      branch: gitInfo.branch || '',
+      pendingFiles: modified.length,
+      docDirty,
+      reason: docDirty
+        ? `O arquivo vinculado (${item.docRef}) tem alterações não commitadas.`
+        : `${modified.length} arquivo(s) com alterações não commitadas em ${gitInfo.branch || 'git'}.`,
+    };
+  }
+  return {
+    state: 'clean',
+    branch: gitInfo.branch || '',
+    pendingFiles: 0,
+    docDirty: false,
+  };
 }
 
 export function CardEditor({
@@ -152,8 +283,11 @@ export function CardEditor({
   const [recentImportCount, setRecentImportCount] = useState<number | null>(null);
   const [pendingExternalReload, setPendingExternalReload] = useState(false);
 
-  // Prompt rápido de commit ao concluir tarefa (0 tokens)
+  // Prompt rápido de commit ao concluir tarefa + verificação Git (0 tokens)
+  const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
+  const [checkingGit, setCheckingGit] = useState(false);
   const [quickCommit, setQuickCommit] = useState<{
+    itemId?: string;
     taskTitle: string;
     message: string;
     branch: string;
@@ -307,19 +441,47 @@ export function CardEditor({
     return () => window.clearInterval(timer);
   }, [entityId, filePath, hasProjectCwd]);
 
+  async function refreshGitStatus(showToast = false): Promise<GitInfo | null> {
+    if (!projectCwd || offlineFallback) {
+      setGitInfo(null);
+      return null;
+    }
+    setCheckingGit(true);
+    try {
+      const g = await api.getGit(projectCwd, projectMachine);
+      setGitInfo(g);
+      if (showToast) {
+        if (!g.isRepo) onNotify('Esta pasta não é um repositório Git.');
+        else if ((g.modified || []).length === 0) onNotify(`Git limpo em ${g.branch || 'HEAD'} (sem alterações pendentes).`);
+        else onNotify(`${g.modified.length} arquivo(s) pendente(s) de commit em ${g.branch || 'HEAD'}.`);
+      }
+      return g;
+    } catch (e) {
+      if (showToast) onNotify((e as Error).message, true);
+      return null;
+    } finally {
+      setCheckingGit(false);
+    }
+  }
+
   useEffect(() => {
-    if (snapshotVersion && baseHashRef.current) checkExternalUpdate(false);
+    if (snapshotVersion && baseHashRef.current) {
+      checkExternalUpdate(false);
+      refreshGitStatus(false);
+    }
   }, [snapshotVersion]);
 
   useEffect(() => {
     setQuickCommit(null);
-  }, [entityId, projectCwd]);
+    setGitInfo(null);
+    if (projectCwd && !offlineFallback) refreshGitStatus(false);
+  }, [entityId, projectCwd, projectMachine, offlineFallback]);
 
-  async function promptQuickCommit(taskTitle: string, explicit = false) {
+  async function promptQuickCommit(taskTitle: string, explicit = false, itemId?: string) {
     if (!projectCwd || offlineFallback) return;
     try {
-      const g = await api.getGit(projectCwd, projectMachine);
-      if (!g.isRepo) {
+      const g = await refreshGitStatus(false);
+      if (!g || !g.isRepo) {
         if (explicit) onNotify('Esta pasta não é um repositório Git.', true);
         return;
       }
@@ -330,6 +492,7 @@ export function CardEditor({
       }
       const cleanTitle = taskTitle.trim().replace(/\s+/g, ' ').slice(0, 80);
       setQuickCommit({
+        itemId,
         taskTitle: cleanTitle,
         message: cleanTitle ? `feat: ${cleanTitle}` : 'chore: atualizar tarefa',
         branch: g.branch || 'HEAD',
@@ -346,6 +509,7 @@ export function CardEditor({
     if (!quickCommit || !projectCwd || quickCommit.committing) return;
     const msg = quickCommit.message.trim();
     if (!msg) return;
+    const linkedItemId = quickCommit.itemId;
     setQuickCommit((prev) => (prev ? { ...prev, committing: true } : null));
     try {
       const r = await api.commitGit({
@@ -357,13 +521,25 @@ export function CardEditor({
       setQuickCommit(null);
       if (r.nothingToCommit) {
         onNotify('Nada para commitar no Git.');
-      } else if (r.pushError) {
-        onNotify(`Commit ${r.hash || ''} criado em ${r.branch || 'git'}, mas o push falhou: ${r.pushError}`, true);
-      } else if (r.pushed) {
-        onNotify(`Commit ${r.hash || ''} criado e enviado (push) em ${r.branch || 'git'}.`);
       } else {
-        onNotify(`Commit ${r.hash || ''} criado em ${r.branch || 'git'}.`);
+        if (r.committed && r.hash && linkedItemId && card && !offlineFallback) {
+          const commitMeta = { hash: r.hash, branch: r.branch || '', message: msg, at: Date.now() };
+          const nextCard: CardDoc = {
+            ...card,
+            items: card.items.map((it) => (it.id === linkedItemId ? { ...it, commit: commitMeta } : it)),
+          };
+          setCard(nextCard);
+          await save(nextCard, true);
+        }
+        if (r.pushError) {
+          onNotify(`Commit ${r.hash || ''} criado em ${r.branch || 'git'}, mas o push falhou: ${r.pushError}`, true);
+        } else if (r.pushed) {
+          onNotify(`Commit ${r.hash || ''} criado e enviado (push) em ${r.branch || 'git'}.`);
+        } else {
+          onNotify(`Commit ${r.hash || ''} criado em ${r.branch || 'git'}.`);
+        }
       }
+      await refreshGitStatus(false);
     } catch (e) {
       setQuickCommit((prev) => (prev ? { ...prev, committing: false } : null));
       onNotify((e as Error).message, true);
@@ -374,7 +550,7 @@ export function CardEditor({
     if (!lastAutoDone || lastAutoDone.entityId !== entityId) return;
     if (lastAutoDone.ts <= lastHandledAutoDoneRef.current) return;
     lastHandledAutoDoneRef.current = lastAutoDone.ts;
-    promptQuickCommit(lastAutoDone.title, false);
+    promptQuickCommit(lastAutoDone.title, false, lastAutoDone.itemId);
   }, [lastAutoDone, entityId, projectCwd, projectMachine]);
 
   function updateCard(next: CardDoc) {
@@ -528,7 +704,7 @@ export function CardEditor({
         await syncCheckboxIfCrossedDone(prevSt, nextSt, stamped);
       }
       if (prevSt !== 'done' && nextSt === 'done') {
-        promptQuickCommit(stamped.title, false);
+        promptQuickCommit(stamped.title, false, stamped.id);
       }
     }
   }
@@ -578,7 +754,7 @@ export function CardEditor({
     await save(nextCard, true);
     await syncCheckboxIfCrossedDone(prevStatus, targetCol, updatedItem);
     if (prevStatus !== 'done' && targetCol === 'done') {
-      promptQuickCommit(updatedItem.title, false);
+      promptQuickCommit(updatedItem.title, false, updatedItem.id);
     }
   }
 
@@ -813,6 +989,7 @@ export function CardEditor({
 
     const st = (item.status || 'idea') as CardStatus;
     const isDone = st === 'done';
+    const commitSt = isDone && projectCwd ? resolveCardCommitStatus(item, gitInfo) : null;
 
     return (
       <div
@@ -950,6 +1127,44 @@ export function CardEditor({
             )}
           </div>
         )}
+
+        {isDone && projectCwd && !offlineFallback && commitSt && commitSt.state !== 'unknown' && (
+          <div className="card-actions" style={{ marginTop: 7, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+            {commitSt.state === 'pending' ? (
+              <button
+                className="btn btn-sm"
+                style={{ padding: '3px 7px', fontSize: 11 }}
+                title={commitSt.reason || 'Commitar alterações pendentes no Git do projeto (0 tokens)'}
+                onClick={() => promptQuickCommit(item.title, true, item.id)}
+              >
+                <GitCommitHorizontal size={11} /> Commitar
+                {commitSt.pendingFiles > 0 && (
+                  <span style={{ color: 'var(--warn)', fontSize: 10, fontWeight: 700 }}>· {commitSt.pendingFiles}</span>
+                )}
+              </button>
+            ) : commitSt.state === 'committed' ? (
+              <span
+                className="badge done mono"
+                style={{ fontSize: 10, gap: 4 }}
+                title={
+                  commitSt.source === 'git-log'
+                    ? `Commit detectado no Git (${commitSt.hash}): ${commitSt.message}`
+                    : `Commitado (${commitSt.hash}${commitSt.branch ? ` em ${commitSt.branch}` : ''}): ${commitSt.message || item.title}`
+                }
+              >
+                <CheckCircle2 size={10} /> {commitSt.hash}
+              </span>
+            ) : (
+              <span
+                className="badge done"
+                style={{ fontSize: 10, gap: 4, opacity: .85 }}
+                title={`Repositório limpo em ${commitSt.branch || 'git'} — nenhuma alteração pendente para commitar`}
+              >
+                <CheckCircle2 size={10} /> Git limpo
+              </span>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -1004,6 +1219,7 @@ export function CardEditor({
       {detailModal && (() => {
         const modalStage = (detailModal.draft.status || 'idea') as CardStatus;
         const modalStageLabel = BOARD_STATUSES.find((s) => s.id === modalStage)?.label || modalStage;
+        const modalCommitSt = !detailModal.isNew && projectCwd ? resolveCardCommitStatus(detailModal.draft, gitInfo) : null;
         return (
         <div className="modal-bg" onClick={() => setDetailModal(null)}>
           <div className={`modal card-detail-modal stage-${modalStage}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1030,14 +1246,14 @@ export function CardEditor({
                     <Play size={12} /> Executar
                   </button>
                 )}
-                {!detailModal.isNew && modalStage === 'done' && projectCwd && !offlineFallback && (
+                {!detailModal.isNew && modalStage === 'done' && projectCwd && !offlineFallback && (gitInfo?.modified?.length ?? 1) > 0 && (
                   <button
                     className="btn btn-sm"
                     title="Commitar alterações pendentes no Git do projeto (0 tokens)"
                     onClick={() => {
-                      const title = detailModal.draft.title;
+                      const { title, id } = detailModal.draft;
                       setDetailModal(null);
-                      promptQuickCommit(title, true);
+                      promptQuickCommit(title, true, id);
                     }}
                   >
                     <GitCommitHorizontal size={13} /> Commitar
@@ -1252,6 +1468,63 @@ export function CardEditor({
                 />
               )}
 
+              {modalCommitSt && modalStage === 'done' && projectCwd && !offlineFallback && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <label style={{ margin: 0 }}>Status no Git</label>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={checkingGit}
+                      onClick={() => refreshGitStatus(true)}
+                      title="Rechecar git status e últimos commits (0 tokens)"
+                    >
+                      <RefreshCw size={11} className={checkingGit ? 'spin' : ''} /> Verificar Git
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: '#101216', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {modalCommitSt.state === 'committed' ? (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ok)', flexWrap: 'wrap' }}>
+                          <CheckCircle2 size={13} />
+                          <b>Commitado</b>
+                          <code className="mono">{modalCommitSt.hash}</code>
+                          {modalCommitSt.branch && <span className="badge">{modalCommitSt.branch}</span>}
+                          {modalCommitSt.source === 'git-log' && <span style={{ color: 'var(--muted)', fontSize: 11 }}>(detectado no histórico)</span>}
+                        </div>
+                        {modalCommitSt.message && (
+                          <div style={{ color: 'var(--muted)', fontSize: 11.5 }}>{modalCommitSt.message}</div>
+                        )}
+                      </>
+                    ) : modalCommitSt.state === 'pending' ? (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--warn)', flexWrap: 'wrap' }}>
+                          <ShieldAlert size={13} />
+                          <b>{modalCommitSt.reason || 'Alterações ainda não commitadas'}</b>
+                        </div>
+                        {gitInfo && gitInfo.modified.length > 0 && (
+                          <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {gitInfo.modified.slice(0, 5).map((m, idx) => (
+                              <div key={idx} className="ell">{m.code} {m.path}</div>
+                            ))}
+                            {gitInfo.modified.length > 5 && (
+                              <div>+{gitInfo.modified.length - 5} outro(s) arquivo(s)</div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : modalCommitSt.state === 'clean' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ok)' }}>
+                        <CheckCircle2 size={13} />
+                        <span>Git limpo em <code className="mono">{modalCommitSt.branch || 'HEAD'}</code> — sem alterações pendentes.</span>
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--muted)' }}>Repositório Git não detectado nesta pasta.</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {detailModal.draft.updatedAt && (
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                   Última alteração: {new Date(detailModal.draft.updatedAt).toLocaleString('pt-BR')}
@@ -1450,9 +1723,9 @@ export function CardEditor({
 
         <button
           className="btn btn-sm btn-icon"
-          onClick={() => checkExternalUpdate(true)}
+          onClick={() => { checkExternalUpdate(true); refreshGitStatus(false); }}
           disabled={refreshing}
-          title="Atualizar quadro do disco sem recarregar a página"
+          title="Atualizar quadro e status Git sem recarregar a página"
           aria-label="Atualizar quadro"
         >
           <RefreshCw size={13} className={refreshing ? 'spin' : ''} />

@@ -110,7 +110,7 @@ export function NewProjectDrawer({
 
   async function submitGroup() {
     const clean = newGroupName.trim();
-    if (!clean) return onNotify('Informe o nome do englobador (workspace).', true);
+    if (!clean) return onNotify('Informe o nome do workspace.', true);
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -128,15 +128,15 @@ export function NewProjectDrawer({
 
   return (
     <div className="side-drawer-bg" onClick={onClose}>
-      <aside className="side-drawer" onClick={(e) => e.stopPropagation()} aria-label="Criar projeto ou englobador">
+      <aside className="side-drawer" onClick={(e) => e.stopPropagation()} aria-label="Criar projeto ou workspace">
         <div className="side-drawer-head">
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>
-              {mode === 'project' ? 'Novo projeto' : 'Novo englobador (Workspace)'}
+              {mode === 'project' ? 'Novo projeto' : 'Novo workspace'}
             </h3>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
               {mode === 'project'
-                ? 'Escolha a pasta do código e organize dentro de um englobador'
+                ? 'Escolha a pasta do código e organize dentro de um workspace'
                 : 'Agrupe vários projetos relacionados (ex.: TRT, Jogos, Pessoal)'}
             </div>
           </div>
@@ -185,13 +185,13 @@ export function NewProjectDrawer({
               />
 
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>3. Englobador / Workspace (ex.: TRT, Jogos)</label>
+                <label>3. Workspace (ex.: TRT, Jogos)</label>
                 <input
                   className="inp"
                   list="wsDrawerGroupList"
                   value={group}
                   onChange={(e) => setGroup(e.target.value)}
-                  placeholder="Escolha ou digite um novo englobador…"
+                  placeholder="Escolha ou digite um novo workspace…"
                 />
                 <datalist id="wsDrawerGroupList">
                   {groups.map((g) => <option key={g} value={g} />)}
@@ -258,7 +258,7 @@ export function NewProjectDrawer({
           <>
             <div className="side-drawer-body">
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>Nome do englobador (Workspace)</label>
+                <label>Nome do workspace</label>
                 <input
                   className="inp"
                   autoFocus
@@ -271,7 +271,7 @@ export function NewProjectDrawer({
 
               {groups.length > 0 && (
                 <div className="field" style={{ marginBottom: 0 }}>
-                  <label>Englobadores já existentes ({groups.length})</label>
+                  <label>Workspaces já existentes ({groups.length})</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {groups.map((g) => (
                       <span key={g} className="badge" style={{ padding: '4px 10px', fontSize: 12 }}>📁 {g}</span>
@@ -281,7 +281,7 @@ export function NewProjectDrawer({
               )}
 
               <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
-                Depois de criar o englobador, clique no botão <b>+</b> ao lado dele na barra esquerda para adicionar projetos ou mova projetos existentes usando o seletor no cabeçalho.
+                Depois de criar o workspace, clique no botão <b>+</b> ao lado dele na barra esquerda para adicionar projetos ou mova projetos existentes usando o seletor no cabeçalho.
               </div>
             </div>
 
@@ -293,7 +293,7 @@ export function NewProjectDrawer({
                 disabled={submitting || !newGroupName.trim()}
                 onClick={submitGroup}
               >
-                <Layers size={14} /> {submitting ? 'Criando…' : 'Criar englobador'}
+                <Layers size={14} /> {submitting ? 'Criando…' : 'Criar workspace'}
               </button>
             </div>
           </>

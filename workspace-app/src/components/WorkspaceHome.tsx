@@ -76,7 +76,7 @@ export function WorkspaceHome({
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>AI Workspace</h1>
           <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
-            Seus projetos, englobadores, memória compartilhada e sessões ativas em um só lugar.
+            Seus projetos, workspaces, memória compartilhada e sessões ativas em um só lugar.
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -84,7 +84,7 @@ export function WorkspaceHome({
             <Plus size={14} /> Novo projeto
           </button>
           <button className="btn" onClick={onNewGroup}>
-            <FolderPlus size={14} /> Novo englobador
+            <FolderPlus size={14} /> Novo workspace
           </button>
           <button className="btn" onClick={onNewConversation}>
             <MessageSquarePlus size={14} /> Nova conversa
@@ -97,7 +97,7 @@ export function WorkspaceHome({
         <div className="home-kpi">
           <div className="home-kpi-lbl"><FolderKanban size={13} /> Projetos</div>
           <div className="home-kpi-val">{entities.length}</div>
-          <div className="home-kpi-sub">{groupsCount ? `${groupsCount} englobador(es)` : 'sem englobadores ainda'}</div>
+          <div className="home-kpi-sub">{groupsCount ? `${groupsCount} workspace(s)` : 'sem workspaces ainda'}</div>
         </div>
         <div className="home-kpi">
           <div className="home-kpi-lbl"><Activity size={13} /> Sessões ativas</div>

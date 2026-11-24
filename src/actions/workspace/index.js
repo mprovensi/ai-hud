@@ -275,7 +275,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       groups = [...new Set(groups)];
       entities = entities.map((e) => (e.group === cleanFrom ? { ...e, group: cleanName } : e));
     } else {
-      if (!cleanName) return { status: 400, body: 'Informe o nome do englobador (workspace).' };
+      if (!cleanName) return { status: 400, body: 'Informe o nome do workspace.' };
       if (!groups.includes(cleanName)) groups.push(cleanName);
     }
 

@@ -244,7 +244,7 @@ export function App() {
     try {
       await api.updateEntity({ id: entity.id, group: nextGroup });
       await loadWorkspace();
-      notify(nextGroup ? `Movido para "${nextGroup}".` : 'Removido do englobador.');
+      notify(nextGroup ? `Movido para "${nextGroup}".` : 'Removido do workspace.');
     } catch (e) {
       notify((e as Error).message, true);
     }
@@ -264,7 +264,7 @@ export function App() {
       } else {
         await api.saveGroup({ name: confirmDelete.name, remove: true });
         await loadWorkspace();
-        notify(`Englobador "${confirmDelete.name}" removido.`);
+        notify(`Workspace "${confirmDelete.name}" removido.`);
       }
       setConfirmDelete(null);
     } catch (e) {
@@ -329,7 +329,7 @@ export function App() {
       sections.push({ name, label: name, items });
     }
     if (ungrouped.length || sections.length === 0) {
-      sections.push({ name: '', label: sections.length ? 'Geral (sem grupo)' : 'Projetos', items: ungrouped });
+      sections.push({ name: '', label: sections.length ? 'Geral (sem workspace)' : 'Projetos', items: ungrouped });
     }
     return sections;
   }, [allGroups, filteredEntities, search]);
@@ -339,7 +339,7 @@ export function App() {
       { id: 'act-home', group: 'Navegação', label: 'Voltar para Início (Dashboard do Workspace)', run: () => setSelection(null) },
       { id: 'act-chat', group: 'Ação', label: 'Nova conversa com IA (escolher pasta e IA)', run: () => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); } },
       { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: () => openNewModal('') },
-      { id: 'act-grp', group: 'Ação', label: 'Criar englobador de projetos (ex.: TRT, Jogos)', run: openNewGroup },
+      { id: 'act-grp', group: 'Ação', label: 'Criar workspace (ex.: TRT, Jogos)', run: openNewGroup },
       { id: 'act-hud', group: 'Navegação', label: 'Abrir AI HUD Clássico (/)', run: () => { window.location.href = withToken('/'); } },
     ];
     for (const e of ws?.entities || []) {
@@ -453,7 +453,7 @@ export function App() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <button className="btn btn-sm btn-icon" title="Novo englobador (ex.: TRT, Jogos)" onClick={openNewGroup}>
+            <button className="btn btn-sm btn-icon" title="Novo workspace (ex.: TRT, Jogos)" onClick={openNewGroup}>
               <FolderPlus size={14} />
             </button>
             <button className="btn btn-primary btn-sm btn-icon" title="Novo projeto" onClick={() => openNewModal('')}>
@@ -489,7 +489,7 @@ export function App() {
                       <button
                         className="btn btn-sm btn-icon"
                         style={{ padding: 2, border: 0, background: 'transparent' }}
-                        title={`Apagar englobador "${sec.name}"`}
+                        title={`Apagar workspace "${sec.name}"`}
                         onClick={() => setConfirmDelete({ kind: 'group', name: sec.name, count: sec.items.length })}
                       >
                         <Trash2 size={12} color="var(--muted)" />
@@ -589,13 +589,13 @@ export function App() {
                   <select
                     className="sel"
                     style={{ width: 'auto', minWidth: 140, maxWidth: 200, padding: '4px 8px', fontSize: 12 }}
-                    title="Englobador (Workspace) deste projeto"
+                    title="Workspace deste projeto"
                     value={selectedEntity.group || ''}
                     onChange={(e) => handleChangeEntityGroup(selectedEntity, e.target.value)}
                   >
-                    <option value="">Sem englobador</option>
+                    <option value="">Sem workspace</option>
                     {allGroups.map((g) => <option key={g} value={g}>📁 {g}</option>)}
-                    <option value="__new__">+ Novo englobador…</option>
+                    <option value="__new__">+ Novo workspace…</option>
                   </select>
                   {activeBinding && (
                     <span className="badge mono">{activeBinding.machine}: {activeBinding.cwd}</span>
@@ -811,7 +811,7 @@ export function App() {
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f6b3b3' }}>
               <Trash2 size={17} />
-              {confirmDelete.kind === 'entity' ? 'Apagar projeto?' : 'Apagar englobador (Workspace)?'}
+              {confirmDelete.kind === 'entity' ? 'Apagar projeto?' : 'Apagar workspace?'}
             </h3>
             {confirmDelete.kind === 'entity' ? (
               <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5, color: '#d5dbe7' }}>
@@ -824,12 +824,12 @@ export function App() {
               </p>
             ) : (
               <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5, color: '#d5dbe7' }}>
-                Tem certeza que deseja apagar o englobador <b>{confirmDelete.name}</b>?
+                Tem certeza que deseja apagar o workspace <b>{confirmDelete.name}</b>?
                 <br />
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>
                   {confirmDelete.count > 0
-                    ? `Os ${confirmDelete.count} projeto(s) dentro dele não serão apagados — passarão para "Geral (sem grupo)".`
-                    : 'Este englobador está vazio e será removido da lista.'}
+                    ? `Os ${confirmDelete.count} projeto(s) dentro dele não serão apagados — passarão para "Geral (sem workspace)".`
+                    : 'Este workspace está vazio e será removido da lista.'}
                 </span>
               </p>
             )}

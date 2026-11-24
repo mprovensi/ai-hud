@@ -20,8 +20,12 @@ module.exports = ({ permissions, queue, collector, json, send }) => [
 
   // hook-stop.js: sessão parada esperando resposta, e entrega da resposta enfileirada
   { method: 'POST', path: '/hook/listen', json: true, handler: ({ res, body }) => {
-    if (body.session) { queue.listen(body.session, body.tool, body.until); collector.poke(); }
-    json(res, {});
+    const remoteMode = !!permissions.remoteMode;
+    if (body.session && (!body.requireRemote || remoteMode)) {
+      queue.listen(body.session, body.tool, body.until);
+      collector.poke();
+    }
+    json(res, { remoteMode });
   } },
   { method: 'POST', path: '/hook/unlisten', json: true, handler: ({ res, body }) => {
     queue.unlisten(body.session);
@@ -29,9 +33,10 @@ module.exports = ({ permissions, queue, collector, json, send }) => [
     json(res, {});
   } },
   { path: '/hook/next', handler: ({ res, url }) => {
+    const headers = { 'X-AI-HUD-Remote': permissions.remoteMode ? '1' : '0' };
     const msg = queue.take(url.searchParams.get('session') || '');
-    if (msg == null) return send(res, 204, 'application/json', '');
+    if (msg == null) return send(res, 204, 'application/json', '', headers);
     collector.poke();
-    return json(res, { text: msg });
+    return send(res, 200, 'application/json', JSON.stringify({ text: msg, remoteMode: !!permissions.remoteMode }), headers);
   } },
 ];

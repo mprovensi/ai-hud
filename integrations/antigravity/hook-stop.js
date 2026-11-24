@@ -1,9 +1,10 @@
-// Hook "Stop" do Antigravity (IDE / Antigravity 2.0): ao fim de cada turno espera até 30 min por uma
-// resposta enviada pelo AI HUD (iPad/Android). Se chegar, devolve {"decision":"continue","reason":<texto>}
-// e a conversa continua na própria janela da IDE.
+// Hook "Stop" do Antigravity (IDE / Antigravity 2.0):
+//   - Sempre entrega imediatamente (0 ms) qualquer mensagem que já foi enfileirada pelo celular/iPad enquanto a IA trabalhava.
+//   - Como o hook Stop do Antigravity é síncrono (bloqueia novas mensagens digitadas na IDE enquanto aguarda),
+//     só mantém a escuta contínua (até 30 min) quando o "Modo remoto" estiver LIGADO no AI HUD.
+//   - Com Modo remoto DESLIGADO, libera a IDE na hora para você digitar normalmente no PC sem travar.
+//   - Se o Modo remoto for desligado durante a espera, libera a IDE em até 2 s.
 //   - Execuções headless do `agy` CLI (`antigravity-cli/`) saem imediatamente para não bloquear `--print`.
-//   - Se o usuário cancelar (`USER_CANCELED`) ou digitar no PC (novo `USER_INPUT`), libera na hora.
-//   - Configurado globalmente em ~/.gemini/config/hooks.json
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -35,7 +36,7 @@ function call(port, token, method, route, body) {
       res.on('end', () => {
         let json = null;
         try { json = JSON.parse(out); } catch {}
-        resolve({ status: res.statusCode, json });
+        resolve({ status: res.statusCode, headers: res.headers || {}, json });
       });
     });
     req.on('timeout', () => req.destroy(new Error('timeout')));
@@ -52,7 +53,6 @@ function isCliExecution(input) {
   return /antigravity-cli/i.test(tp) || /antigravity-cli/i.test(ap);
 }
 
-// Se o usuário digitou na IDE enquanto o hook esperava, o transcript.jsonl recebe novo USER_INPUT
 function typedLocally(file, from) {
   try {
     const size = fs.statSync(file).size;
@@ -72,13 +72,27 @@ function writeOut(obj) {
 async function main(input) {
   const session = input && input.conversationId;
   if (!session) return writeOut({});
-  // Nunca segurar sessões headless do `agy` CLI (`--print`) nem turnos cancelados/com erro
   if (isCliExecution(input)) return writeOut({});
   const reason = String(input.terminationReason || '');
   if (reason === 'USER_CANCELED' || reason === 'ERROR') return writeOut({});
 
   const token = readToken();
   if (!token) return writeOut({});
+
+  // 1. Verifica imediatamente se já existe mensagem enfileirada pelo celular/iPad (0 ms de bloqueio)
+  let remoteMode = false;
+  try {
+    const first = await call(PORT, token, 'GET', `/hook/next?session=${encodeURIComponent(session)}`);
+    if (first.status === 200 && first.json && first.json.text) {
+      return writeOut({ decision: 'continue', reason: first.json.text });
+    }
+    remoteMode = first.headers['x-ai-hud-remote'] === '1';
+  } catch {
+    return writeOut({});
+  }
+
+  // 2. Com Modo remoto desligado (usuário no PC), libera a IDE imediatamente para não travar o chat local
+  if (!remoteMode) return writeOut({});
 
   const transcript = input.transcriptPath || '';
   let from = 0;
@@ -89,9 +103,9 @@ async function main(input) {
   const until = Date.now() + waitMs;
 
   try {
-    const r = await call(PORT, token, 'POST', '/hook/listen', { session, tool: 'Gemini', until });
-    if (r.status !== 200) return writeOut({});
-  } catch { return writeOut({}); } // HUD fora do ar: não segura a IDE
+    const r = await call(PORT, token, 'POST', '/hook/listen', { session, tool: 'Gemini', until, requireRemote: true });
+    if (r.status !== 200 || (r.json && r.json.remoteMode === false)) return writeOut({});
+  } catch { return writeOut({}); }
 
   while (Date.now() < until) {
     try {
@@ -99,6 +113,8 @@ async function main(input) {
       if (r.status === 200 && r.json && r.json.text) {
         return writeOut({ decision: 'continue', reason: r.json.text });
       }
+      // Se o usuário desligou o Modo remoto, libera a IDE imediatamente
+      if (r.headers && r.headers['x-ai-hud-remote'] === '0') break;
     } catch { return writeOut({}); }
     if (transcript && typedLocally(transcript, from)) break;
     await sleep(pollMs);

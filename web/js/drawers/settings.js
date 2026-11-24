@@ -2,6 +2,17 @@
   function renderSettings() {
     var html = head('Configurações', 'preferências deste aparelho');
 
+    // Modo remoto (mantém Antigravity IDE ouvindo o celular/iPad e encaminha permissões para o HUD)
+    var remoteOn = !!(snap && snap.remoteMode);
+    html += '<div class="panel cfg-panel">' +
+      '<h2>Modo remoto</h2>' +
+      '<p class="cfg-desc">Mantém sessões da IDE Antigravity ouvindo respostas do celular/iPad e encaminha pedidos de permissão para o HUD. Desligue ao voltar para o PC para não segurar o chat da IDE.</p>' +
+      '<div class="cfg-row">' +
+        '<button type="button" class="btn cfg-toggle' + (remoteOn ? ' on' : '') + '" id="cfgRemote" aria-pressed="' + (remoteOn ? 'true' : 'false') + '">' +
+          '<span>' + (remoteOn ? '📡 Modo remoto ligado' : 'Modo remoto desligado') + '</span>' +
+        '</button>' +
+      '</div></div>';
+
     // Alertas sonoros
     html += '<div class="panel cfg-panel">' +
       '<h2>Alertas</h2>' +
@@ -52,6 +63,19 @@
     html += '<p class="cfg-foot muted">AI HUD · versão ' + esc(APP_VERSION) + '</p>';
     setOverlay(html);
 
+    if ($('cfgRemote')) {
+      $('cfgRemote').onclick = function () {
+        var b = this, next = !(snap && snap.remoteMode);
+        b.disabled = true;
+        request('POST', '/api/remote', function (err, r) {
+          b.disabled = false;
+          if (err) return flash('Falhou: ' + err.message, false);
+          if (snap) snap.remoteMode = !!(r && r.remoteMode);
+          flash(next ? 'Modo remoto ligado (IDE Antigravity pronta para celular/iPad).' : 'Modo remoto desligado (IDE Antigravity liberada no PC).');
+          renderSettings();
+        }, { on: next });
+      };
+    }
     if ($('cfgSound')) {
       $('cfgSound').onclick = function () {
         unlockAudio();

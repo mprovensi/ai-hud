@@ -8,6 +8,57 @@ const { redactSecrets } = require('../core/redact');
 
 const DEFAULT_MAX_BYTES = 256 * 1024;
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', '.cache', 'target', '__pycache__', '.venv']);
+const ICON_MIMES = {
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+};
+const MAX_ICON_BYTES = 2 * 1024 * 1024;
+const ICON_CANDIDATES = [
+  '.ai-workspace/icon.png',
+  '.ai-workspace/icon.svg',
+  '.ai-workspace/icon.webp',
+  '.ai-workspace/icon.ico',
+  'icon.svg',
+  'icon.png',
+  'icon.ico',
+  'icon.webp',
+  'favicon.svg',
+  'favicon.png',
+  'favicon.ico',
+  'logo.svg',
+  'logo.png',
+  'logo.webp',
+  'assets/icon/app.png',
+  'assets/icon.png',
+  'assets/icon.svg',
+  'assets/icon.webp',
+  'assets/logo.svg',
+  'assets/logo.png',
+  'web/icons/icon-192.png',
+  'web/icons/icon-512.png',
+  'web/favicon.svg',
+  'web/favicon.png',
+  'web/favicon.ico',
+  'web/icon.png',
+  'public/favicon.svg',
+  'public/favicon.png',
+  'public/favicon.ico',
+  'public/icon.png',
+  'public/icon.svg',
+  'public/logo.svg',
+  'public/logo.png',
+  'src/assets/icon.svg',
+  'src/assets/icon.png',
+  'src/assets/logo.svg',
+  'src/assets/logo.png',
+  'app/icon.svg',
+  'app/icon.png',
+  'app/favicon.ico',
+];
 
 function runGit(cwd, args, exec = execFile) {
   return new Promise((resolve) => {
@@ -196,4 +247,75 @@ function listProjectFiles({ cwd, relDir = '', maxEntries = 200 } = {}) {
   }
 }
 
-module.exports = { readFilePreview, readGitBrief, readProjectGit, listProjectFiles };
+function tryResolveIconFile(realCwd, relPath) {
+  const clean = String(relPath || '').trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!clean || !isSafeRelativePath(clean) || isSecretPath(clean)) return null;
+  const ext = path.extname(clean).toLowerCase();
+  const mime = ICON_MIMES[ext];
+  if (!mime) return null;
+  const target = resolveContainedPath(realCwd, clean);
+  if (!target || !isWithinRoot(realCwd, target) || !fs.existsSync(target)) return null;
+  try {
+    const realFile = fs.realpathSync(target);
+    if (!isWithinRoot(realCwd, realFile)) return null;
+    const st = fs.statSync(realFile);
+    if (!st.isFile() || st.size === 0 || st.size > MAX_ICON_BYTES) return null;
+    return { filePath: realFile, mime, ext, relPath: clean };
+  } catch {
+    return null;
+  }
+}
+
+function findProjectIcon(cwd) {
+  const cleanCwd = normalizePath(cwd);
+  if (!cleanCwd) return null;
+  let realCwd;
+  try {
+    realCwd = fs.realpathSync(cleanCwd);
+    if (!fs.statSync(realCwd).isDirectory()) return null;
+  } catch { return null; }
+
+  // 1. Godot: project.godot -> config/icon="res://..."
+  const godotFile = path.join(realCwd, 'project.godot');
+  if (fs.existsSync(godotFile)) {
+    try {
+      const raw = fs.readFileSync(godotFile, 'utf8').slice(0, 16000);
+      const m = /^\s*config\/icon\s*=\s*"res:\/\/([^"]+)"/m.exec(raw);
+      if (m && m[1]) {
+        const hit = tryResolveIconFile(realCwd, m[1]);
+        if (hit) return hit;
+      }
+    } catch {}
+  }
+
+  // 2. Web manifests: manifest.json, web/manifest.json, public/manifest.json
+  for (const mRel of ['manifest.json', 'web/manifest.json', 'public/manifest.json']) {
+    const mPath = path.join(realCwd, mRel);
+    if (!fs.existsSync(mPath)) continue;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(mPath, 'utf8').slice(0, 16000));
+      const icons = Array.isArray(parsed && parsed.icons) ? parsed.icons : [];
+      const baseDir = path.dirname(mRel);
+      for (const ic of icons) {
+        const src = String((ic && ic.src) || '').trim().replace(/^\/+/, '');
+        if (!src) continue;
+        const probes = baseDir === '.'
+          ? [src, `icons/${src}`]
+          : [`${baseDir}/${src}`, `${baseDir}/icons/${src}`, src];
+        for (const p of probes) {
+          const hit = tryResolveIconFile(realCwd, p);
+          if (hit) return hit;
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Caminhos convencionais
+  for (const rel of ICON_CANDIDATES) {
+    const hit = tryResolveIconFile(realCwd, rel);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+module.exports = { readFilePreview, readGitBrief, readProjectGit, listProjectFiles, findProjectIcon };

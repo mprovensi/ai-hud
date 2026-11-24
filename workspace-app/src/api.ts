@@ -295,6 +295,15 @@ export const api = {
       `/api/fs/list?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(relDir)}${machine ? `&machine=${encodeURIComponent(machine)}` : ''}`,
     ),
 
+  mkdir: (body: { cwd: string; name: string; machine?: string }) =>
+    apiFetch<{ ok: boolean; path: string; relPath: string }>('/api/fs/mkdir', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  projectIconUrl: (cwd: string, machine = '') =>
+    withToken(`/api/fs/project-icon?cwd=${encodeURIComponent(cwd)}${machine ? `&machine=${encodeURIComponent(machine)}` : ''}`),
+
   getGit: (cwd: string, machine = '') =>
     apiFetch<GitInfo>(
       `/api/fs/git?cwd=${encodeURIComponent(cwd)}${machine ? `&machine=${encodeURIComponent(machine)}` : ''}`,

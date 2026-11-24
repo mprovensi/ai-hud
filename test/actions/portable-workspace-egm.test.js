@@ -367,6 +367,28 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
       baseHash: bNow.json.hash,
     });
     assert.equal(saveCommitMeta.status, 200);
+
+    // 13. Detecção automática de ícone do projeto (/api/fs/project-icon) + criação segura de subpasta (/api/fs/mkdir)
+    const iconEmpty = await reqJson(port, 'GET', `/api/fs/project-icon?cwd=${encodeURIComponent(gitProj)}`, tok);
+    assert.equal(iconEmpty.status, 204);
+
+    fs.writeFileSync(path.join(projDir, 'project.godot'), 'config_version=5\n[application]\nconfig/icon="res://assets/hero.png"\n');
+    const iconHit = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${port}/api/fs/project-icon?cwd=${encodeURIComponent(projDir)}&t=${tok}`, (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, buf: Buffer.concat(chunks) }));
+      }).on('error', reject);
+    });
+    assert.equal(iconHit.status, 200);
+    assert.equal(iconHit.headers['content-type'], 'image/png');
+    assert.equal(iconHit.buf.length, png1x1.length);
+
+    const mkOk = await reqJson(port, 'POST', '/api/fs/mkdir', tok, { cwd: projDir, name: 'sub-vps-app' });
+    assert.equal(mkOk.status, 200);
+    assert.ok(fs.existsSync(mkOk.json.path));
+    const mkBad = await reqJson(port, 'POST', '/api/fs/mkdir', tok, { cwd: projDir, name: '../escape' });
+    assert.equal(mkBad.status, 400);
   } finally {
     app.server.close();
   }

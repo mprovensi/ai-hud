@@ -3,8 +3,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isCwdAllowed, normalizePath, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
+const { isCwdAllowed, isSafeRelativePath, normalizePath, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
+const { findProjectIcon } = require('../../collect/file-preview');
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
 const { readWorkspaceJson } = require('../../collect/workspace');
 
@@ -94,6 +95,71 @@ module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, termina
       if (!check.ok) return text(res, 403, check.reason);
       const r = fileList({ cwd, relDir });
       return r.status !== 200 ? text(res, r.status, r.error) : json(res, r.body);
+    } },
+
+    { method: 'POST', path: '/api/fs/mkdir', json: true, maxBytes: 4096, handler: async ({ res, url, body }) => {
+      const cwd = String((body && body.cwd) || '').trim();
+      const name = String((body && body.name) || '').trim();
+      const machine = String((body && body.machine) || '').trim();
+      if (!cwd) return text(res, 400, 'informe a pasta raiz');
+      if (!name) return text(res, 400, 'informe o nome da subpasta');
+      if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+        const peer = peers.list.find((p) => p.name === machine);
+        if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
+        return relay(res, peers.forward(peer, 'POST', '/api/fs/mkdir?local=1', { cwd, name }));
+      }
+      const check = checkAuthorizedCwd(cwd);
+      if (!check.ok) return text(res, 403, check.reason);
+      const baseCwd = normalizePath(cwd);
+      if (!baseCwd || !fs.existsSync(baseCwd)) return text(res, 404, 'pasta raiz não encontrada');
+      const rel = name.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      if (!isSafeRelativePath(rel) || isSecretPath(rel) || /[<>:"|?*]/.test(rel)) {
+        return text(res, 400, 'nome de subpasta inválido');
+      }
+      const realRoot = fs.realpathSync(baseCwd);
+      const target = resolveContainedPath(realRoot, rel);
+      if (!target || !isWithinRoot(realRoot, target) || target.toLowerCase() === realRoot.toLowerCase()) {
+        return text(res, 403, 'subpasta fora da pasta raiz autorizada');
+      }
+      try {
+        fs.mkdirSync(target, { recursive: true });
+      } catch (e) {
+        return text(res, 500, e.message || 'não foi possível criar a subpasta');
+      }
+      return json(res, { ok: true, path: target, relPath: rel });
+    } },
+
+    { method: 'GET', path: '/api/fs/project-icon', handler: async ({ res, url }) => {
+      const cwd = url.searchParams.get('cwd') || '';
+      const machine = url.searchParams.get('machine') || '';
+      if (!cwd) return send(res, 204, 'text/plain', '');
+      if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+        const peer = peers.list.find((p) => p.name === machine);
+        if (!peer) return send(res, 204, 'text/plain', '');
+        return peers.forward(peer, 'GET', `/api/fs/project-icon?local=1&cwd=${encodeURIComponent(cwd)}`).then((r) => {
+          if (r.status !== 200 || !r.buffer || !r.buffer.length) return send(res, 204, 'text/plain', '');
+          return send(res, 200, r.contentType || 'image/png', r.buffer, {
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'private, max-age=300',
+            ...((r.contentType || '').includes('svg') ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } : {}),
+          });
+        }, () => send(res, 204, 'text/plain', ''));
+      }
+      const check = checkAuthorizedCwd(cwd);
+      if (!check.ok) return send(res, 204, 'text/plain', '');
+      const found = findProjectIcon(cwd);
+      if (!found) return send(res, 204, 'text/plain', '');
+      try {
+        const buf = fs.readFileSync(found.filePath);
+        const headers = {
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, max-age=300',
+          ...(found.ext === '.svg' ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } : {}),
+        };
+        return send(res, 200, found.mime, buf, headers);
+      } catch {
+        return send(res, 204, 'text/plain', '');
+      }
     } },
 
     { method: 'GET', path: '/api/fs/git', handler: async ({ res, url }) => {

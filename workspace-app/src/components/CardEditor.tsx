@@ -46,6 +46,29 @@ export const BOARD_STATUSES: { id: CardStatus; label: string }[] = [
   { id: 'done', label: 'Concluído' },
 ];
 
+export const EGM_STAGE_GUIDE: Record<CardStatus, { short: string; actionTip: string }> = {
+  idea: {
+    short: '🐘 Elefante (Spec-First): levantar requisitos e gerar spec enxuta antes de codar',
+    actionTip: 'EGM Ideia → Spec: investigar e gerar especificação enxuta sem implementar código ainda',
+  },
+  spec: {
+    short: '🐟 Portão Goldfish + Início: validar lacunas/riscos da spec e iniciar implementação no escopo',
+    actionTip: 'EGM Spec → Em andamento: seguir a spec (e parecer Goldfish) iniciando apenas o escopo aprovado',
+  },
+  'in-progress': {
+    short: '⚙️ Execução focada: concluir implementação no escopo da spec e validar com testes',
+    actionTip: 'EGM Em andamento → Revisão: concluir mudanças no escopo, rodar testes/build e resumir evidências',
+  },
+  review: {
+    short: '🐟 Goldfish (Revisão fria): auditar git diff contra a spec, edge-cases, testes e aceite',
+    actionTip: 'EGM Revisão → Concluído: revisão fria Goldfish sobre o git diff + validação final de testes',
+  },
+  done: {
+    short: '✅ Concluído: tarefa finalizada, pronta para commit e sincronização de checklist',
+    actionTip: 'Tarefa concluída',
+  },
+};
+
 export function nextWorkflowStatus(current: CardStatus): { status: CardStatus; label: string } | null {
   const idx = BOARD_STATUSES.findIndex((s) => s.id === current);
   if (idx < 0 || idx >= BOARD_STATUSES.length - 1) return null;
@@ -563,12 +586,14 @@ export function CardEditor({
 
   async function save(cardOverride?: CardDoc, silentToast = false) {
     const targetCard = cardOverride || card;
-    if (!targetCard || saving || offlineFallback) return false;
+    if (!targetCard || savingRef.current || offlineFallback) return false;
+    savingRef.current = true;
     setSaving(true);
     try {
       const r = hasProjectCwd
-        ? await api.saveProjectBoard({ entityId, content: targetCard, baseHash })
-        : await api.saveEntityFile({ id: entityId, path: filePath, content: targetCard, baseHash });
+        ? await api.saveProjectBoard({ entityId, content: targetCard, baseHash: baseHashRef.current })
+        : await api.saveEntityFile({ id: entityId, path: filePath, content: targetCard, baseHash: baseHashRef.current });
+      baseHashRef.current = r.hash;
       setBaseHash(r.hash);
       setDirty(false);
       setConflict(null);
@@ -587,9 +612,19 @@ export function CardEditor({
       }
       return false;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
+
+  // Salva automaticamente qualquer alteração pendente no Board (debounce curto, sem exigir Ctrl+S)
+  useEffect(() => {
+    if (!dirty || !card || offlineFallback || saving || conflict) return;
+    const timer = window.setTimeout(() => {
+      save(card, true);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [dirty, card, offlineFallback, saving, conflict, entityId, filePath, hasProjectCwd]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -955,10 +990,72 @@ export function CardEditor({
   }
 
   function buildExecutePrompt(item: CardItem): string {
-    if (item.prompt) return item.prompt;
-    if (item.docRef) {
-      return `Leia \`${item.docRef}\` e trabalhe na tarefa "${item.title}"${item.body ? `:\n${item.body}` : '.'}`;
+    const st = (item.status || 'idea') as CardStatus;
+    if (item.prompt && item.prompt.trim()) return item.prompt.trim();
+
+    const docClean = (item.docRef || '').split('#')[0].trim();
+    const specLine = docClean ? `Spec/documento vinculado: \`${item.docRef}\`.` : '';
+    const bodyLine = item.body ? `Contexto da tarefa:\n${item.body}` : '';
+    const reviewLine = item.review?.reportPath
+      ? `Parecer Goldfish (${item.review.status === 'approved' ? 'aprovado' : 'ajustes sugeridos'}): \`${item.review.reportPath}\`${item.review.summary ? ` — ${item.review.summary}` : ''}.`
+      : '';
+
+    if (st === 'idea') {
+      const slug = normCommitText(item.title).replace(/\s+/g, '-').slice(0, 48) || 'spec';
+      const targetDoc = docClean || `docs/specs/${slug}.md`;
+      return [
+        `[EGM · Ideia → Spec] Tarefa: "${item.title}"`,
+        specLine,
+        bodyLine,
+        `Regras Elephant-Goldfish (fase Elefante / Spec-First):`,
+        `1. NÃO implemente código de produção ainda.`,
+        `2. Leia apenas os arquivos relevantes do projeto para entender o contexto real.`,
+        `3. Crie ou atualize uma especificação enxuta em \`${targetDoc}\` com: Objetivo, Escopo, Fora de escopo, Arquivos impactados e Critérios de aceite objetivos.`,
+        `4. Ao concluir, atualize este item no \`.ai-workspace/board.card.json\` (ou via MCP \`board_update_status\`) com \`docRef: "${targetDoc}"\`.`,
+      ].filter(Boolean).join('\n\n');
     }
+
+    if (st === 'spec') {
+      return [
+        `[EGM · Spec → Em andamento] Tarefa: "${item.title}"`,
+        specLine,
+        reviewLine,
+        bodyLine,
+        `Regras Elephant-Goldfish (Portão Goldfish + Início de implementação):`,
+        item.review?.status === 'changes'
+          ? `1. Antes de codar, leia o parecer Goldfish e resolva as lacunas/riscos apontados na spec.`
+          : item.review?.status === 'approved'
+            ? `1. A spec já foi aprovada pelo Goldfish; siga-a rigorosamente sem expandir o escopo.`
+            : `1. Faça uma checagem rápida estilo Goldfish (lacunas, riscos ou ambiguidades) na spec antes de codar; se não houver bloqueios, inicie a implementação.`,
+        `2. Implemente de forma enxuta e focada apenas nos itens do escopo aprovado e valide com testes/build.`,
+      ].filter(Boolean).join('\n\n');
+    }
+
+    if (st === 'in-progress') {
+      return [
+        `[EGM · Em andamento → Revisão] Tarefa: "${item.title}"`,
+        specLine,
+        reviewLine,
+        bodyLine,
+        `Regras Elephant-Goldfish (Execução focada + Evidência):`,
+        `1. Finalize a implementação estritamente dentro do escopo e critérios de aceite da tarefa (sem refatorações fora de escopo).`,
+        `2. Rode os testes e/ou build do projeto para comprovar que tudo passa sem regressões.`,
+        `3. Entregue um resumo objetivo dos arquivos alterados e dos testes executados para a etapa de Revisão.`,
+      ].filter(Boolean).join('\n\n');
+    }
+
+    if (st === 'review') {
+      return [
+        `[EGM · Revisão → Concluído (Goldfish)] Tarefa: "${item.title}"`,
+        specLine,
+        bodyLine,
+        `Regras Elephant-Goldfish (Modo Goldfish — Revisão fria e aceite):`,
+        `1. Atue como revisor independente a frio: inspecione o \`git diff\` atual contra a spec e os critérios de aceite.`,
+        `2. Procure apenas bugs concretos, regressões, edge-cases, segurança ou falta de testes; corrija pendências críticas se houver.`,
+        `3. Confirme que os testes/build passam 100%${docClean ? ` e sincronize os checkboxes \`- [x]\` em \`${docClean}\`` : ''}.`,
+      ].filter(Boolean).join('\n\n');
+    }
+
     return `Trabalhe na tarefa "${item.title}"${item.body ? `:\n${item.body}` : '.'}`;
   }
 
@@ -1099,7 +1196,7 @@ export function CardEditor({
             <button
               className="btn btn-sm"
               style={{ padding: '3px 7px', fontSize: 11 }}
-              title="Executar tarefa com IA (avança para a próxima fase ao concluir)"
+              title={EGM_STAGE_GUIDE[st]?.actionTip || 'Executar tarefa com IA (avança para a próxima fase ao concluir)'}
               onClick={() => triggerExecute(item)}
             >
               <Play size={11} /> Executar
@@ -1300,6 +1397,10 @@ export function CardEditor({
                     placeholder="Ex.: Fase 1, Backend, UI…"
                   />
                 </div>
+              </div>
+
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', padding: '6px 9px', borderRadius: 7, background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+                {EGM_STAGE_GUIDE[modalStage]?.short}
               </div>
 
               <div className="field" style={{ marginBottom: 0 }}>
@@ -1736,10 +1837,10 @@ export function CardEditor({
         </span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {dirty && <span className="badge waiting">Não salvo</span>}
-          {dirty && (
-            <button className="btn btn-primary btn-sm" disabled={saving || offlineFallback} onClick={() => save()}>
-              <Save size={14} /> {saving ? 'Salvando…' : 'Salvar (Ctrl+S)'}
+          {saving && <span className="badge" style={{ fontSize: 11 }}>Salvando…</span>}
+          {!saving && dirty && conflict && (
+            <button className="btn btn-primary btn-sm" disabled={offlineFallback} onClick={() => save()}>
+              <Save size={14} /> Salvar
             </button>
           )}
         </div>

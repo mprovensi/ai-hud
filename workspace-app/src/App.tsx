@@ -33,6 +33,7 @@ import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjec
 import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
 import { ProjectDocsPane } from './components/ProjectDocsPane';
+import { ProjectIcon } from './components/ProjectIcon';
 import { QuotaDrawer, type QuotaProvider } from './components/QuotaDrawer';
 import { TerminalPane } from './components/TerminalPane';
 import { WorkspaceHome } from './components/WorkspaceHome';
@@ -811,7 +812,12 @@ export function App() {
                                 title={act ? `${e.title} · ${act.tip}` : `${e.title} (arraste para reordenar)`}
                                 onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
                               >
-                                <FolderKanban size={14} color={active ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+                                <ProjectIcon
+                                  cwd={e.projectBindings?.[0]?.cwd}
+                                  machine={e.projectBindings?.[0]?.machine}
+                                  size={15}
+                                  active={active}
+                                />
                                 <span className="ell">{e.title}</span>
                                 {act && <span className={`sb-dot ${act.kind}`} title={act.tip} />}
                                 {e.projectBindings?.[0] && (
@@ -900,6 +906,12 @@ export function App() {
                   <button className="btn btn-sm btn-icon" onClick={() => setSelection(null)} aria-label="Voltar" title="Voltar">
                     <ArrowLeft size={14} />
                   </button>
+                  <ProjectIcon
+                    cwd={activeBinding?.cwd}
+                    machine={activeBinding?.machine}
+                    size={22}
+                    accent
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h1 className="stage-title ell">{selectedEntity.title}</h1>
                     {selectedEntity.description && <p className="stage-desc ell">{selectedEntity.description}</p>}

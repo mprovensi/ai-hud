@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Activity, Brain, Clock, Coins, FolderGit2, FolderKanban, FolderPlus, MessageSquarePlus, Monitor, Plus, Terminal } from 'lucide-react';
 import { api } from '../api';
+import { ProjectIcon } from './ProjectIcon';
 import type { Snapshot, UsageAggregate, UsageLogEntry, WorkspaceEntity, WorkspaceIndex } from '../types';
 
 interface Props {
@@ -159,7 +160,7 @@ export function WorkspaceHome({
                 <div key={e.id} className="home-proj-card">
                   <button className="home-proj-main" onClick={() => onOpenEntity(e.id, 'step')}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <FolderKanban size={15} color="var(--accent)" style={{ flexShrink: 0 }} />
+                      <ProjectIcon cwd={binding?.cwd} machine={binding?.machine} size={16} accent />
                       <strong className="ell" style={{ flex: 1, fontSize: 14 }}>{e.title}</strong>
                       {e.group && <span className="badge" style={{ fontSize: 10 }}>📁 {e.group}</span>}
                     </div>

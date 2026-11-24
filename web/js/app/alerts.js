@@ -74,6 +74,6 @@
   function setSound(on) {
     soundOn = on;
     store('hud.sound', on ? '1' : '0');
-    $('sound').innerHTML = icon(on ? 'bell' : 'bellOff');
+    if ($('sound')) $('sound').innerHTML = icon(on ? 'bell' : 'bellOff');
   }
 

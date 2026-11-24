@@ -18,6 +18,7 @@
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M2 2l20 20"/>',
     text: '<path d="M21 14h-5"/><path d="M16 16v-3.5a2.5 2.5 0 0 1 5 0V16"/><path d="M4.5 13h6"/><path d="M3 16l4.5-9 4.5 9"/>',
     refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     fingerprint: '<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>'
   };
   function icon(name) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; }
@@ -68,22 +69,22 @@
   // Preferências do aparelho; localStorage pode falhar (aba privada no iOS)
   function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) {} }
   // Só classes e ES5: funciona também no Safari 9, sem service worker ou APIs modernas.
+  var readingSize = 'normal';
   function setReading(size) {
     if (size !== 'large' && size !== 'larger') size = 'normal';
+    readingSize = size;
     document.body.className = document.body.className.replace(/\bread-(large|larger)\b/g, '').replace(/^\s+|\s+$/g, '') + (size === 'normal' ? '' : ' read-' + size);
     store('hud.reading', size);
-    $('textNormal').setAttribute('aria-pressed', size === 'normal' ? 'true' : 'false');
-    $('textLarge').setAttribute('aria-pressed', size === 'large' ? 'true' : 'false');
-    $('textLarger').setAttribute('aria-pressed', size === 'larger' ? 'true' : 'false');
+    if ($('textNormal')) $('textNormal').setAttribute('aria-pressed', size === 'normal' ? 'true' : 'false');
+    if ($('textLarge')) $('textLarge').setAttribute('aria-pressed', size === 'large' ? 'true' : 'false');
+    if ($('textLarger')) $('textLarger').setAttribute('aria-pressed', size === 'larger' ? 'true' : 'false');
+  }
+  function bindReadingButtons() {
+    if ($('textNormal')) $('textNormal').onclick = function () { setReading('normal'); };
+    if ($('textLarge')) $('textLarge').onclick = function () { setReading('large'); };
+    if ($('textLarger')) $('textLarger').onclick = function () { setReading('larger'); };
   }
   setReading(store('hud.reading'));
-  $('reading').onclick = function () {
-    var open = $('readingOptions').style.display === 'none';
-    $('readingOptions').style.display = open ? 'block' : 'none';
-    $('reading').setAttribute('aria-expanded', open ? 'true' : 'false');
-  };
-  $('textNormal').onclick = function () { setReading('normal'); };
-  $('textLarge').onclick = function () { setReading('large'); };
-  $('textLarger').onclick = function () { setReading('larger'); };
+  bindReadingButtons();
   function toolIndex(t) { if (t === 'Antigravity') return 2; for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i] === t) return i; return 0; }
 

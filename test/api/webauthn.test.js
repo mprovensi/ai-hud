@@ -261,22 +261,32 @@ test('server biometric session expires automatically after timeoutMs without act
 function bootClient({ userAgent, local = {}, session = {}, cookie = '', protocol = 'https:' }) {
   const html = fs.readFileSync(path.join(__dirname, '../../web/index.html'), 'utf8');
   const nodes = {};
+  const makeNode = (id, display = '') => ({
+    id,
+    style: { display },
+    className: '',
+    innerHTML: '',
+    textContent: '',
+    disabled: false,
+    setAttribute(k, v) { this[k] = v; },
+    getAttribute(k) { return this[k]; },
+  });
   for (const match of html.matchAll(/\bid="([^"]+)"/g)) {
     const id = match[1];
-    nodes[id] = {
-      id,
-      style: { display: html.includes(`id="${id}" style="display:none"`) ? 'none' : '' },
-      className: '',
-      innerHTML: '',
-      textContent: '',
-      disabled: false,
-      setAttribute(k, v) { this[k] = v; },
-      getAttribute(k) { return this[k]; },
-    };
+    nodes[id] = makeNode(id, html.includes(`id="${id}" style="display:none"`) ? 'none' : '');
   }
+  let overlayHtml = '';
+  Object.defineProperty(nodes.overlayBody, 'innerHTML', {
+    get() { return overlayHtml; },
+    set(v) {
+      overlayHtml = String(v);
+      for (const m of overlayHtml.matchAll(/\bid="([^"]+)"/g)) if (!nodes[m[1]]) nodes[m[1]] = makeNode(m[1]);
+    },
+  });
   const xhrCalls = [];
   const beacons = [];
   const listeners = {};
+  const winListeners = {};
   class XHR {
     open(method, url) { this.method = method; this.url = url; xhrCalls.push(this); }
     send(body) { this.body = body; }
@@ -315,31 +325,47 @@ function bootClient({ userAgent, local = {}, session = {}, cookie = '', protocol
       setItem: (k, v) => sessionMap.set(k, String(v)),
       removeItem: (k) => sessionMap.delete(k),
     },
-    addEventListener: () => {},
+    addEventListener: (name, fn) => { winListeners[name] = fn; },
     setInterval: () => {},
     setTimeout: () => {},
     innerWidth: 390,
   };
   context.window = context;
   vm.runInNewContext(require('../helpers/app-source'), context);
-  return { context, nodes, xhrCalls, beacons, listeners, sessionMap };
+  const openSettings = () => {
+    nodes.openSettings.onclick();
+    context.location.hash = '#' + context.location.hash.replace(/^#/, '');
+    winListeners.hashchange();
+  };
+  return { context, nodes, xhrCalls, beacons, listeners, sessionMap, openSettings };
 }
 
 test('biometric UI stays hidden on Desktop and iPad, and enforces cold-open + 2 min background lock on Android phone', () => {
   const desktop = bootClient({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0' });
-  assert.equal(desktop.nodes.bioBtn.style.display, 'none');
+  assert.equal(desktop.nodes.sound, undefined);
+  assert.equal(desktop.nodes.reading, undefined);
+  assert.equal(desktop.nodes.bioBtn, undefined);
+  assert.ok(desktop.nodes.openSettings);
   assert.equal(desktop.xhrCalls.length, 1);
   assert.equal(desktop.xhrCalls[0].url, '/api/snapshot');
+  desktop.openSettings();
+  assert.match(desktop.nodes.overlayBody.innerHTML, /Configurações/);
+  assert.match(desktop.nodes.overlayBody.innerHTML, /Tamanho da leitura/);
+  assert.doesNotMatch(desktop.nodes.overlayBody.innerHTML, /cfgBioPanel/);
 
   const ipad = bootClient({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' });
-  assert.equal(ipad.nodes.bioBtn.style.display, 'none');
   assert.equal(ipad.xhrCalls.length, 1);
   assert.equal(ipad.xhrCalls[0].url, '/api/snapshot');
+  ipad.openSettings();
+  assert.match(ipad.nodes.overlayBody.innerHTML, /Configurações/);
+  assert.doesNotMatch(ipad.nodes.overlayBody.innerHTML, /cfgBioPanel/);
 
   const androidUA = 'Mozilla/5.0 (Linux; Android 13; SM-G781B) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36';
   const freshPhone = bootClient({ userAgent: androidUA });
-  assert.equal(freshPhone.nodes.bioBtn.style.display, 'inline-block');
   assert.equal(freshPhone.nodes.bioLock.className, '');
+  freshPhone.openSettings();
+  assert.match(freshPhone.nodes.overlayBody.innerHTML, /cfgBioPanel/);
+  assert.match(freshPhone.nodes.overlayBody.innerHTML, /Ativar digital neste celular/);
 
   // Abertura a frio no celular com digital cadastrada: tranca antes de buscar /api/snapshot
   const coldLocked = bootClient({

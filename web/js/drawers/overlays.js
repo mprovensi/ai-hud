@@ -152,7 +152,7 @@
     if (viewedSession && (!nextSession || decodeURIComponent(nextSession[1]) !== viewedSession.id)) acknowledgeViewed();
     var usage = /^#uso=(claude|codex|gemini)$/.exec(h);
     usageName = usage ? usage[1] : null;
-    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : h === '#nova' ? 'new' : usage ? 'usage' : null;
+    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : h === '#nova' ? 'new' : h === '#configuracoes' ? 'settings' : usage ? 'usage' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
     if (view) {
       $('overlay').scrollTop = 0;
@@ -169,6 +169,7 @@
     }
     if (view === 'recent') renderRecent();
     if (view === 'new') openNewSession();
+    if (view === 'settings' && typeof renderSettings === 'function') renderSettings();
     // A gaveta precisa estar visível para o gráfico medir a própria largura
     if (view === 'stats') setTimeout(renderStats, 30);
     if (view === 'usage') setTimeout(renderUsage, 30);
@@ -188,6 +189,7 @@
   if ($('openWorkspace')) $('openWorkspace').onclick = function () { location.href = '/workspace' + (token ? '?t=' + encodeURIComponent(token) : ''); };
   $('openRecent').onclick = function () { location.hash = 'recentes'; };
   $('openStats').onclick = function () { location.hash = 'estatisticas'; };
+  if ($('openSettings')) $('openSettings').onclick = function () { location.hash = 'configuracoes'; };
   $('q-ollama').onclick = function () { location.hash = 'ollama'; };
   $('q-claude').onclick = function () { location.hash = 'uso=claude'; };
   $('q-codex').onclick = function () { location.hash = 'uso=codex'; };

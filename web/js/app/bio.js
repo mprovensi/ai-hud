@@ -67,35 +67,30 @@
     return Math.round(ms / 60000) + ' min';
   }
 
-  function bioPaintControls() {
-    var btn = $('bioBtn');
-    if (!btn) return;
-    var show = bioSupported() && (bioIsMobilePhone() || bioActive);
-    btn.style.display = show ? 'inline-block' : 'none';
-    if (!show) return;
-    btn.className = 'btn' + (bioActive ? ' on' : '');
-    btn.setAttribute('aria-label', bioActive ? 'Digital ativa (' + bioTimeoutLabel(bioTimeoutMs) + ')' : 'Ativar bloqueio por digital');
-    if ($('bioStateText')) {
-      $('bioStateText').textContent = bioActive
-        ? 'Digital ativa · bloqueia ao abrir ou após ' + bioTimeoutLabel(bioTimeoutMs)
-        : 'Bloqueio por digital desativado neste celular';
-    }
-    if ($('bioEnable')) $('bioEnable').style.display = bioActive ? 'none' : 'inline-block';
-    if ($('bioLockNow')) $('bioLockNow').style.display = bioActive ? 'inline-block' : 'none';
-    if ($('bioDisable')) $('bioDisable').style.display = bioActive ? 'inline-block' : 'none';
-    if ($('bioTimeGroup')) $('bioTimeGroup').style.display = bioActive ? 'block' : 'none';
+  function bioCanShow() {
+    return bioSupported() && (bioIsMobilePhone() || bioActive);
+  }
+
+  function bioBindSettings() {
+    if ($('bioEnable')) $('bioEnable').onclick = bioEnable;
+    if ($('bioLockNow')) $('bioLockNow').onclick = function () { bioLockNow(false); };
+    if ($('bioDisable')) $('bioDisable').onclick = bioDisable;
     var times = [0, 60000, 120000, 300000];
     for (var i = 0; i < times.length; i++) {
-      var el = $('bioT' + times[i]);
-      if (el) el.setAttribute('aria-pressed', bioTimeoutMs === times[i] ? 'true' : 'false');
+      (function (ms) {
+        var el = $('bioT' + ms);
+        if (el) el.onclick = function () { bioSetTimeout(ms); };
+      })(times[i]);
     }
+  }
+
+  function bioPaintControls() {
+    if (view === 'settings' && typeof renderSettings === 'function') renderSettings();
   }
 
   function bioShowLock(autoPrompt, message) {
     bioLocked = true;
     bioSession('hud.bio.ok', null);
-    if ($('bioOptions')) $('bioOptions').style.display = 'none';
-    if ($('bioBtn')) $('bioBtn').setAttribute('aria-expanded', 'false');
     if ($('bioLockMsg')) $('bioLockMsg').textContent = message || '';
     if ($('bioPinForm')) $('bioPinForm').className = '';
     if ($('bioLock')) $('bioLock').className = 'show';
@@ -285,8 +280,6 @@
       bioRemoveStore('hud.bio.id');
       bioRemoveStore('hud.bio.timeout');
       bioSession('hud.bio.ok', null);
-      if ($('bioOptions')) $('bioOptions').style.display = 'none';
-      if ($('bioBtn')) $('bioBtn').setAttribute('aria-expanded', 'false');
       bioPaintControls();
       flash('Bloqueio por digital desativado neste celular.');
     }, { id: bioStore('hud.bio.id') || '' });
@@ -344,7 +337,6 @@
   }
 
   function bioInit() {
-    if ($('bioBtn')) $('bioBtn').innerHTML = icon('fingerprint');
     if (!bioSupported()) return false;
     var savedId = bioStore('hud.bio.id') || '';
     var savedTimeout = parseInt(bioStore('hud.bio.timeout') || '', 10);
@@ -352,17 +344,6 @@
     bioActive = !!savedId;
     if (!bioIsMobilePhone() && !bioActive) return false;
 
-    if ($('bioBtn')) {
-      $('bioBtn').onclick = function () {
-        if (!bioActive) { bioEnable(); return; }
-        var open = $('bioOptions').style.display === 'none';
-        $('bioOptions').style.display = open ? 'block' : 'none';
-        $('bioBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
-      };
-    }
-    if ($('bioEnable')) $('bioEnable').onclick = bioEnable;
-    if ($('bioLockNow')) $('bioLockNow').onclick = function () { bioLockNow(false); };
-    if ($('bioDisable')) $('bioDisable').onclick = bioDisable;
     if ($('bioUnlockBtn')) $('bioUnlockBtn').onclick = bioUnlock;
     if ($('bioUsePinBtn')) {
       $('bioUsePinBtn').onclick = function () {
@@ -374,13 +355,6 @@
           if (inp && inp.focus) inp.focus();
         }
       };
-    }
-    var times = [0, 60000, 120000, 300000];
-    for (var i = 0; i < times.length; i++) {
-      (function (ms) {
-        var el = $('bioT' + ms);
-        if (el) el.onclick = function () { bioSetTimeout(ms); };
-      })(times[i]);
     }
 
     bioPaintControls();

@@ -2,8 +2,8 @@
   $('openNew').innerHTML = icon('plus') + '<span class="lbl"> Nova</span>';
   $('openStats').innerHTML = icon('stats') + '<span class="lbl"> Estatísticas</span>';
   $('openRecent').innerHTML = icon('recent') + '<span class="lbl"> Recentes</span>';
-  $('reading').innerHTML = icon('text');
   $('refresh').innerHTML = icon('refresh');
+  if ($('openSettings')) $('openSettings').innerHTML = icon('settings') + '<span class="lbl"> Configurações</span>';
   setRemoteBtn(false);
 
   // Modo remoto: pedidos de permissão do Claude esperam Permitir/Negar aqui em vez de aparecer no PC
@@ -17,7 +17,7 @@
       flash(r.remoteMode ? 'Modo remoto ligado.' : 'Modo remoto desligado: permissões voltam para o PC.');
     }, { on: on });
   };
-  $('sound').onclick = function () { unlockAudio(); setSound(!soundOn); if (soundOn) beep(); };
+  if ($('sound')) $('sound').onclick = function () { unlockAudio(); setSound(!soundOn); if (soundOn) beep(); };
 
   $('refresh').onclick = function () {
     if (refreshBusy || connection.kind === 'auth') return;

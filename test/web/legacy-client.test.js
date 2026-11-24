@@ -7,11 +7,18 @@ const vm = require('node:vm');
 test('the complete client boots and receives data without service workers, Promise or fetch', () => {
   const directory = path.join(__dirname, '../../web');
   const html = fs.readFileSync(path.join(directory, 'index.html'), 'utf8');
-  const nodes = {}, requests = [];
-  for (const match of html.matchAll(/\bid="([^"]+)"/g)) {
-    nodes[match[1]] = { id: match[1], style: {}, className: '', innerHTML: '', textContent: '',
-      setAttribute(k, v) { this[k] = v; }, getAttribute(k) { return this[k]; } };
-  }
+  const nodes = {}, requests = [], winListeners = {};
+  const makeNode = (id) => ({ id, style: {}, className: '', innerHTML: '', textContent: '',
+    setAttribute(k, v) { this[k] = v; }, getAttribute(k) { return this[k]; } });
+  for (const match of html.matchAll(/\bid="([^"]+)"/g)) nodes[match[1]] = makeNode(match[1]);
+  let overlayHtml = '';
+  Object.defineProperty(nodes.overlayBody, 'innerHTML', {
+    get() { return overlayHtml; },
+    set(v) {
+      overlayHtml = String(v);
+      for (const m of overlayHtml.matchAll(/\bid="([^"]+)"/g)) if (!nodes[m[1]]) nodes[m[1]] = makeNode(m[1]);
+    },
+  });
   class XHR {
     constructor() { requests.push(this); }
     open() {}
@@ -22,7 +29,7 @@ test('the complete client boots and receives data without service workers, Promi
       getElementById: (id) => nodes[id] || null, addEventListener: () => {} },
     navigator: {}, location: { search: '', hash: '' }, history: {}, XMLHttpRequest: XHR,
     Promise: undefined, fetch: undefined, localStorage: { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); } },
-    addEventListener: () => {}, setInterval: () => {}, setTimeout: () => {}, innerWidth: 1024 };
+    addEventListener: (name, fn) => { winListeners[name] = fn; }, setInterval: () => {}, setTimeout: () => {}, innerWidth: 1024 };
   context.window = context;
   vm.runInNewContext(require('../helpers/app-source'), context);
   assert.equal(requests.length, 1);
@@ -33,6 +40,10 @@ test('the complete client boots and receives data without service workers, Promi
   requests[0].onreadystatechange();
   assert.match(nodes.status.innerHTML, /ao vivo/);
   assert.match(nodes.sessList.innerHTML, /Nenhuma sessão/);
+  nodes.openSettings.onclick();
+  context.location.hash = '#' + context.location.hash.replace(/^#/, '');
+  winListeners.hashchange();
+  assert.match(nodes.overlayBody.innerHTML, /Configurações/);
   nodes.textLarger.onclick();
   assert.match(context.document.body.className, /read-larger/);
 });

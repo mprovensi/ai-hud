@@ -29,6 +29,8 @@ const { createMemoryActions } = require('./actions/memory');
 const { createPush } = require('./actions/push');
 const { createVoice } = require('./actions/voice');
 const { createTerminal } = require('./actions/terminal');
+const { createPtyManager } = require('./actions/pty');
+const { attachWsPty } = require('./api/ws-pty');
 const { createRunning } = require('./actions/running');
 const { compareSessions } = require('./core/session');
 const { createPermissions } = require('./actions/permissions');
@@ -165,16 +167,19 @@ function createApp({
   const projectGit = (cwd) => readProjectGit(cwd, exec);
   const voice = createVoice({ config, exec });
   const terminal = createTerminal({ config });
+  const ptyManager = createPtyManager({ dataDir, config, claudeExe, codexExe, agyExe, log });
 
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, memory, push, voice, terminal, filePreview, fileList, projectGit,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, memory, push, voice, terminal, ptyManager, filePreview, fileList, projectGit,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
   const webauthn = createWebAuthn({ dataDir, config });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, webauthn, log }));
+  attachWsPty({ server, config, webauthn, ptyManager, peers, collector, machineName, log });
+  server.on('close', () => ptyManager.closeAll());
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)
   server.keepAliveTimeout = 65e3;

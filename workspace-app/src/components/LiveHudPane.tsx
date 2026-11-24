@@ -7,7 +7,6 @@ import {
   GitFork,
   MessageSquare,
   Paperclip,
-  Play,
   Plus,
   Send,
   ShieldAlert,
@@ -18,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api';
+import { XtermPty } from './XtermPty';
 import type { SessionCard, SessionDetail, Snapshot } from '../types';
 
 interface Props {
@@ -31,16 +31,6 @@ interface Props {
   onNotify: (msg: string, err?: boolean) => void;
   onPollNow: () => void;
   width?: number;
-}
-
-interface TermCmdEntry {
-  id: number;
-  command: string;
-  ok: boolean;
-  code: number;
-  durationMs: number;
-  stdout: string;
-  stderr: string;
 }
 
 function projectMatch(s: SessionCard, binding?: { machine: string; cwd: string } | null, title?: string): boolean {
@@ -78,14 +68,11 @@ export function LiveHudPane({
   const [skills, setSkills] = useState<{ cmd: string; name: string; description: string; source: string }[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  // Terminal mode state (per session)
-  const [termCmd, setTermCmd] = useState('');
-  const [termRunning, setTermRunning] = useState(false);
-  const [termRuns, setTermRuns] = useState<Record<string, TermCmdEntry[]>>({});
+  // Modo do PTY quando em aba Terminal: CLI nativa da sessão (resume) ou Shell na pasta
+  const [ptySubMode, setPtySubMode] = useState<'resume' | 'shell'>('resume');
 
-  // Auto-scroll refs (Conversation & Terminal)
+  // Auto-scroll ref (Conversation)
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const termScrollRef = useRef<HTMLDivElement | null>(null);
   const stickBottomRef = useRef(true);
   const prevMsgCountRef = useRef(0);
   const prevProjectIdRef = useRef<string | undefined>(projectId);
@@ -152,15 +139,6 @@ export function LiveHudPane({
     }
   }, [selectedId, viewMode, messages.length, detail?.state, detail?.lastReply]);
 
-  useEffect(() => {
-    if (!selectedId || viewMode !== 'terminal') return;
-    const el = termScrollRef.current;
-    if (!el) return;
-    window.requestAnimationFrame(() => {
-      if (termScrollRef.current) termScrollRef.current.scrollTop = termScrollRef.current.scrollHeight;
-    });
-  }, [selectedId, viewMode, messages.length, termRuns]);
-
   const allSessions = useMemo(() => [...(snapshot?.active || []), ...(snapshot?.recent || []).slice(0, 15)], [snapshot]);
   const projectSessions = useMemo(
     () => allSessions.filter((s) => projectMatch(s, binding, projectTitle)),
@@ -201,34 +179,6 @@ export function LiveHudPane({
       setSending(false);
     }
   }
-
-  async function runSessionTerminal(rawCmd?: string) {
-    const command = (rawCmd ?? termCmd).trim();
-    if (!detail || !command || termRunning) return;
-    const targetCwd = detail.cwd || binding?.cwd || '';
-    if (!targetCwd) {
-      onNotify('Esta sessão não tem pasta (cwd) registrada para executar comandos.', true);
-      return;
-    }
-    setTermRunning(true);
-    setTermCmd('');
-    try {
-      const r = await api.execTerminal({ cwd: targetCwd, machine: detail.machine || binding?.machine, command });
-      setTermRuns((prev) => ({
-        ...prev,
-        [detail.id]: [
-          ...(prev[detail.id] || []),
-          { id: Date.now(), command, ok: r.ok, code: r.code, durationMs: r.durationMs, stdout: r.stdout, stderr: r.stderr },
-        ],
-      }));
-    } catch (e) {
-      onNotify((e as Error).message, true);
-    } finally {
-      setTermRunning(false);
-    }
-  }
-
-  const sessionTermEntries = detail ? (termRuns[detail.id] || []) : [];
 
   return (
     <aside className="hud-pane" style={width ? { width } : undefined}>
@@ -574,75 +524,36 @@ export function LiveHudPane({
               </div>
             </>
           ) : (
-            /* MODE 2: TERMINAL (Mr. Mak style raw CLI stream + direct command runner in session CWD) */
-            <>
-              <div className="term-stream" ref={termScrollRef}>
-                <div className="term-block" style={{ color: 'var(--muted)' }}>
-                  <div># {detail.tool} · {detail.machine || 'local'} · {detail.cwd || '(sem cwd)'}</div>
-                  {detail.models && detail.models.length > 0 && <div># modelo: {detail.models.join(', ')}</div>}
-                  {detail.files && detail.files.length > 0 && (
-                    <div># arquivos tocados ({detail.files.length}): {detail.files.slice(0, 6).map(([f]) => f).join(', ')}</div>
-                  )}
-                </div>
-
-                {messages.map((m, i) => (
-                  <div key={`m-${i}`} className="term-block">
-                    {m.role === 'user' ? (
-                      <div className="term-prompt">&gt; {m.content}</div>
-                    ) : (
-                      <>
-                        {m.tools && m.tools.length > 0 && (
-                          <div className="term-tools">[tools] {m.tools.join(' · ')}</div>
-                        )}
-                        <pre className="term-out">{m.content}</pre>
-                      </>
-                    )}
-                  </div>
-                ))}
-
-                {detail.state === 'working' && (
-                  <div className="term-block" style={{ color: 'var(--ok)' }}>
-                    ● {detail.lastTool ? `running ${detail.lastTool}…` : 'streaming…'}
-                  </div>
-                )}
-
-                {sessionTermEntries.map((r) => (
-                  <div key={r.id} className="term-block">
-                    <div className="term-prompt" style={{ color: r.ok ? 'var(--ok)' : 'var(--danger)' }}>
-                      $ {r.command} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(exit {r.code} · {r.durationMs}ms)</span>
-                    </div>
-                    {r.stdout && <pre className="term-out">{r.stdout}</pre>}
-                    {r.stderr && <pre className="term-err">{r.stderr}</pre>}
-                  </div>
-                ))}
-              </div>
-
-              {/* Fixed Bottom Shell Prompt in session CWD */}
-              <form
-                className="hud-chat-footer"
-                onSubmit={(e) => { e.preventDefault(); runSessionTerminal(); }}
-              >
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span className="mono" style={{ color: 'var(--accent)', fontWeight: 700 }}>$</span>
-                  <input
-                    className="inp mono"
-                    style={{ fontSize: 12.5 }}
-                    value={termCmd}
-                    disabled={termRunning || !(detail.cwd || binding?.cwd)}
-                    onChange={(e) => setTermCmd(e.target.value)}
-                    placeholder={detail.cwd || binding?.cwd ? `Comando em ${detail.cwd || binding?.cwd}…` : 'Sessão sem pasta (cwd)'}
-                  />
-                  <button
-                    className="btn btn-primary btn-icon"
-                    type="submit"
-                    disabled={termRunning || !termCmd.trim() || !(detail.cwd || binding?.cwd)}
-                    title="Executar comando na pasta da sessão"
-                  >
-                    <Play size={13} />
+            /* MODE 2: TERMINAL INTERATIVO REAL (xterm.js + Win32 ConPTY / Unix PTY estilo Mr. Mak) */
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', background: '#101217', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <div className="seg">
+                  <button className={ptySubMode === 'resume' ? 'on' : ''} onClick={() => setPtySubMode('resume')}>
+                    CLI {detail.tool}
+                  </button>
+                  <button className={ptySubMode === 'shell' ? 'on' : ''} onClick={() => setPtySubMode('shell')}>
+                    Shell
                   </button>
                 </div>
-              </form>
-            </>
+                <span className="mono ell" style={{ fontSize: 11, color: 'var(--muted)', flex: 1 }}>
+                  {detail.cwd || binding?.cwd || '(sem cwd)'}
+                </span>
+              </div>
+              {detail.cwd || binding?.cwd ? (
+                <XtermPty
+                  ptyKey={`sess:${detail.id}:${ptySubMode}`}
+                  cwd={detail.cwd || binding?.cwd || ''}
+                  machine={detail.machine || binding?.machine}
+                  mode={ptySubMode}
+                  tool={detail.tool}
+                  sessionId={detail.id}
+                  model={detail.models?.[0] || ''}
+                  minHeight={260}
+                />
+              ) : (
+                <div className="empty">Esta sessão não possui pasta (cwd) registrada para abrir o terminal PTY.</div>
+              )}
+            </div>
           )}
         </div>
       )}

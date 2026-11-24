@@ -4,7 +4,7 @@ const os = require('os');
 const { isCwdAllowed } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
 
-module.exports = ({ filePreview, fileList, projectGit, terminal, peers, collector, config, machineName, relay, json, text }) => {
+module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, peers, collector, config, machineName, relay, json, text }) => {
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
     return isCwdAllowed(cwd, {
@@ -100,6 +100,10 @@ module.exports = ({ filePreview, fileList, projectGit, terminal, peers, collecto
       if (!check.ok) return text(res, 403, check.reason);
       const r = await terminal({ cwd, command: body.command, timeoutMs: body.timeoutMs });
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    { method: 'GET', path: '/api/pty/status', handler: ({ res }) => {
+      json(res, ptyManager ? ptyManager.status() : { ok: true, available: false });
     } },
   ];
 };

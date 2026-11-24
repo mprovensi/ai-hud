@@ -289,13 +289,24 @@ module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, termina
         if (!/^[a-zA-Z]:/.test(cleanPath) && !cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
       }
 
-      const rel = toSafeRelPath(cleanPath, baseCwd);
+      let allowedRoot = baseCwd;
+      let rel = toSafeRelPath(cleanPath, baseCwd);
+      if ((!rel || isSecretPath(rel)) && dataDir) {
+        const attachRoot = normalizePath(path.join(resolveWorkspaceRoot(dataDir, config), 'inbox', 'attachments'));
+        if (attachRoot && fs.existsSync(attachRoot)) {
+          const attRel = toSafeRelPath(cleanPath, attachRoot);
+          if (attRel && !isSecretPath(attRel)) {
+            allowedRoot = attachRoot;
+            rel = attRel;
+          }
+        }
+      }
       if (!rel || isSecretPath(rel)) return text(res, 403, 'caminho de imagem fora da pasta do projeto');
       const ext = path.extname(rel).toLowerCase();
       const mime = IMAGE_MIMES[ext];
       if (!mime) return text(res, 400, 'extensão de imagem não permitida');
 
-      const realRoot = fs.realpathSync(baseCwd);
+      const realRoot = fs.realpathSync(allowedRoot);
       const target = resolveContainedPath(realRoot, rel);
       if (!target || !isWithinRoot(realRoot, target) || !fs.existsSync(target)) {
         return text(res, 404, 'imagem não encontrada');

@@ -1,7 +1,7 @@
 // POST /api/upload: envia imagem anexada pelo celular/iPad/Workspace para inbox/attachments/
 // na máquina dona da sessão (repassa ao peer se id for `m<n>:...`).
 module.exports = ({ uploadAttachment, peers, relay, json, text }) => [
-  { method: 'POST', path: '/api/upload', json: true, maxBytes: 15 * 1024 * 1024, handler: ({ res, body }) => {
+  { method: 'POST', path: '/api/upload', json: true, maxBytes: 22 * 1024 * 1024, handler: ({ res, body }) => {
     const remote = body.id ? peers.byId(body.id) : null;
     if (remote) {
       return relay(res, peers.forward(remote.peer, 'POST', '/api/upload', {

@@ -12,6 +12,7 @@ import type {
   ProjectDocEntry,
   SessionDetail,
   Snapshot,
+  UsageAggregate,
   WorkspaceEntity,
   WorkspaceIndex,
 } from './types';
@@ -235,7 +236,11 @@ export const api = {
     }),
 
   listMemorySummary: () =>
-    apiFetch<{ projects: { project: string; slug: string; pendingCount: number; lastDreamAt?: number }[] }>('/api/memory'),
+    apiFetch<{
+      projects: { project: string; slug: string; pendingCount: number; lastDreamAt?: number }[];
+      schedule?: { enabled?: boolean; hour?: number; workspaceOnly?: boolean };
+      usage?: UsageAggregate;
+    }>('/api/memory'),
 
   getMemory: (project: string, cwd?: string) =>
     apiFetch<MemoryData>(
@@ -374,4 +379,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  syncDocCheckbox: (body: { entityId: string; docRef: string; title?: string; done: boolean }) =>
+    apiFetch<{ ok: boolean; matched: boolean; changed: boolean; path?: string; lineNo?: number; done?: boolean }>(
+      '/api/workspace/project/sync-checkbox',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  getWorkflowUsage: () =>
+    apiFetch<UsageAggregate>('/api/workspace/usage'),
 };

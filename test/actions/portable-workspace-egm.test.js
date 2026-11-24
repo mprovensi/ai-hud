@@ -129,6 +129,18 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(imp.json.addedCount, 3);
     assert.equal(modelCalls, 0);
 
+    // 3b. Sync reverso Quadro -> Markdown: concluir item 2 marca `- [x]` em docs/plano-v2.md
+    const item2 = imp.json.board.items[1];
+    const synced = await reqJson(port, 'POST', '/api/workspace/project/sync-checkbox', tok, {
+      entityId: entId1,
+      docRef: item2.docRef,
+      title: item2.title,
+      done: true,
+    });
+    assert.equal(synced.status, 200);
+    assert.equal(synced.json.changed, true);
+    assert.match(fs.readFileSync(path.join(projDir, 'docs', 'plano-v2.md'), 'utf8'), /- \[x\] Implementar cache portátil/);
+
     // 4. Cria uma nova Spec EGM Lite em docs/specs/
     const spec = await reqJson(port, 'POST', '/api/workspace/project/spec', tok, {
       entityId: entId1,

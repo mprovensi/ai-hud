@@ -14,6 +14,7 @@ const {
   createSpecDoc,
   saveReviewReport,
   importDocsToBoard,
+  syncDocCheckbox,
 } = require('../../actions/workspace/project-storage');
 
 const REPORT_CSP = "default-src 'self' data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
@@ -458,6 +459,32 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
       if (r.status === 200 && !body.dryRun && r.body && r.body.board && entityId) {
         try { workspace.saveEntityFile({ entityId, relPath: 'overview.card.json', content: r.body.board }); } catch {}
       }
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    { method: 'POST', path: '/api/workspace/project/sync-checkbox', json: true, maxBytes: 16 * 1024, handler: async ({ res, url, body }) => {
+      const isLocal = url.searchParams.get('local') === '1';
+      const target = resolveTarget({
+        entityId: body.entityId || '',
+        cwd: body.cwd || '',
+        machine: body.machine || '',
+        isLocalCall: isLocal,
+      });
+      if (!target.cwd || !body.docRef) return text(res, 400, 'Informe projeto e docRef.');
+      if (target.peer) {
+        return relay(res, peers.forward(target.peer, 'POST', '/api/workspace/project/sync-checkbox?local=1', {
+          cwd: target.cwd,
+          docRef: body.docRef,
+          title: body.title || '',
+          done: !!body.done,
+        }));
+      }
+      if (!isLocal && target.machine && target.machine !== machineName) {
+        return text(res, 404, `Máquina "${target.machine}" não encontrada.`);
+      }
+      const chk = checkAuthorizedCwd(target.cwd, isLocal);
+      if (!chk.ok) return text(res, 403, chk.reason);
+      const r = syncDocCheckbox({ cwd: target.cwd, docRef: body.docRef, title: body.title || '', done: !!body.done });
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 

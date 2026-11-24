@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Activity, Brain, Clock, FolderGit2, FolderKanban, FolderPlus, MessageSquarePlus, Monitor, Plus, Terminal } from 'lucide-react';
+import { Activity, Brain, Clock, Coins, FolderGit2, FolderKanban, FolderPlus, MessageSquarePlus, Monitor, Plus, Terminal } from 'lucide-react';
 import { api } from '../api';
-import type { Snapshot, WorkspaceEntity, WorkspaceIndex } from '../types';
+import type { Snapshot, UsageAggregate, UsageLogEntry, WorkspaceEntity, WorkspaceIndex } from '../types';
 
 interface Props {
   ws: WorkspaceIndex | null;
@@ -46,10 +46,20 @@ export function WorkspaceHome({
   onNewConversation,
 }: Props) {
   const [memPending, setMemPending] = useState<MemSummaryItem[]>([]);
+  const [dreamUsage, setDreamUsage] = useState<UsageAggregate | null>(null);
+  const [dreamSched, setDreamSched] = useState<{ enabled?: boolean; hour?: number; workspaceOnly?: boolean } | null>(null);
+  const [workflowUsage, setWorkflowUsage] = useState<UsageAggregate | null>(null);
 
   useEffect(() => {
     api.listMemorySummary()
-      .then((r) => setMemPending((r.projects || []).filter((p) => p.pendingCount > 0)))
+      .then((r) => {
+        setMemPending((r.projects || []).filter((p) => p.pendingCount > 0));
+        setDreamUsage(r.usage || null);
+        setDreamSched(r.schedule || null);
+      })
+      .catch(() => {});
+    api.getWorkflowUsage()
+      .then((r) => setWorkflowUsage(r))
       .catch(() => {});
   }, [ws?.entities?.length]);
 
@@ -190,6 +200,107 @@ export function WorkspaceHome({
           </div>
         )}
       </section>
+
+      {/* Resumo visual de gasto de tokens (Dreaming + Goldfish/EGM) */}
+      {(() => {
+        const dTok = dreamUsage?.totalTokens || 0;
+        const wTok = workflowUsage?.totalTokens || 0;
+        const totalTok = dTok + wTok;
+        const totalRuns = (dreamUsage?.runs || 0) + (workflowUsage?.runs || 0);
+        const totalIn = (dreamUsage?.inputTokens || 0) + (workflowUsage?.inputTokens || 0);
+        const totalOut = (dreamUsage?.outputTokens || 0) + (workflowUsage?.outputTokens || 0);
+        const totalCache = (dreamUsage?.cacheReadTokens || 0) + (workflowUsage?.cacheReadTokens || 0);
+        const totalCost = (dreamUsage?.costUsd || 0) + (workflowUsage?.costUsd || 0);
+        const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+
+        const combined: (UsageLogEntry & { source: 'dream' | 'workflow' })[] = [
+          ...((dreamUsage?.recent || []).map((r) => ({ ...r, source: 'dream' as const }))),
+          ...((workflowUsage?.recent || []).map((r) => ({ ...r, source: 'workflow' as const }))),
+        ]
+          .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+          .slice(0, 8);
+
+        return (
+          <section className="home-sec">
+            <div className="home-sec-head">
+              <h2><Coins size={14} /> Consumo de Tokens (Dreaming & EGM Lite)</h2>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {dreamSched?.enabled && (
+                  <span className="badge done">
+                    🌙 Dreaming agendado {String(dreamSched.hour ?? 3).padStart(2, '0')}:00
+                    {dreamSched.workspaceOnly !== false ? ' (projetos do Workspace)' : ''}
+                  </span>
+                )}
+                <span className="badge">{totalRuns} execução(ões)</span>
+                <span className="badge" style={{ color: 'var(--accent)' }}>
+                  Total: {fmt(totalTok)} tok
+                </span>
+                {totalCost > 0 && <span className="badge">${totalCost.toFixed(4)}</span>}
+              </div>
+            </div>
+
+            <div className="card-item" style={{ padding: 12 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--muted)', marginBottom: combined.length ? 10 : 0 }}>
+                <span>🌙 Dreaming: <b style={{ color: 'var(--text)' }}>{fmt(dTok)} tok</b> ({dreamUsage?.runs || 0}x)</span>
+                <span>🐟 Goldfish / EGM: <b style={{ color: 'var(--text)' }}>{fmt(wTok)} tok</b> ({workflowUsage?.runs || 0}x)</span>
+                <span>Entrada / Saída: <b style={{ color: 'var(--text)' }}>{fmt(totalIn)} / {fmt(totalOut)}</b>{totalCache > 0 ? ` · Cache ${fmt(totalCache)}` : ''}</span>
+              </div>
+
+              {combined.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--muted)', paddingTop: 6 }}>
+                  Nenhuma execução registrada ainda. O consumo de cada Dreaming noturno/manual e de cada revisão Goldfish aparecerá aqui automaticamente.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="usage-table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Projeto / Doc</th>
+                        <th>Motor</th>
+                        <th>Tokens</th>
+                        <th>Tempo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {combined.map((r, i) => {
+                        const kindLabel = r.source === 'dream'
+                          ? (r.trigger === 'auto' ? '🌙 Dream auto' : '🌙 Dream')
+                          : r.kind === 'structure-from-docs' ? '✨ Estrutura IA' : '🐟 Goldfish';
+                        return (
+                          <tr key={`${r.at}-${i}`}>
+                            <td className="mono" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                              {new Date(r.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{kindLabel}</td>
+                            <td className="ell" style={{ maxWidth: 240 }} title={r.docPath || r.project || ''}>
+                              <b>{r.project || '—'}</b>
+                              {r.docPath ? <span className="mono" style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 11 }}>{r.docPath}</span> : null}
+                            </td>
+                            <td className="mono" style={{ fontSize: 11 }}>
+                              {r.engine || '—'}{r.model ? `/${r.model}` : ''}
+                            </td>
+                            <td className="mono" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                              <b>{fmt(r.totalTokens)}</b>{' '}
+                              <span style={{ color: 'var(--muted)' }}>
+                                ({fmt(r.inputTokens)}/{fmt(r.outputTokens)} {r.estimated ? 'est.' : 'real'})
+                              </span>
+                            </td>
+                            <td className="mono" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                              {typeof r.durationMs === 'number' ? `${(r.durationMs / 1000).toFixed(1)}s` : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      })()}
     </div>
   );
 }

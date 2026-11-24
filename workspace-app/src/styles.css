@@ -268,7 +268,15 @@ button.qchip:hover { border-color: var(--border-hi); background: var(--card-hove
 
 .board-scroll { overflow-x: auto; padding-bottom: 8px; }
 .board-grid { display: grid; grid-template-columns: repeat(5, minmax(210px, 1fr)); gap: 10px; align-items: start; }
-.board-col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px; min-height: 180px; }
+.board-col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px; min-height: 180px; transition: border-color .15s, background .15s; }
+.board-col.drag-over { border-color: var(--accent); background: rgba(95, 184, 164, .09); }
+.card-item.dragging { opacity: .45; }
+.card-item[draggable="true"] { cursor: grab; }
+.card-item[draggable="true"]:active { cursor: grabbing; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.usage-table th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.usage-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+.usage-table tr:last-child td { border-bottom: 0; }
 .board-col-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 
 /* Docs & Specs layout */

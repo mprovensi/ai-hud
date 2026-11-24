@@ -178,10 +178,72 @@ function mergeImportedItems(existingItems, candidates, { maxTotal = 200 } = {}) 
   return { items: out, added };
 }
 
+// Atualiza `- [ ]` <-> `- [x]` em um documento Markdown preservando todo o restante do arquivo.
+// Tenta primeiro na linha `lineNo` (± 3 linhas de tolerância) e, se o arquivo mudou de tamanho, busca pelo título da tarefa.
+function toggleMarkdownCheckbox(markdown, { lineNo = 0, title = '', done = true } = {}) {
+  const raw = String(markdown || '');
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  const lines = raw.split(/\r?\n/);
+  const cbRe = /^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.+?)\s*$/;
+  const targetTitle = cleanTaskTitle(title).title.toLowerCase();
+
+  let hitIdx = -1;
+  if (Number.isInteger(lineNo) && lineNo >= 1 && lineNo <= lines.length) {
+    const offsets = [0, -1, 1, -2, 2, -3, 3];
+    for (const off of offsets) {
+      const idx = lineNo - 1 + off;
+      if (idx < 0 || idx >= lines.length) continue;
+      const m = cbRe.exec(lines[idx]);
+      if (!m) continue;
+      const cleaned = cleanTaskTitle(m[4]).title.toLowerCase();
+      if (!targetTitle || cleaned === targetTitle || cleaned.includes(targetTitle) || targetTitle.includes(cleaned)) {
+        hitIdx = idx;
+        break;
+      }
+    }
+    // Se lineNo exata é um checkbox mesmo com texto levemente editado
+    if (hitIdx < 0 && cbRe.test(lines[lineNo - 1])) hitIdx = lineNo - 1;
+  }
+
+  if (hitIdx < 0 && targetTitle) {
+    let inFence = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*```/.test(lines[i])) { inFence = !inFence; continue; }
+      if (inFence) continue;
+      const m = cbRe.exec(lines[i]);
+      if (!m) continue;
+      const cleaned = cleanTaskTitle(m[4]).title.toLowerCase();
+      if (cleaned === targetTitle || cleaned.includes(targetTitle) || targetTitle.includes(cleaned)) {
+        hitIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (hitIdx < 0) {
+    return { matched: false, changed: false, lineNo: 0, content: raw };
+  }
+
+  const m = cbRe.exec(lines[hitIdx]);
+  const currentDone = m[2].toLowerCase() === 'x';
+  const nextMark = done ? 'x' : ' ';
+  if (currentDone === !!done) {
+    return { matched: true, changed: false, lineNo: hitIdx + 1, content: raw };
+  }
+  lines[hitIdx] = `${m[1]}${nextMark}${m[3]}${m[4]}`;
+  return {
+    matched: true,
+    changed: true,
+    lineNo: hitIdx + 1,
+    content: lines.join(eol),
+  };
+}
+
 module.exports = {
   DOC_CATEGORIES,
   classifyProjectDoc,
   extractDocTitle,
   extractItemsFromMarkdown,
   mergeImportedItems,
+  toggleMarkdownCheckbox,
 };

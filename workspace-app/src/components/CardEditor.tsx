@@ -94,6 +94,10 @@ export function CardEditor({
   const [reviewTarget, setReviewTarget] = useState<{ itemId: string; docPath: string; estimate: GoldfishEstimate } | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
 
+  // Drag-and-drop entre colunas
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<CardStatus | null>(null);
+
   async function load(ignoreDraft = false) {
     setConflict(null);
     try {
@@ -223,6 +227,35 @@ export function CardEditor({
   function patchItem(id: string, patch: Partial<CardItem>) {
     if (!card) return;
     updateCard({ ...card, items: card.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+  }
+
+  async function changeItemStatus(item: CardItem, nextStatus: CardStatus, autoSave = false) {
+    if (!card || offlineFallback) return;
+    const prevStatus = item.status || 'idea';
+    if (prevStatus === nextStatus) return;
+    const nextCard: CardDoc = {
+      ...card,
+      items: card.items.map((it) => (it.id === item.id ? { ...it, status: nextStatus } : it)),
+    };
+    updateCard(nextCard);
+    if (autoSave) {
+      await save(nextCard);
+    }
+    // Sync reverso Quadro -> docs/: ao entrar ou sair de "Concluído", atualiza `- [x]` / `- [ ]` no Markdown vinculado
+    const crossedDone = (prevStatus === 'done') !== (nextStatus === 'done');
+    if (hasProjectCwd && item.docRef && crossedDone) {
+      try {
+        const sr = await api.syncDocCheckbox({
+          entityId,
+          docRef: item.docRef,
+          title: item.title,
+          done: nextStatus === 'done',
+        });
+        if (sr.changed && sr.path) {
+          onNotify(`Checklist atualizado em ${sr.path} (${nextStatus === 'done' ? '- [x]' : '- [ ]'}).`);
+        }
+      } catch {}
+    }
   }
 
   function removeItem(id: string) {
@@ -406,8 +439,23 @@ export function CardEditor({
   function renderItemCard(item: CardItem) {
     const isEditing = editingId === item.id;
     const docClean = (item.docRef || '').split('#')[0];
+    const canDrag = card?.template === 'board' && !isEditing && !offlineFallback;
     return (
-      <div key={item.id} className="card-item">
+      <div
+        key={item.id}
+        className={`card-item ${dragItemId === item.id ? 'dragging' : ''}`}
+        draggable={canDrag}
+        onDragStart={(e) => {
+          if (!canDrag) return;
+          setDragItemId(item.id);
+          e.dataTransfer.setData('text/plain', item.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragEnd={() => {
+          setDragItemId(null);
+          setDragOverCol(null);
+        }}
+      >
         {isEditing ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             <input
@@ -560,7 +608,7 @@ export function CardEditor({
                   className="sel"
                   style={{ width: 'auto', padding: '3px 6px', fontSize: 11 }}
                   value={item.status || 'idea'}
-                  onChange={(e) => patchItem(item.id, { status: e.target.value as CardStatus })}
+                  onChange={(e) => changeItemStatus(item, e.target.value as CardStatus, false)}
                 >
                   {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
@@ -830,7 +878,30 @@ export function CardEditor({
             {STATUSES.map((col) => {
               const items = card.items.filter((i) => (i.status || 'idea') === col.id);
               return (
-                <div key={col.id} className="board-col">
+                <div
+                  key={col.id}
+                  className={`board-col ${dragOverCol === col.id ? 'drag-over' : ''}`}
+                  onDragOver={(e) => {
+                    if (offlineFallback) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverCol !== col.id) setDragOverCol(col.id);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                      setDragOverCol((cur) => (cur === col.id ? null : cur));
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const droppedId = e.dataTransfer.getData('text/plain') || dragItemId;
+                    setDragItemId(null);
+                    setDragOverCol(null);
+                    if (!droppedId) return;
+                    const found = card.items.find((i) => i.id === droppedId);
+                    if (found) changeItemStatus(found, col.id, true);
+                  }}
+                >
                   <div className="board-col-head">
                     <span>{col.label} ({items.length})</span>
                     <button className="btn btn-sm btn-icon" onClick={() => addItem(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>

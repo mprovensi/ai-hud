@@ -137,6 +137,30 @@ export interface DreamUsage {
   estimated?: boolean;
 }
 
+export interface UsageLogEntry extends DreamUsage {
+  at: string;
+  trigger?: 'auto' | 'manual';
+  kind?: 'goldfish-review' | 'structure-from-docs';
+  project?: string;
+  docPath?: string;
+  engine?: string;
+  model?: string;
+  verdict?: string;
+  sessionsProcessed?: number;
+  durationMs?: number;
+  summary?: string;
+}
+
+export interface UsageAggregate {
+  runs: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  recent: UsageLogEntry[];
+}
+
 export interface MemoryData {
   project: string;
   slug: string;

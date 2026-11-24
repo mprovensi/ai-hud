@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { isSafeRelativePath, isWithinRoot, isSecretPath, resolveContainedPath } = require('../../core/path-guard');
 const { validateCard, defaultCard, slugifyEntity } = require('../../core/workspace-schema');
-const { extractItemsFromMarkdown, mergeImportedItems } = require('../../core/doc-parser');
+const { extractItemsFromMarkdown, mergeImportedItems, toggleMarkdownCheckbox } = require('../../core/doc-parser');
 const { buildSpecTemplate } = require('../../core/egm');
 const { hashContent, writeAtomic, writeAtomicWithBackup } = require('../../infra/workspace-paths');
 const { PORTABLE_DIR, PORTABLE_BOARD_REL, listProjectDocs, readProjectDoc, readPortableBoard } = require('../../collect/workspace/project-docs');
@@ -229,6 +229,40 @@ function importDocsToBoard({ cwd, paths = null, dryRun = false, title = '', now 
   };
 }
 
+function syncDocCheckbox({ cwd, docRef = '', title = '', done = true, now = () => Date.now() }) {
+  const parts = String(docRef || '').split('#');
+  const relPath = (parts[0] || '').trim();
+  const lineMatch = /^L(\d+)$/i.exec((parts[1] || '').trim());
+  const lineNo = lineMatch ? Number(lineMatch[1]) : 0;
+  if (!relPath) return { status: 400, body: 'docRef ausente.' };
+
+  const read = readProjectDoc(cwd, relPath);
+  if (read.status !== 200) return { status: read.status, body: read.error };
+
+  const toggled = toggleMarkdownCheckbox(read.body.content, { lineNo, title, done: !!done });
+  if (!toggled.matched) {
+    return { status: 200, body: { ok: true, matched: false, changed: false, path: read.body.path } };
+  }
+  if (!toggled.changed) {
+    return { status: 200, body: { ok: true, matched: true, changed: false, path: read.body.path, lineNo: toggled.lineNo } };
+  }
+
+  const saved = saveProjectDoc({ cwd, relPath: read.body.path, content: toggled.content, baseHash: read.body.hash, now });
+  if (saved.status !== 200) return saved;
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      matched: true,
+      changed: true,
+      path: read.body.path,
+      lineNo: toggled.lineNo,
+      done: !!done,
+      hash: saved.body.hash,
+    },
+  };
+}
+
 module.exports = {
   ensurePortableDir,
   savePortableBoard,
@@ -236,4 +270,5 @@ module.exports = {
   createSpecDoc,
   saveReviewReport,
   importDocsToBoard,
+  syncDocCheckbox,
 };

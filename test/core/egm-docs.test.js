@@ -5,6 +5,7 @@ const {
   extractDocTitle,
   extractItemsFromMarkdown,
   mergeImportedItems,
+  toggleMarkdownCheckbox,
 } = require('../../src/core/doc-parser');
 const {
   buildSpecTemplate,
@@ -46,6 +47,17 @@ test('doc-parser classifica documentos e extrai checklists/fases com 0 tokens', 
   const m2 = mergeImportedItems(m1.items, parsed.items);
   assert.equal(m2.added.length, 0);
   assert.equal(m2.items.length, 3);
+
+  // Sync reverso Quadro -> Markdown marca [x] e desmarca [ ] preservando o restante
+  const t1 = toggleMarkdownCheckbox(md, { lineNo: 5, title: 'Salvar quadro em .ai-workspace/board.card.json', done: true });
+  assert.equal(t1.matched, true);
+  assert.equal(t1.changed, true);
+  assert.match(t1.content, /- \[x\] Salvar quadro em `\.ai-workspace\/board\.card\.json`/);
+  assert.match(t1.content, /- \[ \] Substituir aba Notas/);
+
+  const t2 = toggleMarkdownCheckbox(t1.content, { lineNo: 5, title: 'Salvar quadro em .ai-workspace/board.card.json', done: false });
+  assert.equal(t2.changed, true);
+  assert.match(t2.content, /- \[ \] Salvar quadro em `\.ai-workspace\/board\.card\.json`/);
 });
 
 test('egm.js gera template enxuto, prompt Goldfish sem segredos e parseia revisão + estrutura IA', () => {

@@ -221,6 +221,11 @@ class ConPtyBridge {
         reader.IsBackground = true;
         reader.Start();
 
+        int ptyClosed = 0;
+        Action closePtyOnce = () => {
+            if (Interlocked.Exchange(ref ptyClosed, 1) == 0) ClosePseudoConsole(hPC);
+        };
+
         // Thread de entrada stdin NDJSON -> ConPTY (write / resize / kill)
         Regex rxIn = new Regex("\"d\"\\s*:\\s*\"([^\"]*)\"");
         Regex rxCols = new Regex("\"cols\"\\s*:\\s*(\\d+)");
@@ -245,12 +250,14 @@ class ConPtyBridge {
                         if (c >= 20 && r >= 5) ResizePseudoConsole(hPC, new COORD(c, r));
                     } else if (line.Contains("\"t\":\"kill\"")) {
                         TerminateProcess(pi.hProcess, 1);
+                        closePtyOnce();
                         break;
                     }
                 }
             } catch {}
-            // Se stdin fechou (servidor desconectou), encerra o processo filho
+            // Se stdin fechou (servidor desconectou), encerra o processo filho e o ConPTY
             TerminateProcess(pi.hProcess, 0);
+            closePtyOnce();
         });
         writer.IsBackground = true;
         writer.Start();
@@ -259,7 +266,7 @@ class ConPtyBridge {
         uint exitCode = 0;
         GetExitCodeProcess(pi.hProcess, out exitCode);
 
-        ClosePseudoConsole(hPC);
+        closePtyOnce();
         CloseHandle(ptyInWrite);
         reader.Join(500);
         CloseHandle(ptyOutRead);

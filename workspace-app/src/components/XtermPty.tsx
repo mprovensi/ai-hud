@@ -184,9 +184,12 @@ export function XtermPty({ ptyKey, cwd, machine, mode, tool = '', sessionId = ''
             className="btn btn-sm btn-danger"
             title="Encerrar processo PTY"
             onClick={() => {
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ type: 'kill' }));
+              const ws = wsRef.current;
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'kill' }));
               }
+              setStatus('exited');
+              setExitCode(0);
             }}
           >
             <Square size={11} /> Encerrar

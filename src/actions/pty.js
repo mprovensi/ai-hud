@@ -161,8 +161,26 @@ function createPtyManager({
       kill: () => {
         if (!ptySess.exited) {
           ptySess.exited = true;
-          try { if (child.stdin && !child.stdin.destroyed) child.stdin.write('{"t":"kill"}\n'); } catch {}
-          try { child.kill(); } catch {}
+          ptySess.exitCode = 0;
+          try {
+            if (child.stdin && !child.stdin.destroyed) {
+              child.stdin.write('{"t":"kill"}\n');
+              child.stdin.end();
+            }
+          } catch {}
+          emitter.emit('exit', 0);
+          // Dá 300ms para o helper encerrar graciosamente o ConPTY e seus filhos; depois força tree-kill
+          const pid = child.pid;
+          const force = setTimeout(() => {
+            try {
+              if (platform === 'win32' && pid) {
+                spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { windowsHide: true, stdio: 'ignore' });
+              } else {
+                child.kill('SIGKILL');
+              }
+            } catch {}
+          }, 300);
+          if (force.unref) force.unref();
         }
         sessions.delete(key);
       },

@@ -478,7 +478,6 @@
     html += sessHead(d);
     var places = { vscode: 'VS Code', terminal: 'terminal', 'claude-desktop': 'app Claude', 'codex-desktop': 'app Codex', antigravity: 'Antigravity', 'antigravity-cli': 'terminal', 'gemini-cli': 'terminal', 'ollama-app': 'app Ollama', 'ollama-run': 'terminal' };
     html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
-      (d.canStop ? '<button type="button" class="pcmini stopmini" id="stopTurn" title="Interromper o turno atual sem encerrar a sessão">⏹ Parar</button>' : '') +
       (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ')">🖥 Abrir no PC</button>' : '') + '</div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
@@ -512,6 +511,9 @@
     // ollama run no terminal e sessões legadas sem UUID: sem resposta direta pelo HUD
     var canReply = d.tool !== 'Antigravity' && d.where !== 'ollama-run' && (d.tool !== 'Gemini' || /(?:^|:)[0-9a-f-]{36}$/.test(String(d.id || '')));
     if (canReply) html += replyBox(d);
+    if (d.canStop) {
+      html += '<button type="button" class="pcaction stopturn" id="stopTurn" title="Interromper o turno atual sem encerrar a sessão">⏹ Parar execução</button>';
+    }
     html += '</div>';
 
     // ---- Aba Detalhes ----

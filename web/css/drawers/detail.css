@@ -244,6 +244,8 @@ select.nsel option { background: #1c1c1a; color: #ecece8; }
 .pcaction:active { background: #2f3b60; }
 .pcaction:disabled { opacity: .6; }
 .pcaction.danger { margin: 12px 0 0; background: #3a2626; border-color: #7a3b3b; color: #f0a0a0; }
+.pcaction.stopturn { margin: 10px 0 0; background: #432828; border-color: #824040; color: #f5b4b4; }
+.pcaction.stopturn:active { background: #593333; }
 .pcaction.danger:active { background: #4d2f2f; }
 .more .mhead { width: 100%; }
 .more .mhead h2 { margin: 0; }

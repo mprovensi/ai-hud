@@ -1,5 +1,5 @@
   // ---- Resposta rápida (hook-stop.js entrega à sessão parada) ----------------
-  var QUICK = ['Continue', 'Sim, implemente', 'Resuma', 'Não, pare aqui', 'Faça o commit', 'Rode os testes', 'Explique melhor'];
+  var QUICK = ['Sim', 'Continue', 'Sim, implemente', 'Resuma', 'Não, pare aqui', 'Faça o commit', 'Rode os testes', 'Explique melhor'];
   var chipsOpen = false;
 
   function replyBox(d) {
@@ -10,8 +10,15 @@
       : (d.tool === 'Codex' || d.tool === 'Ollama' || d.tool === 'Gemini'
         ? d.state !== 'working'
         : (!!d.listening || (d.state !== 'working' && /(?:^|:)[0-9a-f-]{36}$/.test(String(d.key || d.id || '')))));
-    var sugg = d.suggestions && d.suggestions.length ? d.suggestions : [];
-    var i, html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
+    var rawSugg = d.suggestions && d.suggestions.length ? d.suggestions : [];
+    var sugg = [], i;
+    if (rawSugg.length) {
+      sugg.push('Sim');
+      for (i = 0; i < rawSugg.length; i++) {
+        if (String(rawSugg[i] || '').toLowerCase() !== 'sim') sugg.push(rawSugg[i]);
+      }
+    }
+    var html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
       (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">vai para a fila</span>') +
       '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
       (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button></div>';

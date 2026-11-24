@@ -173,10 +173,14 @@ test('atalhos contextuais aparecem visíveis e tocam para preencher a caixa de t
     lastReply: 'Posso implementar?', lastReplyAt: now - 5e3,
     history: [{ role: 'assistant', content: 'Posso implementar?', at: now - 5e3 }],
     question: null,
+    canStop: true,
     suggestions: ['Sim, implemente', 'Ajuste a proposta', 'Explique melhor'],
   });
   assert.match(h.html(), /id="suggChips"/);
   assert.match(h.html(), /⚡ Mais/);
+  const suggChips = h.mockButtons.filter((b) => b.getAttribute('data-chip'));
+  assert.equal(suggChips[0].getAttribute('data-chip'), 'Sim', 'primeira resposta rápida deve ser Sim');
+  assert.ok(h.html().indexOf('id="stopTurn"') > h.html().indexOf('id="sendReply"'), 'botão de parar deve ficar abaixo do bloco Responder');
   const chip = h.mockButtons.find((b) => b.getAttribute('data-chip') === 'Sim, implemente');
   assert.ok(chip);
   chip.onclick();

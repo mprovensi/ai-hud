@@ -347,9 +347,6 @@ export function App() {
         <a className="pill-link" href={withToken('/')}>
           <LayoutDashboard size={13} /> HUD Clássico
         </a>
-        <button className="btn btn-sm btn-primary" onClick={() => { setNewChatPrompt(''); setNewChatOpen(true); }} title="Abrir gaveta lateral para escolher pasta e IA">
-          <Plus size={13} /> Nova conversa
-        </button>
         <button className="cmd-trigger" onClick={() => setPaletteOpen(true)}>
           <Search size={13} /> Buscar ou ir para… <span className="kbd">Ctrl+K</span>
         </button>
@@ -553,6 +550,13 @@ export function App() {
                   {activeBinding && (
                     <span className="badge mono">{activeBinding.machine}: {activeBinding.cwd}</span>
                   )}
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => { setNewChatPrompt(''); setNewChatOpen(true); }}
+                    title="Abrir nova conversa neste projeto"
+                  >
+                    <Plus size={13} /> Nova conversa
+                  </button>
                 </div>
 
                 <div className="tabs">

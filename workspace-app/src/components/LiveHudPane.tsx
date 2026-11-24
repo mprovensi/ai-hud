@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, GitFork, Paperclip, Plus, Send, Square, Star } from 'lucide-react';
+import { ArrowLeft, GitFork, Paperclip, Plus, Send, Square, Star, Volume2 } from 'lucide-react';
 import { api } from '../api';
 import type { MachineCaps, SessionCard, SessionDetail, Snapshot } from '../types';
 
@@ -247,6 +247,23 @@ export function LiveHudPane({ snapshot, projectTitle, binding, draftPrompt, onDr
               <button className="btn btn-sm" onClick={() => setHandoffOpen(!handoffOpen)}>
                 <GitFork size={12} /> Handoff
               </button>
+              {detail.lastReply && (
+                <button
+                  className="btn btn-sm"
+                  title="Ouvir última resposta (TTS local)"
+                  onClick={async () => {
+                    try {
+                      const r = await api.speakText(detail.lastReply || '');
+                      const audio = new Audio(`data:${r.contentType || 'audio/wav'};base64,${r.audioBase64}`);
+                      await audio.play();
+                    } catch (e) {
+                      onNotify((e as Error).message, true);
+                    }
+                  }}
+                >
+                  <Volume2 size={12} /> Ler
+                </button>
+              )}
             </div>
 
             {handoffOpen && (

@@ -327,6 +327,6 @@ data/workspace/  (ou caminho em config.json -> workspaceDir)
 - [x] Notificações **Web Push** nativas (`node:crypto` VAPID + RFC 8291 `aes128gcm`, zero deps) no Android PWA quando uma sessão termina, falha teste, pede permissão ou conclui um Dreaming noturno.
 
 ### Fase 5 — *Good-to-Have* (Segundo Momento, Sob Demanda)
-- [ ] **Voz local (Whisper + TTS) no PC Desktop (GPU):** serviço auxiliar opcional apenas no Desktop, permitindo ditado e leitura em voz alta inclusive no **iPad mini 1 (HTTP)** sem custo de API.
-- [ ] **Terminal interativo embutido (PTY / `xterm.js`):** apenas se no futuro houver necessidade real de TUI interativa dentro da janela desktop Tauri (mantido fora do núcleo zero-deps e da VPS).
-- [ ] **Separação de repositório:** se `workspace-app/` + `workspace-desktop/` crescerem muito, podem ser extraídos para um repositório irmão sem mudar a API do `ai-hud`.
+- [x] **Voz local (Whisper + TTS) no PC Desktop (GPU) / Windows:** serviço auxiliar `integrations/voice-server/server.py` + proxy `/api/voice/*` com TTS nativo Windows SAPI (PT-BR) funcionando inclusive no **iPad mini 1 (HTTP)** via `<audio>` e relay automático Hub → Peer.
+- [x] **Terminal integrado no `/workspace`:** `POST /api/fs/exec` (zero deps, allowlist de pastas, redação de segredos, federação multi-máquina) + aba `Terminal` em `TerminalPane.tsx`.
+- [ ] **Separação de repositório:** mantido no monorepo `ai-hud` conforme decisão do usuário (adiado até eventual crescimento).

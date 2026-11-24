@@ -439,6 +439,7 @@
     if (msgs && msgs.length) {
       var title = d.where === 'ollama-run' && !d.lastReply ? 'Últimos comandos no terminal' : 'Conversa';
       html += '<div class="row chead"><h2 class="grow">' + title + '</h2>' +
+        (d.lastReply ? '<button type="button" class="pcmini" id="speakLast" title="Ouvir última resposta (TTS local)">🔊 Ler</button>' : '') +
         (d.lastReplyAt ? '<span class="muted ctime">' + when(d.lastReplyAt) + '</span>' : '') + '</div>' +
         '<div class="convo lastreply" id="lastReply" tabindex="-1">';
       for (var i = 0; i < msgs.length; i++) {
@@ -643,6 +644,46 @@
         flash(err ? 'Falhou: ' + err.message : r.message, !err && r.ok);
         if (!err && r.ok) { d.canStop = false; if (d.state === 'working') d.state = 'waiting'; renderDetail(d); }
       }, { id: d.id });
+    };
+    if ($('speakLast')) $('speakLast').onclick = function () {
+      var b = this;
+      if (window._hudTtsAudio) {
+        try { window._hudTtsAudio.pause(); } catch (e) {}
+        window._hudTtsAudio = null;
+        b.textContent = '🔊 Ler';
+        return;
+      }
+      if (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) {
+        try { speechSynthesis.cancel(); } catch (e) {}
+        b.textContent = '🔊 Ler';
+        return;
+      }
+      b.disabled = true;
+      b.textContent = '🔊…';
+      request('POST', '/api/voice/speak?format=json', function (err, r) {
+        b.disabled = false;
+        if (!err && r && r.audioBase64) {
+          try {
+            var audio = new Audio('data:' + (r.contentType || 'audio/wav') + ';base64,' + r.audioBase64);
+            window._hudTtsAudio = audio;
+            b.textContent = '⏹ Parar';
+            audio.onended = function () { window._hudTtsAudio = null; if ($('speakLast')) $('speakLast').textContent = '🔊 Ler'; };
+            audio.onerror = function () { window._hudTtsAudio = null; if ($('speakLast')) $('speakLast').textContent = '🔊 Ler'; };
+            audio.play();
+            return;
+          } catch (playErr) {}
+        }
+        if (typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined') {
+          var u = new SpeechSynthesisUtterance(String(d.lastReply || '').slice(0, 1200));
+          u.lang = 'pt-BR';
+          b.textContent = '⏹ Parar';
+          u.onend = function () { if ($('speakLast')) $('speakLast').textContent = '🔊 Ler'; };
+          speechSynthesis.speak(u);
+          return;
+        }
+        b.textContent = '🔊 Ler';
+        flash('Leitura em voz indisponível: ' + (err ? err.message : 'sem áudio'), false);
+      }, { text: String(d.lastReply || '').slice(0, 1800) });
     };
     if ($('assumeHud')) $('assumeHud').onclick = function () {
       var b = this;

@@ -21,6 +21,7 @@ const routes = [
   require('./workspace'),
   require('./memory'),
   require('./push'),
+  require('./voice'),
   require('./hooks'),
 ];
 

@@ -104,6 +104,28 @@ export const api = {
       `/api/skills${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''}`,
     ),
 
+  speakText: (text: string) =>
+    apiFetch<{ ok: boolean; contentType: string; engine: string; audioBase64: string }>('/api/voice/speak?format=json', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+
+  execTerminal: (body: { cwd: string; machine?: string; command: string; timeoutMs?: number }) =>
+    apiFetch<{
+      ok: boolean;
+      code: number;
+      timedOut: boolean;
+      truncated: boolean;
+      redacted: boolean;
+      durationMs: number;
+      cwd: string;
+      stdout: string;
+      stderr: string;
+    }>('/api/fs/exec', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   getWorkspaceIndex: () =>
     apiFetch<WorkspaceIndex>('/api/workspace/index'),
 

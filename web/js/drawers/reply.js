@@ -36,11 +36,12 @@
       '<div class="row rform"><textarea id="replyText" rows="2" placeholder="Escreva, digite / ou fale uma resposta…"></textarea>' +
       '<input type="file" id="replyAttachInput" accept="image/*" style="display:none">' +
       '<button type="button" class="attach" id="attachReply" aria-label="Anexar imagem" title="Anexar imagem">📎</button>' +
-      (Speech ? '<button class="mic' + (rec ? ' on' : '') + '" id="micReply" aria-label="Falar a resposta" title="Falar a resposta">🎤</button>' : '') +
+      (Speech ? '<button class="mic' + (rec ? ' on' : '') + '" id="micReply" aria-label="Falar a resposta" title="Falar a resposta">🎤</button>'
+        : (snap && snap.voiceStt ? '<input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" style="display:none"><button type="button" class="mic" id="voiceSttBtn" aria-label="Ditar via Whisper local" title="Ditar via Whisper local">🎤</button>' : '')) +
       '<button class="send" id="sendReply">Enviar</button></div></div>';
   }
 
-  // ---- Ditado da resposta (Web Speech API do navegador) ------------------------
+  // ---- Ditado da resposta (Web Speech API do navegador ou Whisper local) ------
   // O texto falado entra na caixa, para revisar antes de enviar. O navegador só libera o microfone em
   // HTTPS ou no próprio PC (localhost). Sem a API (Safari 9, Firefox) ou fora desse contexto (aberto pela
   // rede em http) o ditado não funciona: o botão nem aparece.
@@ -190,6 +191,32 @@
         if (!err && r && r.skills) { slashList = r.skills; renderSlash($('replyText') ? $('replyText').value : ''); }
       });
     };
+    if ($('voiceSttBtn') && $('voiceFileInput')) {
+      $('voiceSttBtn').onclick = function () { $('voiceFileInput').click(); };
+      $('voiceFileInput').onchange = function () {
+        var f = this.files && this.files[0];
+        this.value = '';
+        if (!f) return;
+        var b = $('voiceSttBtn');
+        b.disabled = true;
+        b.textContent = '…';
+        var rd = new FileReader();
+        rd.onload = function () {
+          request('POST', '/api/voice/transcribe', function (err, r) {
+            b.disabled = false;
+            b.textContent = '🎤';
+            if (err) return flash('Transcrição falhou: ' + err.message, false);
+            var box = $('replyText');
+            if (box && r && r.text) {
+              box.value = (box.value ? box.value.replace(/\s+$/, '') + ' ' : '') + r.text;
+              box.focus();
+            }
+          }, { audioBase64: String(rd.result || ''), mimeType: f.type || 'audio/wav', language: 'pt' });
+        };
+        rd.onerror = function () { b.disabled = false; b.textContent = '🎤'; };
+        rd.readAsDataURL(f);
+      };
+    }
   }
 
   function flash(msg, ok) {

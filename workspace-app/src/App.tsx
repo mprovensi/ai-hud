@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Terminal,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import { FilesAndGit } from './components/FilesAndGit';
 import { LiveHudPane } from './components/LiveHudPane';
 import { MemoryPanel } from './components/MemoryPanel';
 import { NotesAndReports } from './components/NotesAndReports';
+import { TerminalPane } from './components/TerminalPane';
 import type { MachineCaps, Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
 
 type Selection =
@@ -28,7 +30,7 @@ type Selection =
   | { kind: 'doc'; area: 'context' | 'knowledge' | 'skills' | 'handoffs'; name: string }
   | null;
 
-type EntityTab = 'step' | 'memory' | 'files';
+type EntityTab = 'step' | 'memory' | 'files' | 'terminal';
 
 function quotaPct(q?: { windows?: Record<string, { used: number }> }): string | null {
   if (!q?.windows) return null;
@@ -415,12 +417,20 @@ export function App() {
                     <Brain size={14} /> Memória & Dreaming
                   </button>
                   {activeBinding && (
-                    <button
-                      className={`tab ${entityTab === 'files' ? 'active' : ''}`}
-                      onClick={() => setEntityTab('files')}
-                    >
-                      <FolderGit2 size={14} /> Arquivos & Git
-                    </button>
+                    <>
+                      <button
+                        className={`tab ${entityTab === 'files' ? 'active' : ''}`}
+                        onClick={() => setEntityTab('files')}
+                      >
+                        <FolderGit2 size={14} /> Arquivos & Git
+                      </button>
+                      <button
+                        className={`tab ${entityTab === 'terminal' ? 'active' : ''}`}
+                        onClick={() => setEntityTab('terminal')}
+                      >
+                        <Terminal size={14} /> Terminal
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -451,6 +461,12 @@ export function App() {
                   />
                 ) : entityTab === 'files' && activeBinding ? (
                   <FilesAndGit
+                    cwd={activeBinding.cwd}
+                    machine={activeBinding.machine}
+                    onNotify={notify}
+                  />
+                ) : entityTab === 'terminal' && activeBinding ? (
+                  <TerminalPane
                     cwd={activeBinding.cwd}
                     machine={activeBinding.machine}
                     onNotify={notify}

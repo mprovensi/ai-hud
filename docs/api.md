@@ -65,6 +65,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão ou autorizado) |
 | `GET /api/fs/list?cwd=&path=&machine=` | `{ ok, dir, entries: [{ name, path, type, size }], truncated }` (pastas autorizadas) |
 | `GET /api/fs/git?cwd=&machine=` | `{ ok, isRepo, branch, modified[], commits[] }` (pastas autorizadas) |
+| `POST /api/fs/exec` | `{ cwd, machine?, command, timeoutMs? }` → `{ ok, code, timedOut, truncated, redacted, durationMs, stdout, stderr }` (terminal integrado em pastas autorizadas; desativável via `config.disableTerminal`) |
 
 ## AI Workspace & Memória Compartilhada (`/api/workspace/*`, `/api/memory/*`)
 
@@ -91,6 +92,14 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `POST /api/push/subscribe` | Registra assinatura `{ endpoint, keys: { p256dh, auth }, label? }` em `data/push-subscriptions.json` |
 | `POST /api/push/unsubscribe` | Remove assinatura `{ endpoint }` |
 | `POST /api/push/test` | Envia uma notificação de teste para todas as assinaturas ativas |
+
+## Voz Local (`/api/voice/*`, STT Whisper + TTS)
+
+| Rota | Efeito |
+|---|---|
+| `GET /api/voice/status` | Retorna `{ ok, stt, tts, configured, remoteOnline, engine: { stt, tts } }` (no Hub consulta peers online se local não tiver voz) |
+| `POST /api/voice/transcribe` | Transcreve `{ audioBase64, mimeType?, language? }` via serviço local `voiceUrl` (`integrations/voice-server/server.py`) |
+| `POST /api/voice/speak` | Sintetiza `{ text, voice? }` em `audio/wav` (ou JSON base64 com `?format=json`) usando `voiceUrl` ou Windows SAPI PT-BR nativo |
 
 ## Hooks (mesmo PC)
 

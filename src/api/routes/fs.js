@@ -4,7 +4,7 @@ const os = require('os');
 const { isCwdAllowed } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
 
-module.exports = ({ filePreview, fileList, projectGit, peers, collector, config, machineName, relay, json, text }) => {
+module.exports = ({ filePreview, fileList, projectGit, terminal, peers, collector, config, machineName, relay, json, text }) => {
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
     return isCwdAllowed(cwd, {
@@ -80,6 +80,26 @@ module.exports = ({ filePreview, fileList, projectGit, peers, collector, config,
       if (!check.ok) return text(res, 403, check.reason);
       const r = await projectGit(cwd);
       return r.status !== 200 ? text(res, r.status, r.error) : json(res, r.body);
+    } },
+
+    { method: 'POST', path: '/api/fs/exec', json: true, maxBytes: 16 * 1024, handler: async ({ res, url, body }) => {
+      if (!terminal) return text(res, 501, 'Terminal integrado indisponível.');
+      const cwd = String(body.cwd || '').trim();
+      const machine = String(body.machine || '').trim();
+      if (!cwd) return text(res, 400, 'informe cwd do projeto');
+      if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+        const peer = peers.list.find((p) => p.name === machine);
+        if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
+        return relay(res, peers.forward(peer, 'POST', '/api/fs/exec?local=1', {
+          cwd,
+          command: body.command,
+          timeoutMs: body.timeoutMs,
+        }));
+      }
+      const check = checkAuthorizedCwd(cwd);
+      if (!check.ok) return text(res, 403, check.reason);
+      const r = await terminal({ cwd, command: body.command, timeoutMs: body.timeoutMs });
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
   ];
 };

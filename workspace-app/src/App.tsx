@@ -17,6 +17,7 @@ import {
   Search,
   Sparkles,
   Terminal,
+  Trash2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -119,6 +120,14 @@ export function App() {
       window.removeEventListener('mouseup', onUp);
     };
   }, [draggingCol]);
+
+  // Modal de confirmação para apagar projeto ou englobador (workspace)
+  const [confirmDelete, setConfirmDelete] = useState<
+    | { kind: 'entity'; id: string; title: string; cwd?: string }
+    | { kind: 'group'; name: string; count: number }
+    | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
@@ -238,6 +247,30 @@ export function App() {
       notify(nextGroup ? `Movido para "${nextGroup}".` : 'Removido do englobador.');
     } catch (e) {
       notify((e as Error).message, true);
+    }
+  }
+
+  async function executeConfirmDelete() {
+    if (!confirmDelete || deleting) return;
+    setDeleting(true);
+    try {
+      if (confirmDelete.kind === 'entity') {
+        await api.deleteEntity(confirmDelete.id);
+        if (selection?.kind === 'entity' && selection.id === confirmDelete.id) {
+          setSelection(null);
+        }
+        await loadWorkspace();
+        notify(`Projeto "${confirmDelete.title}" removido do Workspace.`);
+      } else {
+        await api.saveGroup({ name: confirmDelete.name, remove: true });
+        await loadWorkspace();
+        notify(`Englobador "${confirmDelete.name}" removido.`);
+      }
+      setConfirmDelete(null);
+    } catch (e) {
+      notify((e as Error).message, true);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -452,6 +485,16 @@ export function App() {
                     >
                       <Plus size={12} color="var(--muted)" />
                     </button>
+                    {sec.name && (
+                      <button
+                        className="btn btn-sm btn-icon"
+                        style={{ padding: 2, border: 0, background: 'transparent' }}
+                        title={`Apagar englobador "${sec.name}"`}
+                        onClick={() => setConfirmDelete({ kind: 'group', name: sec.name, count: sec.items.length })}
+                      >
+                        <Trash2 size={12} color="var(--muted)" />
+                      </button>
+                    )}
                   </div>
 
                   {!isCol && (
@@ -563,6 +606,19 @@ export function App() {
                     title="Abrir nova conversa neste projeto"
                   >
                     <Plus size={13} /> Nova conversa
+                  </button>
+                  <button
+                    className="btn btn-sm btn-icon btn-danger"
+                    onClick={() => setConfirmDelete({
+                      kind: 'entity',
+                      id: selectedEntity.id,
+                      title: selectedEntity.title,
+                      cwd: activeBinding?.cwd,
+                    })}
+                    aria-label="Apagar projeto"
+                    title="Apagar projeto do AI Workspace"
+                  >
+                    <Trash2 size={13} />
                   </button>
                 </div>
 
@@ -748,6 +804,47 @@ export function App() {
       />
 
       <CommandPalette open={paletteOpen} actions={paletteActions} onClose={() => setPaletteOpen(false)} />
+
+      {/* Modal de confirmação de exclusão (Projeto ou Englobador) */}
+      {confirmDelete && (
+        <div className="modal-bg" onClick={() => !deleting && setConfirmDelete(null)}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f6b3b3' }}>
+              <Trash2 size={17} />
+              {confirmDelete.kind === 'entity' ? 'Apagar projeto?' : 'Apagar englobador (Workspace)?'}
+            </h3>
+            {confirmDelete.kind === 'entity' ? (
+              <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5, color: '#d5dbe7' }}>
+                Tem certeza que deseja remover o projeto <b>{confirmDelete.title}</b> do AI Workspace?
+                <br />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  Os cards e notas serão movidos para backup interno (<code>.ai-workspace/backups/deleted/</code>).
+                  {confirmDelete.cwd ? <> A pasta de código (<code className="mono">{confirmDelete.cwd}</code>) <b>não</b> será apagada.</> : null}
+                </span>
+              </p>
+            ) : (
+              <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5, color: '#d5dbe7' }}>
+                Tem certeza que deseja apagar o englobador <b>{confirmDelete.name}</b>?
+                <br />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  {confirmDelete.count > 0
+                    ? `Os ${confirmDelete.count} projeto(s) dentro dele não serão apagados — passarão para "Geral (sem grupo)".`
+                    : 'Este englobador está vazio e será removido da lista.'}
+                </span>
+              </p>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button className="btn" disabled={deleting} onClick={() => setConfirmDelete(null)}>
+                Cancelar
+              </button>
+              <button className="btn btn-danger" disabled={deleting} onClick={executeConfirmDelete}>
+                <Trash2 size={13} /> {deleting ? 'Apagando…' : 'Confirmar exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div className={`toast ${toast.err ? 'err' : ''}`}>{toast.msg}</div>}
     </div>
   );

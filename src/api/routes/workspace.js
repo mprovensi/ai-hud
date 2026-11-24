@@ -38,6 +38,11 @@ module.exports = ({ dataDir, config, workspace, workspaceSync, send, json, text 
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 
+    { method: 'POST', path: '/api/workspace/entity/delete', json: true, maxBytes: 4096, handler: ({ res, body }) => {
+      const r = workspace.deleteEntity(body);
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
     { method: 'POST', path: '/api/workspace/group', json: true, maxBytes: 16 * 1024, handler: ({ res, body }) => {
       const r = workspace.saveGroup(body);
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);

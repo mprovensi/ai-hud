@@ -157,6 +157,20 @@ test('Fase 5 end-to-end: /api/voice/status e /api/fs/exec com contenção de pas
     assert.ok(idx.json.groups.includes('TRT'));
     assert.ok(idx.json.groups.includes('Jogos'));
     assert.equal(idx.json.entities[0].group, 'Jogos');
+
+    // Apagar englobador mantém projeto em "sem grupo"
+    const rmGrp = await reqJson(port, 'POST', '/api/workspace/group', token, { name: 'Jogos', remove: true });
+    assert.equal(rmGrp.status, 200);
+    assert.ok(!rmGrp.json.groups.includes('Jogos'));
+    const idx2 = await reqJson(port, 'GET', '/api/workspace/index', token);
+    assert.equal(idx2.json.entities.length, 1);
+    assert.equal(idx2.json.entities[0].group, undefined);
+
+    // Apagar projeto remove do índice e move pasta para backups/deleted
+    const rmEnt = await reqJson(port, 'POST', '/api/workspace/entity/delete', token, { id: ent.json.entity.id });
+    assert.equal(rmEnt.status, 200);
+    const idx3 = await reqJson(port, 'GET', '/api/workspace/index', token);
+    assert.equal(idx3.json.entities.length, 0);
   } finally {
     app.server.close();
   }

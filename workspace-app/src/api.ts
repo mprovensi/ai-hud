@@ -165,6 +165,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  deleteEntity: (id: string) =>
+    apiFetch<{ ok: boolean; id: string }>('/api/workspace/entity/delete', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    }),
+
   saveGroup: (body: { name: string; renameFrom?: string; remove?: boolean }) =>
     apiFetch<{ ok: boolean; groups: string[] }>('/api/workspace/group', {
       method: 'POST',

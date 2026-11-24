@@ -288,7 +288,36 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return { status: 200, body: { ok: true, groups } };
   }
 
-  return { createEntity, updateEntity, saveGroup, saveEntityFile, saveGlobalDoc, uploadEntityMedia };
+  function deleteEntity({ id } = {}) {
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return { status: 400, body: 'Informe o id do projeto para apagar.' };
+    const wsRoot = root();
+    const index = readWorkspaceJson(wsRoot);
+    const entity = index.entities.find((e) => e.id === cleanId);
+    if (!entity) return { status: 404, body: 'Projeto não encontrado.' };
+
+    const entities = index.entities.filter((e) => e.id !== cleanId);
+    const nextIndex = { ...index, entities };
+    try {
+      saveIndex(nextIndex);
+    } catch (e) {
+      return { status: e.status || 400, body: e.message };
+    }
+
+    // Move apenas a pasta interna do card/notas (entities/...) para backups/deleted;
+    // NUNCA apaga a pasta de código vinculada em projectBindings[].cwd.
+    const entityRoot = resolveEntityRoot(wsRoot, entity);
+    if (entityRoot && fs.existsSync(entityRoot)) {
+      const trashDir = backupsDir('deleted');
+      fs.mkdirSync(trashDir, { recursive: true });
+      const stamp = new Date(now()).toISOString().replace(/[:.]/g, '-');
+      const dest = path.join(trashDir, `${stamp}_${cleanId}`);
+      try { fs.renameSync(entityRoot, dest); } catch {}
+    }
+    return { status: 200, body: { ok: true, id: cleanId } };
+  }
+
+  return { createEntity, updateEntity, deleteEntity, saveGroup, saveEntityFile, saveGlobalDoc, uploadEntityMedia };
 }
 
 module.exports = { createWorkspaceActions };

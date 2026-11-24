@@ -17,6 +17,7 @@ const routes = [
   require('./upload'),
   require('./skills'),
   require('./fs'),
+  require('./run'),
   require('./handoff'),
   require('./workspace'),
   require('./memory'),

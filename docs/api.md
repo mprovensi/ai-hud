@@ -73,6 +73,9 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `GET /api/pty/status` | `{ ok, available, backend, active }` (status do PTY nativo — `win32-conpty` no Windows ou `unix-pty` no Linux/macOS) |
 | `WS /ws/pty` | WebSocket RFC 6455 nativo (`?cwd=&machine=&mode=resume\|cli\|shell&tool=&sessionId=&cols=&rows=&key=`) para terminal `xterm.js` interativo real (com proxy multi-máquina) |
 | `POST /api/fs/pick-folder` | `{ machine?, initialDir? }` → `{ ok, path, canceled }` (abre o seletor nativo de pastas do sistema operacional na máquina escolhida) |
+| `GET / PUT /api/run/config` | Lê (com auto-detecção 0-token de Godot, Front+Back, Node, Python, Docker, Rust, Go) ou salva `<cwd>/.ai-workspace/run.json` (proxy multi-máquina) |
+| `GET /api/run/status` | `{ ok, running, profileId, profileName, kind, processes: [{ id, name, pid, status, exitCode, detectedUrls[], logs[] }] }` |
+| `POST /api/run/start`, `POST /api/run/stop` | Inicia ou encerra a árvore de processos de um perfil do projeto (`{ cwd, machine?, profileId? / processId? }`, com suporte a GUI e compostos) |
 
 ## AI Workspace & Memória Compartilhada (`/api/workspace/*`, `/api/memory/*`)
 

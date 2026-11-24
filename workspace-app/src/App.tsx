@@ -36,6 +36,7 @@ import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
 import { ProjectDocsPane } from './components/ProjectDocsPane';
 import { ProjectIcon } from './components/ProjectIcon';
+import { ProjectRunControl } from './components/ProjectRunControl';
 import { QuotaDrawer, type QuotaProvider } from './components/QuotaDrawer';
 import { TerminalPane } from './components/TerminalPane';
 import { WorkspaceHome } from './components/WorkspaceHome';
@@ -982,6 +983,13 @@ export function App() {
                   </div>
                   {activeBinding && (
                     <span className="badge mono">{activeBinding.machine}: {activeBinding.cwd}</span>
+                  )}
+                  {activeBinding && (
+                    <ProjectRunControl
+                      cwd={activeBinding.cwd}
+                      machine={activeBinding.machine}
+                      onNotify={notify}
+                    />
                   )}
                   <button
                     className="btn btn-sm btn-primary"

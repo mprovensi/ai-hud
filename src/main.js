@@ -34,6 +34,7 @@ const { createTerminal } = require('./actions/terminal');
 const { createPtyManager } = require('./actions/pty');
 const { createFolderPicker } = require('./actions/folder-picker');
 const { commitProjectGit } = require('./actions/project-git-commit');
+const { createProjectRunner } = require('./actions/project-runner');
 const { attachWsPty } = require('./api/ws-pty');
 const { createRunning } = require('./actions/running');
 const { compareSessions } = require('./core/session');
@@ -181,18 +182,19 @@ function createApp({
   const terminal = createTerminal({ config });
   const ptyManager = createPtyManager({ dataDir, config, claudeExe, codexExe, agyExe, log });
   const pickFolder = createFolderPicker({ exec });
+  const projectRunner = createProjectRunner({ config, log });
 
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, push, voice, terminal, ptyManager, pickFolder, filePreview, fileList, projectGit, projectGitCommit,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, push, voice, terminal, ptyManager, pickFolder, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
   const webauthn = createWebAuthn({ dataDir, config });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, webauthn, log }));
   attachWsPty({ server, dataDir, config, webauthn, ptyManager, peers, collector, machineName, log });
-  server.on('close', () => ptyManager.closeAll());
+  server.on('close', () => { ptyManager.closeAll(); projectRunner.stopAll(); });
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)
   server.keepAliveTimeout = 65e3;

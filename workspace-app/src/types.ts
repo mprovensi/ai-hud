@@ -310,6 +310,54 @@ export interface FsEntry {
   size: number;
 }
 
+export interface RunProcessSpec {
+  id: string;
+  name: string;
+  cmd: string;
+  cwd?: string;
+  gui?: boolean;
+  openUrl?: string;
+}
+
+export interface RunProfile {
+  id: string;
+  name: string;
+  kind: 'web' | 'gui' | 'compound' | 'service' | 'script';
+  processes: RunProcessSpec[];
+}
+
+export interface ProjectRunConfig {
+  format: string;
+  version: number;
+  defaultProfile: string;
+  profiles: RunProfile[];
+}
+
+export interface RunProcessState {
+  id: string;
+  name: string;
+  cmd: string;
+  cwd?: string;
+  gui?: boolean;
+  pid: number;
+  status: 'running' | 'stopped' | 'exited';
+  exitCode: number | null;
+  startedAt: number;
+  endedAt: number;
+  detectedUrls: string[];
+  logs: { ts: number; stream: 'out' | 'err' | 'sys'; text: string }[];
+}
+
+export interface ProjectRunStatus {
+  ok: boolean;
+  running: boolean;
+  profileId: string;
+  profileName: string;
+  kind: string;
+  startedAt: number;
+  processes: RunProcessState[];
+}
+
 export interface GitInfo {
   ok: boolean;
   isRepo: boolean;

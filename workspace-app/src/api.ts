@@ -432,4 +432,35 @@ export const api = {
 
   getWorkflowUsage: () =>
     apiFetch<UsageAggregate>('/api/workspace/usage'),
+
+  getRunConfig: (cwd: string, machine = '') =>
+    apiFetch<{
+      ok: boolean;
+      source: 'saved' | 'auto';
+      config: import('./types').ProjectRunConfig;
+      detected: import('./types').ProjectRunConfig;
+    }>(`/api/run/config?cwd=${encodeURIComponent(cwd)}${machine ? `&machine=${encodeURIComponent(machine)}` : ''}`),
+
+  saveRunConfig: (body: { cwd: string; machine?: string; config: import('./types').ProjectRunConfig }) =>
+    apiFetch<{ ok: boolean; config: import('./types').ProjectRunConfig }>('/api/run/config', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  getRunStatus: (cwd: string, machine = '') =>
+    apiFetch<import('./types').ProjectRunStatus>(
+      `/api/run/status?cwd=${encodeURIComponent(cwd)}${machine ? `&machine=${encodeURIComponent(machine)}` : ''}`,
+    ),
+
+  startRun: (body: { cwd: string; machine?: string; profileId?: string }) =>
+    apiFetch<import('./types').ProjectRunStatus>('/api/run/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  stopRun: (body: { cwd: string; machine?: string; processId?: string }) =>
+    apiFetch<import('./types').ProjectRunStatus>('/api/run/stop', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

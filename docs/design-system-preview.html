@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI HUD &amp; AI Workspace — Design System (Obsidian Slate)</title>
+<style>
+  :root {
+    --ds-bg: #0e0f12; --ds-inset: #101216; --ds-panel: #15171c; --ds-card: #1b1e25; --ds-card-hover: #21252f;
+    --ds-border: #292d38; --ds-border-hi: #3a4152;
+    --ds-text: #eceef2; --ds-text-soft: #cfd5e2; --ds-muted: #8f96a6;
+    --ds-accent: #5fb8a4; --ds-accent-bg: rgba(95, 184, 164, 0.14);
+    --ds-claude: #e08a66; --ds-codex: #5fb8a4; --ds-gemini: #7d9bf0; --ds-ollama: #b39ddb;
+    --ds-ok: #8ad6a3; --ds-warn: #e5c063; --ds-danger: #e87070;
+    --ds-stage-idea: #7c8ba6; --ds-stage-spec: #b692f6; --ds-stage-progress: #6ea3f7; --ds-stage-review: #e5c063; --ds-stage-done: #6fd195;
+    --ds-sans: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+    --ds-mono: 'Cascadia Code', Consolas, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ds-bg); color: var(--ds-text); font-family: var(--ds-sans); font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 22px 48px; }
+  h1 { margin: 0 0 6px; font-size: 24px; display: flex; align-items: center; gap: 10px; }
+  h2 { margin: 28px 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--ds-muted); border-bottom: 1px solid var(--ds-border); padding-bottom: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .sub { color: var(--ds-muted); margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+  .swatch { background: var(--ds-panel); border: 1px solid var(--ds-border); border-radius: 10px; overflow: hidden; }
+  .swatch-c { height: 52px; border-bottom: 1px solid var(--ds-border); }
+  .swatch-b { padding: 8px 10px; font-size: 12px; }
+  .mono { font-family: var(--ds-mono); font-size: 11.5px; color: var(--ds-muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: var(--ds-card); border: 1px solid var(--ds-border); color: var(--ds-text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: var(--ds-accent-bg); border-color: rgba(95, 184, 164, .45); color: #bdf1e4; }
+  .btn-play { background: rgba(111, 209, 149, .14); border-color: rgba(111, 209, 149, .45); color: #b4f0c8; }
+  .btn-danger { background: rgba(232, 112, 112, .12); border-color: rgba(232, 112, 112, .45); color: #f6b3b3; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--ds-card); border: 1px solid var(--ds-border); color: var(--ds-muted); }
+  .badge.ok { background: rgba(138, 214, 163, .14); border-color: rgba(138, 214, 163, .4); color: var(--ds-ok); }
+  .badge.warn { background: rgba(229, 192, 99, .14); border-color: rgba(229, 192, 99, .45); color: var(--ds-warn); }
+  .badge.danger { background: rgba(232, 112, 112, .18); border-color: rgba(232, 112, 112, .5); color: #f7b0b0; }
+  .badge.spec { background: rgba(182, 146, 246, .16); border-color: rgba(182, 146, 246, .45); color: #d3bfff; }
+  .badge.prog { background: rgba(110, 163, 247, .14); border-color: rgba(110, 163, 247, .4); color: #b4c8ff; }
+  .stages { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 10px; overflow-x: auto; }
+  .stage-card { border: 1px solid var(--ds-border); border-left-width: 3px; border-radius: 10px; padding: 10px 11px; background: var(--ds-card); }
+  .st-idea { border-left-color: var(--ds-stage-idea); background: linear-gradient(90deg, rgba(124, 139, 166, .06), transparent 45%), var(--ds-card); }
+  .st-spec { border-left-color: var(--ds-stage-spec); background: linear-gradient(90deg, rgba(182, 146, 246, .08), transparent 45%), var(--ds-card); }
+  .st-prog { border-left-color: var(--ds-stage-progress); background: linear-gradient(90deg, rgba(110, 163, 247, .09), transparent 45%), var(--ds-card); }
+  .st-rev { border-left-color: var(--ds-stage-review); background: linear-gradient(90deg, rgba(229, 192, 99, .09), transparent 45%), var(--ds-card); }
+  .st-done { border-left-color: var(--ds-stage-done); background: linear-gradient(90deg, rgba(111, 209, 149, .07), transparent 45%), var(--ds-card); opacity: .82; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="dot" style="background:var(--ds-accent);box-shadow:0 0 12px rgba(95,184,164,.55)"></span> AI HUD &amp; AI Workspace · Design System</h1>
+  <p class="sub">Identidade unificada <b>Obsidian Slate</b> — tokens formais em <code>workspace-app/src/design-system/tokens.css</code> e espelhados no AI HUD (<code>web/css/</code>).</p>
+
+  <h2>Superfícies &amp; Bordas</h2>
+  <div class="grid">
+    <div class="swatch"><div class="swatch-c" style="background:#0e0f12"></div><div class="swatch-b"><b>Canvas</b><div class="mono">--ds-bg · #0e0f12</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#101216"></div><div class="swatch-b"><b>Inset / Input</b><div class="mono">--ds-inset · #101216</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#15171c"></div><div class="swatch-b"><b>Panel</b><div class="mono">--ds-panel · #15171c</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#1b1e25"></div><div class="swatch-b"><b>Card</b><div class="mono">--ds-card · #1b1e25</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#21252f"></div><div class="swatch-b"><b>Hover</b><div class="mono">--ds-card-hover · #21252f</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#292d38"></div><div class="swatch-b"><b>Border</b><div class="mono">--ds-border · #292d38</div></div></div>
+  </div>
+
+  <h2>Provedores de IA &amp; Semântica</h2>
+  <div class="grid">
+    <div class="swatch"><div class="swatch-c" style="background:#5fb8a4"></div><div class="swatch-b"><b>Accent / Codex</b><div class="mono">#5fb8a4</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#e08a66"></div><div class="swatch-b"><b>Claude Code</b><div class="mono">#e08a66</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#7d9bf0"></div><div class="swatch-b"><b>Gemini</b><div class="mono">#7d9bf0</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#b39ddb"></div><div class="swatch-b"><b>Ollama</b><div class="mono">#b39ddb</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#8ad6a3"></div><div class="swatch-b"><b>OK / Live</b><div class="mono">#8ad6a3</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#e5c063"></div><div class="swatch-b"><b>Warn / Review</b><div class="mono">#e5c063</div></div></div>
+    <div class="swatch"><div class="swatch-c" style="background:#e87070"></div><div class="swatch-b"><b>Danger</b><div class="mono">#e87070</div></div></div>
+  </div>
+
+  <h2>Botões &amp; Badges</h2>
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn">Padrão</button>
+    <button class="btn btn-primary">Ação Primária</button>
+    <button class="btn btn-play">▶ Play</button>
+    <button class="btn btn-danger">Excluir / Stop</button>
+  </div>
+  <div class="row">
+    <span class="badge">Neutro</span>
+    <span class="badge ok">● Trabalhando</span>
+    <span class="badge warn">● Revisão</span>
+    <span class="badge danger">● Permissão</span>
+    <span class="badge spec">Spec / Plano</span>
+    <span class="badge prog">Em andamento</span>
+  </div>
+
+  <h2>Cards por Etapa (Elephant-Goldfish Board)</h2>
+  <div class="stages">
+    <div class="stage-card st-idea"><div class="mono" style="margin-bottom:4px">IDEIA</div><b>Mapear requisitos</b></div>
+    <div class="stage-card st-spec"><div class="mono" style="margin-bottom:4px">SPEC / PLANO</div><b>Spec enxuta revisada</b></div>
+    <div class="stage-card st-prog"><div class="mono" style="margin-bottom:4px">EM ANDAMENTO</div><b>Implementar feature</b></div>
+    <div class="stage-card st-rev"><div class="mono" style="margin-bottom:4px">REVISÃO</div><b>Auditoria Goldfish</b></div>
+    <div class="stage-card st-done"><div class="mono" style="margin-bottom:4px">CONCLUÍDO</div><b>Commitado ✓ a1b2c3d</b></div>
+  </div>
+</div>
+</body>
+</html>

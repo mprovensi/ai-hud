@@ -1,12 +1,12 @@
-/* AI HUD: estilos. ES5 e flexbox sem gap no JS/CSS: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) */
+/* AI HUD: estilos (Design System Obsidian Slate). ES5 e flexbox sem gap: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: #121211; color: #ecece8; overflow-x: hidden; }
+html, body { background: #0e0f12; color: #eceef2; overflow-x: hidden; }
 /* Sem a espera de ~300 ms nem zoom de duplo toque nos cartões e botões */
 html, body, button, [role="button"], .panel, .card { touch-action: manipulation; -ms-touch-action: manipulation; }
 button { -webkit-tap-highlight-color: transparent; }
 body { font: 15px/1.35 -apple-system, "Helvetica Neue", Roboto, sans-serif; padding: 12px 14px 20px; -webkit-text-size-adjust: 100%; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
-.muted { color: #8d8d87; }
+.muted { color: #8f96a6; }
 /* Estado (texto sempre com palavra ao lado): cores que nenhuma IA usa; as das IAs são .c0–.c3 */
 .lo { color: #9ad65c; } .warn { color: #ecd13a; } .hi { color: #e82e3c; }
 .dot { display: inline-block; width: .6em; height: .6em; border-radius: 50%; margin-right: .4em; vertical-align: .05em; }
@@ -27,9 +27,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Botões do topo só com ícone em todos os aparelhos (o texto fica no aria-label) */
 .top .lbl { display: none; }
 .top .btn { padding: .35em .6em; font-size: .9em; }
-.top .clock { font-size: 1.15em; margin-left: .5em; color: #8d8d87; }
+.top .clock { font-size: 1.15em; margin-left: .5em; color: #8f96a6; }
 .top .status { margin-left: auto; font-size: .78em; }
-.btn { margin-left: 8px; background: #262624; border: 1px solid #3a3a36; border-radius: 8px; padding: .3em .7em; font-size: .82em; white-space: nowrap; }
+.btn { margin-left: 8px; background: #1b1e25; border: 1px solid #292d38; border-radius: 8px; padding: .3em .7em; font-size: .82em; white-space: nowrap; }
 /* Alvos de toque físicos, inclusive no Safari 9; o texto continua ajustável. */
 button { min-width: 44px; min-height: 44px; }
 button:focus, [role="button"]:focus { outline: 2px solid #8ca5ff; outline-offset: 2px; }
@@ -41,14 +41,14 @@ button:focus, [role="button"]:focus { outline: 2px solid #8ca5ff; outline-offset
 .card:focus { outline: none; }
 .card:focus-visible .in { box-shadow: 0 0 0 2px #8ca5ff; }
 .connection-info { font-size: .8em; color: #aaa9a2; margin: 0 0 10px; word-wrap: break-word; }
-.reading-options, .update-notice { padding: 8px 10px; margin-bottom: 10px; background: #262624; border: 1px solid #3a3a36; border-radius: 10px; }
+.reading-options, .update-notice { padding: 8px 10px; margin-bottom: 10px; background: #1b1e25; border: 1px solid #292d38; border-radius: 10px; }
 .reading-options > span, .update-notice > span { display: inline-block; margin: 4px 6px 4px 0; }
 .reading-options button[aria-pressed="true"] { background: #35496b; border-color: #8ca5ff; }
 .update-notice { border-color: #8a6a2a; color: #f0cf8a; }
 body.read-large { font-size: 17px; }
 body.read-larger { font-size: 19px; }
-.panel { background: #1c1c1a; border: 1px solid #2c2c29; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
-.panel h2 { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+.panel { background: #15171c; border: 1px solid #292d38; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+.panel h2 { font-size: .7em; font-weight: 700; color: #8f96a6; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
 /* Horário ao lado do título de um painel (ex.: Última resposta · às 09:12) */
 .htime { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .quotas { display: -webkit-flex; display: flex; }

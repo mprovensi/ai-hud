@@ -1,23 +1,4 @@
-:root {
-  --bg: #0e0f12;
-  --panel: #15171c;
-  --card: #1b1e25;
-  --card-hover: #21252f;
-  --border: #292d38;
-  --border-hi: #3a4152;
-  --text: #eceef2;
-  --muted: #8f96a6;
-  --accent: #5fb8a4;
-  --accent-bg: rgba(95, 184, 164, 0.14);
-  --claude: #e08a66;
-  --codex: #5fb8a4;
-  --gemini: #7d9bf0;
-  --warn: #e5c063;
-  --danger: #e87070;
-  --ok: #8ad6a3;
-  --mono: 'Cascadia Code', Consolas, Menlo, monospace;
-  --sans: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
-}
+@import './design-system/tokens.css';
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }

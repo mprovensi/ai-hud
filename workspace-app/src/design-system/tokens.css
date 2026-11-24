@@ -1,0 +1,93 @@
+/* AI HUD & AI Workspace Design System — "Obsidian Slate" v1
+ * Fonte única de verdade para superfícies, bordas, tipografia, provedores de IA,
+ * estados semânticos, etapas do Board (EGM), raios, sombras e z-index.
+ */
+:root {
+  /* Superfícies */
+  --ds-bg: #0e0f12;
+  --ds-inset: #101216;
+  --ds-panel: #15171c;
+  --ds-card: #1b1e25;
+  --ds-card-hover: #21252f;
+
+  /* Bordas */
+  --ds-border: #292d38;
+  --ds-border-hi: #3a4152;
+
+  /* Texto */
+  --ds-text: #eceef2;
+  --ds-text-soft: #cfd5e2;
+  --ds-muted: #8f96a6;
+
+  /* Marca / Acento */
+  --ds-accent: #5fb8a4;
+  --ds-accent-bg: rgba(95, 184, 164, 0.14);
+  --ds-accent-border: rgba(95, 184, 164, 0.45);
+
+  /* Provedores de IA */
+  --ds-claude: #e08a66;
+  --ds-codex: #5fb8a4;
+  --ds-gemini: #7d9bf0;
+  --ds-ollama: #b39ddb;
+
+  /* Semântica */
+  --ds-ok: #8ad6a3;
+  --ds-warn: #e5c063;
+  --ds-danger: #e87070;
+
+  /* Etapas do Board (EGM Lite) */
+  --ds-stage-idea: #7c8ba6;
+  --ds-stage-spec: #b692f6;
+  --ds-stage-progress: #6ea3f7;
+  --ds-stage-review: #e5c063;
+  --ds-stage-done: #6fd195;
+
+  /* Tipografia */
+  --ds-sans: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --ds-mono: 'Cascadia Code', Consolas, Menlo, monospace;
+
+  /* Raios */
+  --ds-r-sm: 6px;
+  --ds-r-md: 8px;
+  --ds-r-lg: 12px;
+  --ds-r-xl: 14px;
+  --ds-r-pill: 999px;
+
+  /* Espaçamento */
+  --ds-sp-1: 4px;
+  --ds-sp-2: 8px;
+  --ds-sp-3: 12px;
+  --ds-sp-4: 16px;
+  --ds-sp-5: 20px;
+
+  /* Elevação / Sombras */
+  --ds-shadow-md: 0 14px 36px rgba(0, 0, 0, 0.55);
+  --ds-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.65);
+
+  /* Z-index */
+  --ds-z-dropdown: 30;
+  --ds-z-drawer: 60;
+  --ds-z-modal: 70;
+  --ds-z-lightbox: 90;
+  --ds-z-toast: 100;
+
+  /* Aliases legados (retrocompatibilidade com styles.css) */
+  --bg: var(--ds-bg);
+  --panel: var(--ds-panel);
+  --card: var(--ds-card);
+  --card-hover: var(--ds-card-hover);
+  --border: var(--ds-border);
+  --border-hi: var(--ds-border-hi);
+  --text: var(--ds-text);
+  --muted: var(--ds-muted);
+  --accent: var(--ds-accent);
+  --accent-bg: var(--ds-accent-bg);
+  --claude: var(--ds-claude);
+  --codex: var(--ds-codex);
+  --gemini: var(--ds-gemini);
+  --warn: var(--ds-warn);
+  --danger: var(--ds-danger);
+  --ok: var(--ds-ok);
+  --mono: var(--ds-mono);
+  --sans: var(--ds-sans);
+}

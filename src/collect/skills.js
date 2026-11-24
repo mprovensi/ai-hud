@@ -40,6 +40,13 @@ const BUILTIN_COMMANDS = [
     prompt: 'Atue como revisor independente Goldfish (revisão a frio): inspecione o `git diff` atual contra a spec/critérios de aceite, aponte apenas bugs concretos, regressões, riscos de segurança ou testes faltantes, corrija pendências críticas e confirme todos os testes passando.',
     source: 'workspace',
   },
+  {
+    cmd: '/design-system',
+    name: 'design-system',
+    description: 'Aplicar tokens e regras do Design System Obsidian Slate (AI HUD & AI Workspace)',
+    prompt: 'Leia `docs/design-system.md` e `workspace-app/src/design-system/tokens.css` e aplique rigorosamente os tokens de cor, tipografia, raios, primitivos de `workspace-app/src/ui/index.tsx` e regras de UX (modais sem fechamento por clique fora, ES5 sem gap em `web/`) na tarefa atual.',
+    source: 'workspace',
+  },
   { cmd: '/plan', name: 'plan', description: 'Planejar passo a passo antes de implementar', source: 'builtin' },
   { cmd: '/compact', name: 'compact', description: 'Compactar contexto da conversa', source: 'builtin' },
   { cmd: '/review', name: 'review', description: 'Revisar alterações e buscar falhas/melhorias', source: 'builtin' },

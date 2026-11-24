@@ -1,10 +1,10 @@
 /* Grade de sessões: 3 colunas, quantas linhas precisar (flex-wrap; o Safari 9 não tem CSS Grid) */
-.gtitle { font-size: .7em; font-weight: 700; color: #8d8d87; text-transform: uppercase; letter-spacing: .08em; margin: 4px 2px 6px; }
+.gtitle { font-size: .7em; font-weight: 700; color: #8f96a6; text-transform: uppercase; letter-spacing: .08em; margin: 4px 2px 6px; }
 .grid { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -5px; }
 .card { display: block; padding: 0 5px 10px; }
-.card .in { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background-color: #1c1c1a;
-  border: 1px solid #2c2c29; border-radius: 12px; padding: 10px 12px; }
-.card:active .in { background-color: #232321; }
+.card .in { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background-color: #15171c;
+  border: 1px solid #292d38; border-radius: 12px; padding: 10px 12px; }
+.card:active .in { background-color: #21252f; }
 /* Altura fixa no iPad: as linhas não encolhem (cortariam o texto) */
 .card .in > * { -webkit-flex-shrink: 0; flex-shrink: 0; }
 /* Cor da IA: degradê leve no canto superior esquerdo, sumindo antes do meio (texto sempre sobre

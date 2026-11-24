@@ -1,7 +1,7 @@
 /* Sessões */
-.sess { display: block; width: 100%; border-left: 4px solid #3a3a36; padding: 9px 0 9px 11px; }
-.sess + .sess { border-top: 1px solid #2c2c29; }
-.sess:active { background: #232321; }
+.sess { display: block; width: 100%; border-left: 4px solid #3a4152; padding: 9px 0 9px 11px; }
+.sess + .sess { border-top: 1px solid #292d38; }
+.sess:active { background: #21252f; }
 .b0 { border-left-color: #e08a66 !important; } .b1 { border-left-color: #5fb8a4 !important; } .b2 { border-left-color: #7d9bf0 !important; }
 .sess .proj { font-weight: 700; font-size: 1.08em; }
 .sess .tool { font-size: .72em; color: #8d8d87; margin-left: 6px; white-space: nowrap; }

@@ -426,8 +426,8 @@ export function ProjectDocsPane({ entityId, initialDocPath = '', onNotify, onSen
       <div className="docs-grid">
         <aside className="docs-list-pane">
           <input
-            className="sb-search"
-            style={{ width: '100%' }}
+            className="inp"
+            style={{ width: '100%', height: 34, padding: '6px 10px', fontSize: 12.5, flex: '0 0 auto' }}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filtrar planos, specs e docs…"

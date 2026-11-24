@@ -975,7 +975,7 @@ export function App() {
                   <ProjectIcon
                     cwd={activeBinding?.cwd}
                     machine={activeBinding?.machine}
-                    size={22}
+                    size={32}
                     accent
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>

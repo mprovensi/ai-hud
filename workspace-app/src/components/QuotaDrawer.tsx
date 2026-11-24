@@ -32,8 +32,8 @@ const WINDOW_LABELS: Record<string, string> = {
 };
 
 function levelColor(pct: number): string {
-  if (pct >= 80) return 'var(--ds-danger)';
-  if (pct >= 55) return 'var(--ds-warn)';
+  if (pct >= 85) return 'var(--ds-danger)';
+  if (pct >= 50) return 'var(--ds-warn)';
   return 'var(--ds-ok)';
 }
 

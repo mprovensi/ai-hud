@@ -38,7 +38,7 @@ export function ProjectIcon({ cwd, machine, size = 15, active = false, accent = 
       style={{
         width: size,
         height: size,
-        borderRadius: 4,
+        borderRadius: size >= 28 ? 7 : 4,
         objectFit: 'contain',
         flexShrink: 0,
         display: 'block',

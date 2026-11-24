@@ -21,8 +21,9 @@
     refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     fingerprint: '<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>',
-    volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>',
-    stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>'
+    volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+    volumeLoad: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>',
+    stop: '<circle cx="12" cy="12" r="9"/><rect x="9" y="9" width="6" height="6" rx="1"/>'
   };
   function icon(name) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -51,21 +52,14 @@
     var h = Math.floor(m / 60);
     return h < 24 ? h + 'h' + pad(m % 60) : Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
   }
-  // Cores de estado: nenhuma é cor de IA (COLORS). Transição suave verde → âmbar → coral, sólida (sem degradê)
+  // Cores de estado (tokens Design System: --ds-ok, --ds-warn, --ds-danger).
+  // Semáforo suave em 3 faixas sólidas: < 50% verde sálvia, 50–84% âmbar quente, >= 85% coral.
   var STATUS = { ok: '#5ea87e', warn: '#d9a441', crit: '#d95b5b' };
-  // Verde até 30%, já amarelado em 50% (âmbar cheio em 55%) e chega ao coral cheio em 80%
-  var LEVEL_STOPS = [[0, STATUS.ok], [30, STATUS.ok], [55, STATUS.warn], [80, STATUS.crit], [100, STATUS.crit]];
   function levelColor(p) {
-    var s = LEVEL_STOPS, i = 1;
-    p = Math.max(0, Math.min(100, p || 0));
-    while (i < s.length - 1 && p > s[i][0]) i++;
-    var t = Math.max(0, Math.min(1, (p - s[i - 1][0]) / (s[i][0] - s[i - 1][0])));
-    var a = parseInt(s[i - 1][1].slice(1), 16), b = parseInt(s[i][1].slice(1), 16), out = '#';
-    for (var sh = 16; sh >= 0; sh -= 8) {
-      var c = Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * t);
-      out += (c < 16 ? '0' : '') + c.toString(16);
-    }
-    return out;
+    p = Math.max(0, Math.min(100, Number(p) || 0));
+    if (p >= 85) return STATUS.crit;
+    if (p >= 50) return STATUS.warn;
+    return STATUS.ok;
   }
   // Preenchimento sólido chapado (sem degradê)
   function levelFill(p) { return levelColor(p); }

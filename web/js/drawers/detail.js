@@ -430,8 +430,10 @@
   function speakIcon(name) {
     if (typeof icon === 'function') return icon(name);
     var p = name === 'stop'
-      ? '<rect x="6" y="6" width="12" height="12" rx="2"/>'
-      : '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>';
+      ? '<circle cx="12" cy="12" r="9"/><rect x="9" y="9" width="6" height="6" rx="1"/>'
+      : name === 'volumeLoad'
+        ? '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
+        : '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>';
     return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + p + '</svg>';
   }
 
@@ -447,7 +449,7 @@
     if (msgs && msgs.length) {
       var title = d.where === 'ollama-run' && !d.lastReply ? 'Últimos comandos no terminal' : 'Conversa';
       html += '<div class="row chead"><h2 class="grow">' + title + '</h2>' +
-        (d.lastReply ? '<button type="button" class="speak-ico" id="speakLast" aria-label="Ouvir última resposta" title="Ouvir última resposta">' + speakIcon('volume') + '</button>' : '') +
+        (d.lastReply ? '<button type="button" class="speak-ico" id="speakLast" aria-pressed="false" aria-label="Ouvir última resposta" title="Ouvir última resposta">' + speakIcon('volume') + '</button>' : '') +
         (d.lastReplyAt ? '<span class="muted ctime">' + when(d.lastReplyAt) + '</span>' : '') + '</div>' +
         '<div class="convo lastreply" id="lastReply" tabindex="-1">';
       for (var i = 0; i < msgs.length; i++) {
@@ -660,16 +662,19 @@
         b.innerHTML = speakIcon('stop');
         b.title = 'Parar leitura';
         b.setAttribute('aria-label', 'Parar leitura');
+        b.setAttribute('aria-pressed', 'true');
       } else if (state === 'loading') {
         b.className = 'speak-ico loading';
-        b.innerHTML = speakIcon('volume');
+        b.innerHTML = speakIcon('volumeLoad');
         b.title = 'Carregando áudio…';
         b.setAttribute('aria-label', 'Carregando áudio');
+        b.setAttribute('aria-pressed', 'true');
       } else {
         b.className = 'speak-ico';
         b.innerHTML = speakIcon('volume');
         b.title = 'Ouvir última resposta';
         b.setAttribute('aria-label', 'Ouvir última resposta');
+        b.setAttribute('aria-pressed', 'false');
       }
     }
     if ($('speakLast')) $('speakLast').onclick = function () {

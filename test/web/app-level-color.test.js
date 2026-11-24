@@ -7,36 +7,29 @@ const app = require('../helpers/app-source');
 // levelColor e as cores que ele usa, como saem no app.js dos aparelhos
 function loadLevelColor() {
   const colors = app.match(/var COLORS = [^;]+;/)[0];
-  const level = app.match(/var STATUS = [\s\S]*?function levelColor[\s\S]*?return out;\s*\}/)[0];
+  const level = app.match(/var STATUS = [\s\S]*?function levelColor[\s\S]*?return STATUS\.ok;\s*\}/)[0];
   const context = {};
   vm.runInNewContext(colors + '\n' + level, context);
   return context;
 }
 
-const rgb = (hex) => [16, 8, 0].map((sh) => (parseInt(hex.slice(1), 16) >> sh) & 255);
-
-test('a cor da cota fica verde até 30%, chega ao âmbar em 55% e ao coral em 80%', () => {
+test('semáforo suave em 3 faixas sólidas: < 50% verde (#5ea87e), 50–84% âmbar (#d9a441), >= 85% coral (#d95b5b)', () => {
   const { levelColor, STATUS } = loadLevelColor();
-  assert.equal(levelColor(0), STATUS.ok);
-  assert.equal(levelColor(30), STATUS.ok);
-  assert.equal(levelColor(55), STATUS.warn);
-  // Em 50% o tom amarelado já prevalece (mais perto do âmbar que do verde)
-  const at50 = rgb(levelColor(50)), a = rgb(STATUS.ok), w = rgb(STATUS.warn);
-  assert.ok(at50[0] > (a[0] + w[0]) / 2, levelColor(50));
-  // Entre 55% e 80%, passa pelo laranja até chegar ao coral
-  const mid2 = rgb(levelColor(68)), c = rgb(STATUS.crit);
-  assert.ok(mid2[1] < w[1] && mid2[1] > c[1], levelColor(68));
-  assert.equal(levelColor(80), STATUS.crit);
-  assert.equal(levelColor(100), STATUS.crit);
-});
+  assert.equal(STATUS.ok, '#5ea87e');
+  assert.equal(STATUS.warn, '#d9a441');
+  assert.equal(STATUS.crit, '#d95b5b');
 
-test('a cor muda aos poucos: 1 ponto a mais de cota nunca dá um salto de cor', () => {
-  const { levelColor } = loadLevelColor();
-  for (let p = 1; p <= 100; p++) {
-    const a = rgb(levelColor(p - 1)), b = rgb(levelColor(p));
-    const jump = Math.max(...a.map((c, i) => Math.abs(c - b[i])));
-    assert.ok(jump <= 12, `${p - 1}% → ${p}%: ${levelColor(p - 1)} → ${levelColor(p)}`);
-  }
+  assert.equal(levelColor(0), '#5ea87e');
+  assert.equal(levelColor(30), '#5ea87e');
+  assert.equal(levelColor(49.9), '#5ea87e');
+
+  assert.equal(levelColor(50), '#d9a441');
+  assert.equal(levelColor(68), '#d9a441');
+  assert.equal(levelColor(84.9), '#d9a441');
+
+  assert.equal(levelColor(85), '#d95b5b');
+  assert.equal(levelColor(95), '#d95b5b');
+  assert.equal(levelColor(100), '#d95b5b');
 });
 
 test('valores fora de 0–100 ou ausentes não quebram a cor', () => {

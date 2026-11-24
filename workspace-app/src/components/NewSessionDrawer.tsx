@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Send, X } from 'lucide-react';
+import { FolderLock, Send, X } from 'lucide-react';
 import { api } from '../api';
 import { FolderPicker } from './FolderPicker';
 import type { MachineCaps, Snapshot, WorkspaceEntity } from '../types';
@@ -8,6 +8,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   defaultBinding?: { machine: string; cwd: string } | null;
+  lockedProject?: { title: string; machine: string; cwd: string } | null;
   entities: WorkspaceEntity[];
   snapshot: Snapshot | null;
   initialPrompt?: string;
@@ -26,6 +27,7 @@ export function NewSessionDrawer({
   open,
   onClose,
   defaultBinding,
+  lockedProject = null,
   entities,
   snapshot,
   initialPrompt = '',
@@ -41,6 +43,10 @@ export function NewSessionDrawer({
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const effectiveBinding = lockedProject
+    ? { machine: lockedProject.machine, cwd: lockedProject.cwd }
+    : defaultBinding;
+
   useEffect(() => {
     if (!open) return;
     setPrompt(initialPrompt || '');
@@ -49,19 +55,22 @@ export function NewSessionDrawer({
       .then((r) => {
         const list = r.machines || [];
         setCaps(list);
-        const preferred = (defaultBinding?.machine && list.find((m) => m.name === defaultBinding.machine))
+        const preferred = (effectiveBinding?.machine && list.find((m) => m.name === effectiveBinding.machine))
           || list.find((m) => m.online)
           || list[0];
         if (preferred) {
-          setMachine(preferred.name);
-          setCwd(defaultBinding?.cwd || preferred.pinned?.[0] || preferred.cwds?.[0] || '');
+          setMachine(lockedProject?.machine || preferred.name);
+          setCwd(lockedProject?.cwd || effectiveBinding?.cwd || preferred.pinned?.[0] || preferred.cwds?.[0] || '');
           const availTool = AI_META.find((a) => preferred.tools?.[a.id])?.id || 'Claude Code';
           setTool(availTool);
+        } else if (lockedProject) {
+          setMachine(lockedProject.machine);
+          setCwd(lockedProject.cwd);
         }
       })
       .catch((e) => onNotify((e as Error).message, true))
       .finally(() => setLoadingCaps(false));
-  }, [open, defaultBinding?.machine, defaultBinding?.cwd, initialPrompt, onNotify]);
+  }, [open, lockedProject?.machine, lockedProject?.cwd, effectiveBinding?.machine, effectiveBinding?.cwd, initialPrompt, onNotify]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,8 +116,14 @@ export function NewSessionDrawer({
       <aside className="side-drawer right" onClick={(e) => e.stopPropagation()} aria-label="Nova conversa com IA">
         <div className="side-drawer-head">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Nova conversa com IA</h3>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>Escolha a máquina, a pasta do projeto e o agente</div>
+            <h3 style={{ margin: 0, fontSize: 16 }}>
+              {lockedProject ? `Nova conversa · ${lockedProject.title}` : 'Nova conversa com IA'}
+            </h3>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {lockedProject
+                ? 'Projeto fixado — escolha o agente e envie a mensagem inicial'
+                : 'Escolha a máquina, a pasta do projeto e o agente'}
+            </div>
           </div>
           <button className="btn btn-sm btn-icon" onClick={onClose} title="Fechar (Esc)">
             <X size={16} />
@@ -116,22 +131,38 @@ export function NewSessionDrawer({
         </div>
 
         <div className="side-drawer-body">
-          <FolderPicker
-            caps={caps}
-            loadingCaps={loadingCaps}
-            machine={machine}
-            cwd={cwd}
-            entities={entities}
-            labelMachine="1. Máquina"
-            labelFolder="2. Pasta do projeto (CWD)"
-            onChangeMachine={(m, nextCwd) => { setMachine(m); setCwd(nextCwd); }}
-            onChangeCwd={setCwd}
-            onCapsUpdated={setCaps}
-            onNotify={onNotify}
-          />
+          {lockedProject ? (
+            <div
+              className="card-item"
+              style={{ marginBottom: 0, borderColor: 'rgba(95, 184, 164, .4)', background: 'rgba(95, 184, 164, .08)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                <FolderLock size={14} color="var(--accent)" />
+                <strong style={{ fontSize: 13.5 }}>{lockedProject.title}</strong>
+                {lockedProject.machine && <span className="badge" style={{ marginLeft: 'auto' }}>{lockedProject.machine}</span>}
+              </div>
+              <div className="mono ell" style={{ fontSize: 11.5, color: 'var(--muted)' }} title={lockedProject.cwd}>
+                {lockedProject.cwd || '(sem pasta vinculada)'}
+              </div>
+            </div>
+          ) : (
+            <FolderPicker
+              caps={caps}
+              loadingCaps={loadingCaps}
+              machine={machine}
+              cwd={cwd}
+              entities={entities}
+              labelMachine="1. Máquina"
+              labelFolder="2. Pasta do projeto (CWD)"
+              onChangeMachine={(m, nextCwd) => { setMachine(m); setCwd(nextCwd); }}
+              onChangeCwd={setCwd}
+              onCapsUpdated={setCaps}
+              onNotify={onNotify}
+            />
+          )}
 
           <div className="field" style={{ marginBottom: 0 }}>
-            <label>3. Inteligência Artificial</label>
+            <label>{lockedProject ? '1. Inteligência Artificial' : '3. Inteligência Artificial'}</label>
             <div className="ai-grid">
               {AI_META.map((ai) => {
                 const avail = !currentMachine || !!currentMachine.tools?.[ai.id];
@@ -164,7 +195,7 @@ export function NewSessionDrawer({
 
           {models.length > 0 && (
             <div className="field" style={{ marginBottom: 0 }}>
-              <label>4. Modelo</label>
+              <label>{lockedProject ? '2. Modelo' : '4. Modelo'}</label>
               <select className="sel" value={model} onChange={(e) => setModel(e.target.value)}>
                 {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
@@ -172,7 +203,7 @@ export function NewSessionDrawer({
           )}
 
           <div className="field" style={{ marginBottom: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <label>5. Mensagem inicial</label>
+            <label>{lockedProject ? (models.length ? '3. Mensagem inicial' : '2. Mensagem inicial') : '5. Mensagem inicial'}</label>
             <textarea
               className="ta"
               rows={5}

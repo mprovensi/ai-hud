@@ -77,6 +77,7 @@ export function App() {
   // Gaveta lateral direita em altura total para Nova Conversa
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatPrompt, setNewChatPrompt] = useState('');
+  const [newChatLocked, setNewChatLocked] = useState(false);
 
   // Gaveta lateral esquerda em altura total para Novo Projeto / Novo Englobador
   const [projectDrawer, setProjectDrawer] = useState<{ open: boolean; mode: ProjectDrawerMode; presetGroup: string }>({
@@ -300,7 +301,7 @@ export function App() {
 
   const paletteActions: PaletteAction[] = useMemo(() => {
     const acts: PaletteAction[] = [
-      { id: 'act-chat', group: 'Ação', label: 'Nova conversa com IA (escolher pasta e IA)', run: () => { setNewChatPrompt(''); setNewChatOpen(true); } },
+      { id: 'act-chat', group: 'Ação', label: 'Nova conversa com IA (escolher pasta e IA)', run: () => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); } },
       { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: () => openNewModal('') },
       { id: 'act-grp', group: 'Ação', label: 'Criar englobador de projetos (ex.: TRT, Jogos)', run: openNewGroup },
       { id: 'act-hud', group: 'Navegação', label: 'Abrir AI HUD Clássico (/)', run: () => { window.location.href = withToken('/'); } },
@@ -552,7 +553,7 @@ export function App() {
                   )}
                   <button
                     className="btn btn-sm btn-primary"
-                    onClick={() => { setNewChatPrompt(''); setNewChatOpen(true); }}
+                    onClick={() => { setNewChatPrompt(''); setNewChatLocked(true); setNewChatOpen(true); }}
                     title="Abrir nova conversa neste projeto"
                   >
                     <Plus size={13} /> Nova conversa
@@ -679,6 +680,7 @@ export function App() {
           onDraftConsumed={() => setDraftPrompt('')}
           onOpenNewSession={(initial) => {
             setNewChatPrompt(initial || '');
+            setNewChatLocked(false);
             setNewChatOpen(true);
           }}
           onNotify={notify}
@@ -714,6 +716,15 @@ export function App() {
         open={newChatOpen}
         onClose={() => setNewChatOpen(false)}
         defaultBinding={activeBinding}
+        lockedProject={
+          newChatLocked && selectedEntity
+            ? {
+                title: selectedEntity.title,
+                machine: activeBinding?.machine || '',
+                cwd: activeBinding?.cwd || '',
+              }
+            : null
+        }
         entities={ws?.entities || []}
         snapshot={snap}
         initialPrompt={newChatPrompt}

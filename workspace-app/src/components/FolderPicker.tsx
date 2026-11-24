@@ -23,6 +23,42 @@ export function shortFolderName(p: string): string {
   return parts.length ? parts[parts.length - 1] : p;
 }
 
+function detectClientDesktopPlatform(): 'win32' | 'darwin' | '' {
+  if (typeof navigator === 'undefined') return '';
+  const ua = navigator.userAgent || '';
+  if (/Windows/i.test(ua)) return 'win32';
+  if (/Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua)) return 'darwin';
+  return '';
+}
+
+function isLocalAppOrigin(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = (window.location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]' || host.endsWith('.localhost');
+}
+
+/**
+ * Ordena as máquinas para que a máquina onde o AI Workspace app está rodando
+ * (localhost ou desktop do cliente, ex.: MateusNote) apareça sempre como 1ª opção e padrão.
+ */
+export function orderMachines(list: MachineCaps[]): MachineCaps[] {
+  const localOrigin = isLocalAppOrigin();
+  const clientPlatform = detectClientDesktopPlatform();
+  const score = (m: MachineCaps, idx: number): number => {
+    const isHost = m.local === true || idx === 0;
+    if (!m.online) return 4;
+    if (localOrigin && isHost) return 0;
+    if (clientPlatform && m.platform === clientPlatform) return 0;
+    if (!localOrigin && (m.platform === 'win32' || m.platform === 'darwin')) return 1;
+    if (isHost) return 2;
+    return 3;
+  };
+  return list
+    .map((m, idx) => ({ m, idx, s: score(m, idx) }))
+    .sort((a, b) => (a.s - b.s) || (a.idx - b.idx))
+    .map((x) => x.m);
+}
+
 function joinPath(base: string, child: string): string {
   const sep = base.includes('\\') ? '\\' : '/';
   return `${base.replace(/[\\/]+$/, '')}${sep}${child}`;

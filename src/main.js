@@ -180,7 +180,7 @@ function createApp({
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
   const webauthn = createWebAuthn({ dataDir, config });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, webauthn, log }));
-  attachWsPty({ server, config, webauthn, ptyManager, peers, collector, machineName, log });
+  attachWsPty({ server, dataDir, config, webauthn, ptyManager, peers, collector, machineName, log });
   server.on('close', () => ptyManager.closeAll());
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)

@@ -174,8 +174,8 @@ export const api = {
       body: JSON.stringify({ id }),
     }),
 
-  saveGroup: (body: { name: string; renameFrom?: string; remove?: boolean }) =>
-    apiFetch<{ ok: boolean; groups: string[] }>('/api/workspace/group', {
+  saveGroup: (body: { name: string; renameFrom?: string; remove?: boolean; machine?: string; rootCwd?: string }) =>
+    apiFetch<{ ok: boolean; groups: string[]; groupMeta?: Record<string, { machine?: string; rootCwd?: string }> }>('/api/workspace/group', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

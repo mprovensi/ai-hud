@@ -806,6 +806,7 @@ export function App() {
         editEntity={projectDrawer.editEntity}
         editGroup={projectDrawer.editGroup}
         groups={allGroups}
+        groupMeta={ws?.groupMeta || {}}
         entities={ws?.entities || []}
         onClose={() => setProjectDrawer((prev) => ({ ...prev, open: false, editEntity: null, editGroup: null }))}
         onProjectSaved={async (entity, isEdit) => {

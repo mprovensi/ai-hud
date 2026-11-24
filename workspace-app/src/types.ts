@@ -57,11 +57,17 @@ export interface GlobalDocItem {
   size: number;
 }
 
+export interface WorkspaceGroupMeta {
+  machine?: string;
+  rootCwd?: string;
+}
+
 export interface WorkspaceIndex {
   root: string;
   format: string;
   version: number;
   groups?: string[];
+  groupMeta?: Record<string, WorkspaceGroupMeta>;
   entities: WorkspaceEntity[];
   context: GlobalDocItem[];
   knowledge: GlobalDocItem[];
@@ -170,6 +176,7 @@ export interface SessionDetail extends SessionCard {
 export interface MachineCaps {
   name: string;
   online: boolean;
+  local?: boolean;
   platform?: string;
   home?: string;
   pinned?: string[];

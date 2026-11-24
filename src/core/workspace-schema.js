@@ -112,7 +112,7 @@ function validateCard(value, { draft = false } = {}) {
 }
 
 function validateWorkspaceIndex(value) {
-  assertKeys(value, ['format', 'version', 'groups', 'entities'], 'workspace.json');
+  assertKeys(value, ['format', 'version', 'groups', 'groupMeta', 'entities'], 'workspace.json');
   if (value.format !== WORKSPACE_FORMAT || value.version !== WORKSPACE_VERSION) {
     throw fail(`Formato de workspace.json incompatível (esperado ${WORKSPACE_FORMAT} v${WORKSPACE_VERSION}).`);
   }
@@ -121,6 +121,15 @@ function validateWorkspaceIndex(value) {
       throw fail('workspace.json precisa de um array "groups" válido.');
     }
     for (const g of value.groups) assertText(g, 'Nome do workspace/grupo', 80, true);
+  }
+  if (value.groupMeta !== undefined) {
+    if (!isPlainObj(value.groupMeta)) throw fail('workspace.json precisa de um objeto "groupMeta" válido.');
+    for (const [gName, meta] of Object.entries(value.groupMeta)) {
+      assertText(gName, 'Nome do workspace em groupMeta', 80, true);
+      assertKeys(meta, ['machine', 'rootCwd'], `groupMeta["${gName}"]`);
+      assertText(meta.machine, 'groupMeta.machine', 80);
+      assertText(meta.rootCwd, 'groupMeta.rootCwd', 500);
+    }
   }
   if (!Array.isArray(value.entities) || value.entities.length > 500) {
     throw fail('workspace.json precisa de um array "entities" válido.');

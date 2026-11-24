@@ -6,6 +6,8 @@ const os = require('os');
 const { acceptKey, encodeFrame, decodeFrames } = require('../core/websocket');
 const { isCwdAllowed } = require('../core/path-guard');
 const { recentCwds } = require('../collect/capabilities');
+const { resolveWorkspaceRoot } = require('../infra/workspace-paths');
+const { readWorkspaceJson } = require('../collect/workspace');
 const { authorized } = require('./utils');
 const { allowed } = require('./auth');
 
@@ -16,7 +18,7 @@ function rejectUpgrade(socket, status, msg) {
   socket.destroy();
 }
 
-function attachWsPty({ server, config, webauthn, ptyManager, peers, collector, machineName, log = () => {} }) {
+function attachWsPty({ server, dataDir, config, webauthn, ptyManager, peers, collector, machineName, log = () => {} }) {
   function isAuthed(req, url) {
     const bioDev = webauthn ? webauthn.deviceFromRequest(req) : { isBioDevice: false };
     return bioDev.isBioDevice
@@ -26,8 +28,18 @@ function attachWsPty({ server, config, webauthn, ptyManager, peers, collector, m
 
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
+    const wsRoots = [];
+    if (dataDir) {
+      try {
+        const ws = readWorkspaceJson(resolveWorkspaceRoot(dataDir, config));
+        for (const m of Object.values(ws.groupMeta || {})) if (m && m.rootCwd) wsRoots.push(m.rootCwd);
+        for (const e of (ws.entities || [])) {
+          for (const b of (e.projectBindings || [])) if (b && b.cwd) wsRoots.push(b.cwd);
+        }
+      } catch {}
+    }
     return isCwdAllowed(cwd, {
-      allowedRoots: (config && config.allowedRoots) || [],
+      allowedRoots: [...((config && config.allowedRoots) || []), ...wsRoots],
       knownCwds,
       home: os.homedir(),
       strict: true,

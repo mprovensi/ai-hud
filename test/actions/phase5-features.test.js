@@ -171,6 +171,53 @@ test('Fase 5 end-to-end: /api/voice/status e /api/fs/exec com contenção de pas
     assert.equal(rmEnt.status, 200);
     const idx3 = await reqJson(port, 'GET', '/api/workspace/index', token);
     assert.equal(idx3.json.entities.length, 0);
+
+    // Workspace com pasta raiz opcional (rootCwd) restringe projetos às subpastas e autoriza /api/fs/list
+    const wsRoot = tmpDir('hud-p5-wsroot-');
+    const wsSub = path.join(wsRoot, 'sub-jogo');
+    fs.mkdirSync(wsSub, { recursive: true });
+
+    const gRoot = await reqJson(port, 'POST', '/api/workspace/group', token, {
+      name: 'Studio',
+      machine: 'TestP5',
+      rootCwd: wsRoot,
+    });
+    assert.equal(gRoot.status, 200);
+    assert.equal(gRoot.json.groupMeta.Studio.rootCwd, wsRoot);
+
+    const lsRoot = await reqJson(port, 'GET', `/api/fs/list?cwd=${encodeURIComponent(wsRoot)}`, token);
+    assert.equal(lsRoot.status, 200);
+    assert.ok(lsRoot.json.entries.some((e) => e.name === 'sub-jogo' && e.type === 'dir'));
+
+    // Rejeita projeto na própria pasta raiz ou fora dela
+    const badSame = await reqJson(port, 'POST', '/api/workspace/entity', token, {
+      title: 'Igual Raiz',
+      group: 'Studio',
+      projectBindings: [{ machine: 'TestP5', cwd: wsRoot }],
+    });
+    assert.equal(badSame.status, 400);
+
+    const badOut = await reqJson(port, 'POST', '/api/workspace/entity', token, {
+      title: 'Fora Raiz',
+      group: 'Studio',
+      projectBindings: [{ machine: 'TestP5', cwd: projNo }],
+    });
+    assert.equal(badOut.status, 400);
+
+    // Aceita subpasta válida dentro da pasta raiz do workspace
+    const okSub = await reqJson(port, 'POST', '/api/workspace/entity', token, {
+      title: 'Sub Jogo',
+      group: 'Studio',
+      projectBindings: [{ machine: 'TestP5', cwd: wsSub }],
+    });
+    assert.equal(okSub.status, 200);
+    assert.equal(okSub.json.entity.projectBindings[0].cwd, wsSub);
+
+    // /api/capabilities marca a máquina local que serve o app com local: true
+    const caps = await reqJson(port, 'GET', '/api/capabilities', token);
+    assert.equal(caps.status, 200);
+    assert.equal(caps.json.machines[0].name, 'TestP5');
+    assert.equal(caps.json.machines[0].local, true);
   } finally {
     app.server.close();
   }

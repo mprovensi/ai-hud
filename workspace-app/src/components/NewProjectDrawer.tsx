@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { FolderKanban, Layers, Plus, Save, X } from 'lucide-react';
+import { ChevronRight, Folder, FolderKanban, FolderLock, FolderOpen, Layers, Plus, Save, X } from 'lucide-react';
 import { api } from '../api';
-import { FolderPicker, shortFolderName } from './FolderPicker';
-import type { MachineCaps, WorkspaceEntity } from '../types';
+import { FolderPicker, orderMachines, shortFolderName } from './FolderPicker';
+import type { FsEntry, MachineCaps, WorkspaceEntity, WorkspaceGroupMeta } from '../types';
 
 export type ProjectDrawerMode = 'project' | 'group';
 
@@ -13,11 +13,18 @@ interface Props {
   editEntity?: WorkspaceEntity | null;
   editGroup?: string | null;
   groups: string[];
+  groupMeta: Record<string, WorkspaceGroupMeta>;
   entities: WorkspaceEntity[];
   onClose: () => void;
   onProjectSaved: (entity: WorkspaceEntity, isEdit: boolean) => void;
   onGroupSaved: (groupName: string, renamedFrom?: string) => void;
   onNotify: (msg: string, err?: boolean) => void;
+}
+
+function joinSubPath(base: string, rel: string): string {
+  const sep = base.includes('\\') ? '\\' : '/';
+  const cleanRel = rel.replace(/[\\/]+/g, sep).replace(new RegExp(`^\\${sep}+`), '');
+  return `${base.replace(/[\\/]+$/, '')}${sep}${cleanRel}`;
 }
 
 export function NewProjectDrawer({
@@ -27,6 +34,7 @@ export function NewProjectDrawer({
   editEntity = null,
   editGroup = null,
   groups,
+  groupMeta,
   entities,
   onClose,
   onProjectSaved,
@@ -38,23 +46,39 @@ export function NewProjectDrawer({
   const [mode, setMode] = useState<ProjectDrawerMode>(initialMode);
   const [caps, setCaps] = useState<MachineCaps[]>([]);
   const [loadingCaps, setLoadingCaps] = useState(false);
+
+  // Estado de projeto
   const [machine, setMachine] = useState('');
   const [cwd, setCwd] = useState('');
-
-  // Campos de projeto
   const [title, setTitle] = useState('');
   const [titleTouched, setTitleTouched] = useState(false);
   const [desc, setDesc] = useState('');
   const [group, setGroup] = useState(presetGroup);
   const [template, setTemplate] = useState('board');
 
-  // Campos de workspace
+  // Navegação restrita de subpastas quando o workspace escolhido possui rootCwd
+  const [subRel, setSubRel] = useState('');
+  const [subDirs, setSubDirs] = useState<FsEntry[]>([]);
+  const [subLoading, setSubLoading] = useState(false);
+  const [subQuery, setSubQuery] = useState('');
+
+  // Estado de workspace (com pasta raiz opcional)
   const [newGroupName, setNewGroupName] = useState('');
+  const [groupNameTouched, setGroupNameTouched] = useState(false);
+  const [wsMachine, setWsMachine] = useState('');
+  const [wsRootCwd, setWsRootCwd] = useState('');
+
   const [submitting, setSubmitting] = useState(false);
+
+  const activeGroupMeta = group.trim() ? groupMeta[group.trim()] : undefined;
+  const restrictedRoot = activeGroupMeta?.rootCwd ? activeGroupMeta.rootCwd.trim() : '';
+  const restrictedMachine = activeGroupMeta?.machine || machine;
 
   useEffect(() => {
     if (!open) return;
     setMode(editEntity ? 'project' : editGroup ? 'group' : initialMode);
+    setSubRel('');
+    setSubQuery('');
     if (editEntity) {
       setTitle(editEntity.title || '');
       setTitleTouched(true);
@@ -68,20 +92,39 @@ export function NewProjectDrawer({
       setDesc('');
       setTemplate('board');
     }
-    setNewGroupName(editGroup || '');
+
+    if (editGroup) {
+      const gm = groupMeta[editGroup];
+      setNewGroupName(editGroup);
+      setGroupNameTouched(true);
+      setWsMachine(gm?.machine || '');
+      setWsRootCwd(gm?.rootCwd || '');
+    } else {
+      setNewGroupName('');
+      setGroupNameTouched(false);
+      setWsMachine('');
+      setWsRootCwd('');
+    }
 
     setLoadingCaps(true);
     api.getCapabilities()
       .then((r) => {
-        const list = r.machines || [];
+        const list = orderMachines(r.machines || []);
         setCaps(list);
+        const first = list.find((m) => m.online) || list[0];
+        const gmEdit = editGroup ? groupMeta[editGroup] : undefined;
+        if (first && !gmEdit?.machine) setWsMachine(first.name);
+
         const existingBinding = editEntity?.projectBindings?.[0];
         if (existingBinding) {
-          setMachine(existingBinding.machine || list[0]?.name || '');
+          setMachine(existingBinding.machine || first?.name || '');
           setCwd(existingBinding.cwd || '');
         } else {
-          const first = list.find((m) => m.online) || list[0];
-          if (first) {
+          const gmPreset = presetGroup ? groupMeta[presetGroup] : undefined;
+          if (gmPreset?.rootCwd) {
+            setMachine(gmPreset.machine || first?.name || '');
+            setCwd('');
+          } else if (first) {
             setMachine(first.name);
             setCwd(editEntity ? '' : (first.pinned?.[0] || first.cwds?.[0] || ''));
           }
@@ -89,7 +132,39 @@ export function NewProjectDrawer({
       })
       .catch(() => {})
       .finally(() => setLoadingCaps(false));
-  }, [open, initialMode, presetGroup, editEntity, editGroup]);
+  }, [open, initialMode, presetGroup, editEntity, editGroup, groupMeta]);
+
+  // Carrega subpastas sempre que um workspace com rootCwd estiver selecionado no modo projeto
+  useEffect(() => {
+    if (!open || mode !== 'project' || !restrictedRoot) {
+      setSubDirs([]);
+      return;
+    }
+    if (activeGroupMeta?.machine && activeGroupMeta.machine !== machine) {
+      setMachine(activeGroupMeta.machine);
+    }
+    // Se o cwd atual não estiver dentro de restrictedRoot, limpa para obrigar escolha de subpasta válida
+    const normRoot = restrictedRoot.replace(/[\\/]+$/, '').toLowerCase();
+    const normCwd = cwd.replace(/[\\/]+$/, '').toLowerCase();
+    if (normCwd && (!normCwd.startsWith(normRoot + '\\') && !normCwd.startsWith(normRoot + '/'))) {
+      setCwd('');
+    }
+
+    let alive = true;
+    setSubLoading(true);
+    api.listFiles(restrictedRoot, subRel, activeGroupMeta?.machine || machine)
+      .then((r) => {
+        if (!alive) return;
+        setSubDirs((r.entries || []).filter((e) => e.type === 'dir'));
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setSubDirs([]);
+        onNotify((e as Error).message, true);
+      })
+      .finally(() => { if (alive) setSubLoading(false); });
+    return () => { alive = false; };
+  }, [open, mode, restrictedRoot, subRel, activeGroupMeta?.machine, machine]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,13 +180,24 @@ export function NewProjectDrawer({
     }
   }
 
+  function handleSelectWsRoot(next: string) {
+    setWsRootCwd(next);
+    if (!groupNameTouched && next.trim()) {
+      setNewGroupName(shortFolderName(next));
+    }
+  }
+
   async function submitProject() {
     const cleanTitle = title.trim();
     if (!cleanTitle) return onNotify('Informe o nome do projeto.', true);
+    if (restrictedRoot && !cwd.trim()) {
+      return onNotify(`Selecione uma subpasta dentro de "${restrictedRoot}".`, true);
+    }
     if (submitting) return;
     setSubmitting(true);
     try {
-      const bindings = machine && cwd.trim() ? [{ machine, cwd: cwd.trim() }] : [];
+      const targetMachine = restrictedRoot ? (activeGroupMeta?.machine || machine) : machine;
+      const bindings = targetMachine && cwd.trim() ? [{ machine: targetMachine, cwd: cwd.trim() }] : [];
       if (editEntity) {
         const r = await api.updateEntity({
           id: editEntity.id,
@@ -145,7 +231,12 @@ export function NewProjectDrawer({
     if (submitting) return;
     setSubmitting(true);
     try {
-      await api.saveGroup(editGroup ? { renameFrom: editGroup, name: clean } : { name: clean });
+      await api.saveGroup({
+        ...(editGroup ? { renameFrom: editGroup } : {}),
+        name: clean,
+        machine: wsRootCwd.trim() ? wsMachine : '',
+        rootCwd: wsRootCwd.trim(),
+      });
       onGroupSaved(clean, editGroup || undefined);
       onClose();
     } catch (e) {
@@ -156,6 +247,10 @@ export function NewProjectDrawer({
   }
 
   if (!open) return null;
+
+  const visibleSubDirs = subQuery.trim()
+    ? subDirs.filter((d) => d.name.toLowerCase().includes(subQuery.trim().toLowerCase()))
+    : subDirs;
 
   return (
     <div className="side-drawer-bg" onClick={onClose}>
@@ -173,8 +268,8 @@ export function NewProjectDrawer({
             </h3>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
               {mode === 'project'
-                ? 'Configure a pasta do código, o workspace e os detalhes do projeto'
-                : 'Agrupe projetos relacionados (ex.: TRT, Jogos, Pessoal)'}
+                ? 'Configure o workspace, a pasta do código e os detalhes do projeto'
+                : 'Agrupe projetos relacionados e, opcionalmente, defina uma pasta raiz'}
             </div>
           </div>
           <button className="btn btn-sm btn-icon" onClick={onClose} title="Fechar (Esc)">
@@ -208,29 +303,15 @@ export function NewProjectDrawer({
         {mode === 'project' ? (
           <>
             <div className="side-drawer-body">
-              <FolderPicker
-                caps={caps}
-                loadingCaps={loadingCaps}
-                machine={machine}
-                cwd={cwd}
-                entities={entities}
-                labelMachine="1. Máquina do código"
-                labelFolder="2. Pasta do projeto (opcional)"
-                allowEmpty
-                onChangeMachine={(m, nextCwd) => { setMachine(m); handleSelectCwd(nextCwd); }}
-                onChangeCwd={handleSelectCwd}
-                onCapsUpdated={setCaps}
-                onNotify={onNotify}
-              />
-
+              {/* 1. Workspace primeiro (para saber se restringe às subpastas) */}
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>3. Workspace (ex.: TRT, Jogos)</label>
+                <label>1. Workspace (ex.: TRT, Jogos)</label>
                 <input
                   className="inp"
                   list="wsDrawerGroupList"
                   value={group}
-                  onChange={(e) => setGroup(e.target.value)}
-                  placeholder="Escolha ou digite um novo workspace…"
+                  onChange={(e) => { setGroup(e.target.value); setSubRel(''); }}
+                  placeholder="Escolha ou digite um workspace (opcional)…"
                 />
                 <datalist id="wsDrawerGroupList">
                   {groups.map((g) => <option key={g} value={g} />)}
@@ -242,17 +323,109 @@ export function NewProjectDrawer({
                         key={g}
                         type="button"
                         className={`btn btn-sm ${group === g ? 'btn-primary' : ''}`}
-                        onClick={() => setGroup(group === g ? '' : g)}
+                        onClick={() => { setGroup(group === g ? '' : g); setSubRel(''); }}
                       >
-                        📁 {g}
+                        {groupMeta[g]?.rootCwd ? '🔒 ' : '📁 '}{g}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
+              {/* 2. Pasta do projeto: restrita às subpastas se o workspace tiver rootCwd; livre caso contrário */}
+              {restrictedRoot ? (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <label style={{ margin: 0 }}>2. Subpasta do projeto (obrigatória)</label>
+                    {subRel && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => setSubRel(subRel.split('/').slice(0, -1).join('/'))}
+                      >
+                        ↑ Subir
+                      </button>
+                    )}
+                  </div>
+                  <div
+                    className="card-item"
+                    style={{ marginBottom: 6, padding: '7px 10px', borderColor: 'rgba(95, 184, 164, .35)', background: 'rgba(95, 184, 164, .07)' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+                      <FolderLock size={13} color="var(--accent)" />
+                      <span className="mono ell" style={{ flex: 1 }}>
+                        {restrictedRoot}{subRel ? `/${subRel}` : ''}
+                      </span>
+                      {restrictedMachine && <span className="badge" style={{ fontSize: 10 }}>{restrictedMachine}</span>}
+                    </div>
+                  </div>
+                  <input
+                    className="sb-search"
+                    style={{ width: '100%', marginBottom: 6 }}
+                    value={subQuery}
+                    onChange={(e) => setSubQuery(e.target.value)}
+                    placeholder="Filtrar subpastas…"
+                  />
+                  <div className="folder-list">
+                    {subLoading ? (
+                      <div style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>Carregando subpastas…</div>
+                    ) : visibleSubDirs.length === 0 ? (
+                      <div style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>Nenhuma subpasta encontrada neste nível.</div>
+                    ) : (
+                      visibleSubDirs.map((d) => {
+                        const fullPath = joinSubPath(restrictedRoot, d.path);
+                        const isSel = cwd.toLowerCase() === fullPath.toLowerCase();
+                        return (
+                          <div key={d.path} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <button
+                              type="button"
+                              className={`folder-row ${isSel ? 'active' : ''}`}
+                              style={{ flex: 1, minWidth: 0 }}
+                              onClick={() => handleSelectCwd(fullPath)}
+                              title={fullPath}
+                            >
+                              {isSel ? <FolderOpen size={14} color="var(--accent)" style={{ flexShrink: 0 }} /> : <Folder size={14} color="var(--warn)" style={{ flexShrink: 0 }} />}
+                              <span className="ell">{d.name}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-icon"
+                              style={{ border: 0, background: 'transparent' }}
+                              title="Abrir subpastas"
+                              onClick={() => setSubRel(d.path)}
+                            >
+                              <ChevronRight size={13} color="var(--muted)" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  {cwd && (
+                    <div className="mono ell" style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>
+                      Selecionada: {cwd}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <FolderPicker
+                  caps={caps}
+                  loadingCaps={loadingCaps}
+                  machine={machine}
+                  cwd={cwd}
+                  entities={entities}
+                  labelMachine="2. Máquina do código"
+                  labelFolder="3. Pasta do projeto (opcional)"
+                  allowEmpty
+                  onChangeMachine={(m, nextCwd) => { setMachine(m); handleSelectCwd(nextCwd); }}
+                  onChangeCwd={handleSelectCwd}
+                  onCapsUpdated={setCaps}
+                  onNotify={onNotify}
+                />
+              )}
+
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>4. Nome do projeto</label>
+                <label>Nome do projeto</label>
                 <input
                   className="inp"
                   value={title}
@@ -262,7 +435,7 @@ export function NewProjectDrawer({
               </div>
 
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>5. Descrição curta</label>
+                <label>Descrição curta</label>
                 <input
                   className="inp"
                   value={desc}
@@ -273,7 +446,7 @@ export function NewProjectDrawer({
 
               {!isEditingEntity && (
                 <div className="field" style={{ marginBottom: 0 }}>
-                  <label>6. Visão inicial do card</label>
+                  <label>Visão inicial do card</label>
                   <select className="sel" value={template} onChange={(e) => setTemplate(e.target.value)}>
                     <option value="board">Board (Kanban: Ideia / Em andamento / Revisão / Concluído)</option>
                     <option value="research">Research (Lista rica com notas e links)</option>
@@ -288,7 +461,7 @@ export function NewProjectDrawer({
               <button
                 className="btn btn-primary"
                 style={{ flex: 1 }}
-                disabled={submitting || !title.trim()}
+                disabled={submitting || !title.trim() || (!!restrictedRoot && !cwd.trim())}
                 onClick={submitProject}
               >
                 {isEditingEntity ? <Save size={14} /> : <Plus size={14} />}
@@ -300,32 +473,36 @@ export function NewProjectDrawer({
           <>
             <div className="side-drawer-body">
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>Nome do workspace</label>
+                <label>1. Nome do workspace</label>
                 <input
                   className="inp"
                   autoFocus
                   value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onChange={(e) => { setGroupNameTouched(true); setNewGroupName(e.target.value); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitGroup(); }}
                   placeholder="Ex.: TRT, Jogos, Infraestrutura…"
                 />
               </div>
 
-              {!isEditingGroup && groups.length > 0 && (
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label>Workspaces já existentes ({groups.length})</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {groups.map((g) => (
-                      <span key={g} className="badge" style={{ padding: '4px 10px', fontSize: 12 }}>📁 {g}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <FolderPicker
+                caps={caps}
+                loadingCaps={loadingCaps}
+                machine={wsMachine}
+                cwd={wsRootCwd}
+                entities={entities}
+                labelMachine="2. Máquina da pasta raiz (opcional)"
+                labelFolder="Pasta raiz do workspace (opcional)"
+                allowEmpty
+                onChangeMachine={(m) => setWsMachine(m)}
+                onChangeCwd={handleSelectWsRoot}
+                onCapsUpdated={setCaps}
+                onNotify={onNotify}
+              />
 
-              <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
-                {isEditingGroup
-                  ? 'Todos os projetos dentro deste workspace serão atualizados automaticamente para o novo nome.'
-                  : <>Depois de criar o workspace, clique no botão <b>+</b> ao lado dele na barra esquerda para adicionar projetos ou mova projetos existentes usando o seletor no cabeçalho.</>}
+              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+                {wsRootCwd.trim()
+                  ? <>🔒 Com pasta raiz definida, projetos criados neste workspace só poderão selecionar <b>subpastas</b> de <code className="mono">{wsRootCwd.trim()}</code>.</>
+                  : 'Se você selecionar uma pasta raiz acima, apenas subpastas dela poderão ser escolhidas como projetos deste workspace.'}
               </div>
             </div>
 
@@ -338,7 +515,7 @@ export function NewProjectDrawer({
                 onClick={submitGroup}
               >
                 {isEditingGroup ? <Save size={14} /> : <Layers size={14} />}
-                {submitting ? 'Salvando…' : isEditingGroup ? 'Salvar nome' : 'Criar workspace'}
+                {submitting ? 'Salvando…' : isEditingGroup ? 'Salvar workspace' : 'Criar workspace'}
               </button>
             </div>
           </>

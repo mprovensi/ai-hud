@@ -37,6 +37,20 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     while (index.entities.some((e) => e.id === id)) { id = `${baseId}-${n++}`; }
 
     const cleanGroup = String(group || '').trim().slice(0, 80);
+    const bindings = Array.isArray(projectBindings) ? projectBindings : [];
+    const gMeta = cleanGroup && index.groupMeta ? index.groupMeta[cleanGroup] : null;
+    if (gMeta && gMeta.rootCwd && bindings.length) {
+      for (const b of bindings) {
+        const bCwd = String(b.cwd || '').trim();
+        if (bCwd && !isWithinRoot(gMeta.rootCwd, bCwd)) {
+          return { status: 400, body: `A pasta do projeto deve ser uma subpasta de "${gMeta.rootCwd}".` };
+        }
+        if (bCwd && path.resolve(bCwd).toLowerCase() === path.resolve(gMeta.rootCwd).toLowerCase()) {
+          return { status: 400, body: `Selecione uma subpasta dentro de "${gMeta.rootCwd}", não a pasta raiz do workspace.` };
+        }
+      }
+    }
+
     const day = new Date(now()).toISOString().slice(0, 10);
     const folder = `entities/${day}_${id}`;
     const cardPath = 'overview.card.json';
@@ -50,7 +64,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       status: 'active',
       pinned: false,
       folder,
-      projectBindings: Array.isArray(projectBindings) ? projectBindings : [],
+      projectBindings: bindings,
       defaultAgent: String(defaultAgent || 'claude').slice(0, 40),
       steps: [
         { name: 'Quadro', path: cardPath, viewer: 'card' },
@@ -239,6 +253,18 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
         delete cur.group;
       }
     }
+    const gMeta = cur.group && index.groupMeta ? index.groupMeta[cur.group] : null;
+    if (gMeta && gMeta.rootCwd && Array.isArray(cur.projectBindings) && cur.projectBindings.length) {
+      for (const b of cur.projectBindings) {
+        const bCwd = String(b.cwd || '').trim();
+        if (bCwd && !isWithinRoot(gMeta.rootCwd, bCwd)) {
+          return { status: 400, body: `A pasta do projeto deve ser uma subpasta de "${gMeta.rootCwd}".` };
+        }
+        if (bCwd && path.resolve(bCwd).toLowerCase() === path.resolve(gMeta.rootCwd).toLowerCase()) {
+          return { status: 400, body: `Selecione uma subpasta dentro de "${gMeta.rootCwd}", não a pasta raiz do workspace.` };
+        }
+      }
+    }
     cur.updated = new Date(now()).toISOString().slice(0, 10);
     const entities = index.entities.slice();
     entities[idx] = cur;
@@ -251,11 +277,12 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return { status: 200, body: { ok: true, entity: cur, groups } };
   }
 
-  function saveGroup({ name = '', renameFrom = '', remove = false } = {}) {
+  function saveGroup({ name = '', renameFrom = '', remove = false, machine, rootCwd } = {}) {
     const wsRoot = root();
     const index = readWorkspaceJson(wsRoot);
     let groups = Array.isArray(index.groups) ? [...index.groups] : [];
     for (const e of index.entities) if (e.group && !groups.includes(e.group)) groups.push(e.group);
+    const groupMeta = { ...(index.groupMeta || {}) };
 
     const cleanName = String(name || '').trim().slice(0, 80);
     const cleanFrom = String(renameFrom || '').trim().slice(0, 80);
@@ -263,6 +290,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     let entities = index.entities;
     if (remove && cleanName) {
       groups = groups.filter((g) => g !== cleanName);
+      delete groupMeta[cleanName];
       entities = entities.map((e) => {
         if (e.group !== cleanName) return e;
         const copy = { ...e };
@@ -273,19 +301,39 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       groups = groups.map((g) => (g === cleanFrom ? cleanName : g));
       if (!groups.includes(cleanName)) groups.push(cleanName);
       groups = [...new Set(groups)];
+      if (cleanFrom !== cleanName && groupMeta[cleanFrom]) {
+        groupMeta[cleanName] = groupMeta[cleanFrom];
+        delete groupMeta[cleanFrom];
+      }
       entities = entities.map((e) => (e.group === cleanFrom ? { ...e, group: cleanName } : e));
     } else {
       if (!cleanName) return { status: 400, body: 'Informe o nome do workspace.' };
       if (!groups.includes(cleanName)) groups.push(cleanName);
     }
 
-    const nextIndex = { format: index.format, version: index.version, ...(groups.length ? { groups } : {}), entities };
+    if (!remove && cleanName && (rootCwd !== undefined || machine !== undefined)) {
+      const cleanRoot = String(rootCwd || '').trim().slice(0, 500);
+      const cleanMach = String(machine || '').trim().slice(0, 80);
+      if (cleanRoot) {
+        groupMeta[cleanName] = { ...(cleanMach ? { machine: cleanMach } : {}), rootCwd: cleanRoot };
+      } else {
+        delete groupMeta[cleanName];
+      }
+    }
+
+    const nextIndex = {
+      format: index.format,
+      version: index.version,
+      ...(groups.length ? { groups } : {}),
+      ...(Object.keys(groupMeta).length ? { groupMeta } : {}),
+      entities,
+    };
     try {
       saveIndex(nextIndex);
     } catch (e) {
       return { status: e.status || 400, body: e.message };
     }
-    return { status: 200, body: { ok: true, groups } };
+    return { status: 200, body: { ok: true, groups, groupMeta } };
   }
 
   function deleteEntity({ id } = {}) {

@@ -62,6 +62,7 @@ function readWorkspaceIndex(workspaceRoot) {
     format: index.format,
     version: index.version,
     groups: [...groupSet].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    groupMeta: index.groupMeta || {},
     entities: index.entities,
     context: listDirFiles(path.join(workspaceRoot, 'context'), ['.md', '.txt']),
     knowledge: listDirFiles(path.join(workspaceRoot, 'knowledge'), ['.md', '.txt']),

@@ -60,7 +60,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 
 | Rota | Resposta |
 |---|---|
-| `GET /api/capabilities` | `{ machines: [{ name, online, platform, home, pinned[], strictRemoteCwd, cwds[], tools }] }` |
+| `GET /api/capabilities` | `{ machines: [{ name, online, local?, platform, home, pinned[], strictRemoteCwd, cwds[], tools }] }` |
 | `GET /api/skills?cwd=` | `{ skills: [{ cmd, name, description, source }] }` (comandos `/` do projeto, AI Workspace, IAs locais e builtins) |
 | `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão ou autorizado) |
 | `GET /api/fs/list?cwd=&path=&machine=` | `{ ok, dir, entries: [{ name, path, type, size }], truncated }` (pastas autorizadas) |
@@ -74,11 +74,11 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 
 | Rota | Efeito |
 |---|---|
-| `GET /api/workspace/index` | Índice `workspace.json` + arquivos em `context/`, `knowledge/`, `skills/`, `inbox/handoffs/` |
-| `POST /api/workspace/entity` | Cria entidade/projeto (`overview.card.json` + `notes.md` + pasta `media/`, com `group?`) |
+| `GET /api/workspace/index` | Índice `workspace.json` (`groups`, `groupMeta`, `entities`) + arquivos em `context/`, `knowledge/`, `skills/`, `inbox/handoffs/` |
+| `POST /api/workspace/entity` | Cria entidade/projeto (`overview.card.json` + `notes.md` + pasta `media/`, com `group?`; valida subpasta se o workspace tiver `rootCwd`) |
 | `PUT /api/workspace/entity` | Atualiza metadados de entidade/projeto (`title`, `description`, `group`, `pinned`, `projectBindings`) |
 | `POST /api/workspace/entity/delete` | Remove entidade/projeto do `workspace.json` movendo sua pasta interna para `.ai-workspace/backups/deleted/` (nunca apaga a pasta de código do usuário) |
-| `POST /api/workspace/group` | Cria, renomeia ou remove englobador de projetos (`{ name, renameFrom?, remove? }`) |
+| `POST /api/workspace/group` | Cria, renomeia ou remove workspace (`{ name, renameFrom?, remove?, machine?, rootCwd? }`) |
 | `GET / PUT /api/workspace/entity/file` | Lê ou grava card (`.card.json`) / Markdown com verificação `baseHash` (`409 Conflict` em edição concorrente) + backup |
 | `GET /api/workspace/entity/asset?id=&path=` | Serve `media/*` e `report.html` isolados (CSP restrita em HTML) |
 | `POST /api/workspace/entity/media` | Upload seguro de imagem (PNG/JPG/WEBP/GIF, até 10 MB) para `media/` da entidade |

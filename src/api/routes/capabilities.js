@@ -9,6 +9,6 @@ module.exports = ({ capabilities, collector, peers, machineName, json }) => [
         if (r.status === 200 && r.json && r.json.machine) return { ...r.json.machine, name: p.name, online: true };
         return { name: p.name, online: false, tools: {}, cwds: [] };
       }, () => ({ name: p.name, online: false, tools: {}, cwds: [] }))));
-    json(res, { machines: [local, ...remotes] });
+    json(res, { machines: [{ ...local, local: true }, ...remotes] });
   } },
 ];

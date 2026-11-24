@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FolderLock, Send, X } from 'lucide-react';
 import { api } from '../api';
-import { FolderPicker } from './FolderPicker';
+import { FolderPicker, orderMachines } from './FolderPicker';
 import type { MachineCaps, Snapshot, WorkspaceEntity } from '../types';
 
 interface Props {
@@ -53,7 +53,7 @@ export function NewSessionDrawer({
     setLoadingCaps(true);
     api.getCapabilities()
       .then((r) => {
-        const list = r.machines || [];
+        const list = orderMachines(r.machines || []);
         setCaps(list);
         const preferred = (effectiveBinding?.machine && list.find((m) => m.name === effectiveBinding.machine))
           || list.find((m) => m.online)

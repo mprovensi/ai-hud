@@ -3,12 +3,28 @@
 const os = require('os');
 const { isCwdAllowed } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
+const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
+const { readWorkspaceJson } = require('../../collect/workspace');
 
-module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pickFolder, peers, collector, config, machineName, relay, json, text }) => {
+module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, json, text }) => {
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
+    const wsRoots = [];
+    if (dataDir) {
+      try {
+        const ws = readWorkspaceJson(resolveWorkspaceRoot(dataDir, config));
+        for (const m of Object.values(ws.groupMeta || {})) {
+          if (m && m.rootCwd) wsRoots.push(m.rootCwd);
+        }
+        for (const e of (ws.entities || [])) {
+          for (const b of (e.projectBindings || [])) {
+            if (b && b.cwd) wsRoots.push(b.cwd);
+          }
+        }
+      } catch {}
+    }
     return isCwdAllowed(cwd, {
-      allowedRoots: (config && config.allowedRoots) || [],
+      allowedRoots: [...((config && config.allowedRoots) || []), ...wsRoots],
       knownCwds,
       home: os.homedir(),
       strict: true,

@@ -267,7 +267,29 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
 
     const bAdd = mcp.addBoardItem({ cwd: projDir, title: 'Nova tarefa via MCP', status: 'idea' });
     assert.equal(bAdd.ok, true);
+    assert.ok(typeof bAdd.item.updatedAt === 'number');
     assert.equal(mcp.readBoardCompact({ cwd: projDir }).total, 4);
+
+    // 8. Servir imagem local do projeto em /api/fs/image (inline + download + contenção)
+    const png1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    fs.mkdirSync(path.join(projDir, 'assets'), { recursive: true });
+    const imgPath = path.join(projDir, 'assets', 'hero.png');
+    fs.writeFileSync(imgPath, png1x1);
+
+    const imgRes = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${port}/api/fs/image?cwd=${encodeURIComponent(projDir)}&path=${encodeURIComponent(imgPath)}&download=1&t=${tok}`, (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, buf: Buffer.concat(chunks) }));
+      }).on('error', reject);
+    });
+    assert.equal(imgRes.status, 200);
+    assert.equal(imgRes.headers['content-type'], 'image/png');
+    assert.match(imgRes.headers['content-disposition'], /attachment; filename="hero\.png"/);
+    assert.equal(imgRes.buf.length, png1x1.length);
+
+    const imgBad = await reqJson(port, 'GET', `/api/fs/image?cwd=${encodeURIComponent(projDir)}&path=${encodeURIComponent('../../secret.png')}`, tok);
+    assert.equal(imgBad.status, 403);
   } finally {
     app.server.close();
   }

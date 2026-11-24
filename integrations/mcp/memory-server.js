@@ -244,7 +244,7 @@ function updateBoardStatus({ cwd = '', updates = [], syncDocs = true } = {}) {
     const nextBody = u.note
       ? `${String(cur.body || '').trimEnd()}${cur.body ? '\n\n' : ''}- ${String(u.note).trim()}`
       : cur.body;
-    items[idx] = { ...cur, status: u.status, ...(nextBody !== undefined ? { body: nextBody } : {}) };
+    items[idx] = { ...cur, status: u.status, updatedAt: Date.now(), ...(nextBody !== undefined ? { body: nextBody } : {}) };
     let docSynced = false;
     if (syncDocs !== false && cur.docRef && (prevStatus === 'done') !== (u.status === 'done')) {
       docSynced = syncMarkdownCheckboxStandalone(r.root, cur.docRef, cur.title, u.status === 'done');
@@ -285,6 +285,7 @@ function addBoardItem({ cwd = '', title = '', body = '', status = 'idea', phase 
     title: cleanTitle.slice(0, 200),
     body: String(body || '').slice(0, 10000),
     status: cleanStatus,
+    updatedAt: Date.now(),
     ...(phase ? { phase: String(phase).slice(0, 120) } : {}),
     ...(docRef ? { docRef: String(docRef).replace(/\\/g, '/').replace(/^\/+/, '').slice(0, 400) } : {}),
   };

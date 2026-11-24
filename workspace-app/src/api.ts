@@ -295,6 +295,9 @@ export const api = {
       `/api/fs/preview?cwd=${encodeURIComponent(opts.cwd)}&path=${encodeURIComponent(opts.path)}&mode=${opts.mode}${opts.machine ? `&machine=${encodeURIComponent(opts.machine)}` : ''}`,
     ),
 
+  sessionImageUrl: (sessionId: string, imgPath: string, download = false) =>
+    withToken(`/api/fs/image?id=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(imgPath)}${download ? '&download=1' : ''}`),
+
   // ---- Docs & Specs reais do projeto + Quadro portátil (.ai-workspace/) + EGM Lite ----
 
   listProjectDocs: (entityId: string) =>

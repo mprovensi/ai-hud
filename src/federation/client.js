@@ -14,10 +14,12 @@ function call(peer, method, route, body, timeoutMs = 8000) {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8');
+        const buffer = Buffer.concat(chunks);
+        const contentType = res.headers['content-type'] || '';
+        const text = buffer.toString('utf8');
         let json = null;
         try { json = JSON.parse(text); } catch {}
-        resolve({ status: res.statusCode, json, text });
+        resolve({ status: res.statusCode, json, text, buffer, contentType });
       });
     });
     req.on('timeout', () => req.destroy(new Error('sem resposta')));

@@ -78,7 +78,7 @@ function validateCard(value, { draft = false } = {}) {
   for (const item of value.items) {
     assertKeys(
       item,
-      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review'],
+      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review', 'updatedAt'],
       'Um item do card',
     );
     if (typeof item.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(item.id) || seen.has(item.id)) {
@@ -91,6 +91,9 @@ function validateCard(value, { draft = false } = {}) {
     assertText(item.prompt, 'Prompt salvo', 8000);
     assertText(item.linkLabel, 'Rótulo do link', 120);
     assertText(item.phase, 'Fase/grupo do item', 120);
+    if (item.updatedAt !== undefined && (typeof item.updatedAt !== 'number' || !Number.isFinite(item.updatedAt))) {
+      throw fail(`updatedAt inválido no item "${item.id}".`);
+    }
     if (item.docRef !== undefined && item.docRef !== '') {
       assertText(item.docRef, 'Referência de documento', 400);
       const cleanDocPath = item.docRef.split('#')[0];

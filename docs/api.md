@@ -63,6 +63,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `GET /api/capabilities` | `{ machines: [{ name, online, local?, platform, home, pinned[], strictRemoteCwd, cwds[], tools }] }` |
 | `GET /api/skills?cwd=` | `{ skills: [{ cmd, name, description, source }] }` (comandos `/` do projeto, AI Workspace, IAs locais e builtins) |
 | `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão ou autorizado) |
+| `GET /api/fs/image?id=&cwd=&machine=&path=&download=1` | Serve imagem binária (PNG/JPG/WEBP/GIF/SVG/BMP/ICO, até 15 MB) contida na pasta da sessão/projeto, com proxy multi-máquina e cabeçalho `Content-Disposition` opcional |
 | `GET /api/fs/list?cwd=&path=&machine=` | `{ ok, dir, entries: [{ name, path, type, size }], truncated }` (pastas autorizadas) |
 | `GET /api/fs/git?cwd=&machine=` | `{ ok, isRepo, branch, modified[], commits[] }` (pastas autorizadas) |
 | `POST /api/fs/exec` | `{ cwd, machine?, command, timeoutMs? }` → `{ ok, code, timedOut, truncated, redacted, durationMs, stdout, stderr }` (terminal integrado em pastas autorizadas; desativável via `config.disableTerminal`) |

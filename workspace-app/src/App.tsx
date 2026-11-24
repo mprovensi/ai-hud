@@ -27,7 +27,7 @@ import { api, withToken } from './api';
 import { CardEditor } from './components/CardEditor';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { FilesAndGit } from './components/FilesAndGit';
-import { LiveHudPane } from './components/LiveHudPane';
+import { LiveHudPane, type CardExecIntent } from './components/LiveHudPane';
 import { MemoryPanel } from './components/MemoryPanel';
 import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjectDrawer';
 import { NewSessionDrawer } from './components/NewSessionDrawer';
@@ -77,6 +77,12 @@ export function App() {
   const [search, setSearch] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState('');
+  const [pendingCardExec, setPendingCardExec] = useState<CardExecIntent | null>(null);
+  const [runningCardExec, setRunningCardExec] = useState<(CardExecIntent & {
+    sessionId: string;
+    startedAt: number;
+    seenWorking: boolean;
+  }) | null>(null);
   const [focusSessionId, setFocusSessionId] = useState('');
   const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
@@ -161,6 +167,68 @@ export function App() {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 3500);
   }, []);
+
+  // Item 4: Quando a sessão vinculada a um card executado conclui sem erro, avança o card automaticamente para a próxima fase
+  const attachCardExecToSession = useCallback((sessionId: string) => {
+    setPendingCardExec((cur) => {
+      if (cur && cur.nextStatus && sessionId) {
+        setRunningCardExec({
+          ...cur,
+          sessionId,
+          startedAt: Date.now(),
+          seenWorking: false,
+        });
+      }
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!runningCardExec || !snap) return;
+    const all = [...(snap.active || []), ...(snap.recent || [])];
+    const s = all.find((x) => x.id === runningCardExec.sessionId);
+    if (!s) return;
+
+    if (s.state === 'working') {
+      if (!runningCardExec.seenWorking) {
+        setRunningCardExec((prev) => (prev ? { ...prev, seenWorking: true } : null));
+      }
+      return;
+    }
+
+    const finishedAfterStart = (s.end || 0) > runningCardExec.startedAt - 1000;
+    if ((runningCardExec.seenWorking || finishedAfterStart) && (s.state === 'waiting' || s.state === 'idle')) {
+      const exec = runningCardExec;
+      setRunningCardExec(null);
+      const failedReply = typeof s.lastReply === 'string' && /^\s*⚠/.test(s.lastReply);
+      if (failedReply || !exec.nextStatus) return;
+
+      (async () => {
+        try {
+          const detail = await api.getSession(exec.sessionId).catch(() => null);
+          if (detail && detail.testRun && detail.testRun.ok === false) return;
+          const b = await api.getProjectBoard(exec.entityId);
+          if (!b.content || b.offlineFallback) return;
+          const target = b.content.items.find((it) => it.id === exec.itemId);
+          if (!target || (target.status || 'idea') !== exec.currentStatus) return;
+          const nextCard = {
+            ...b.content,
+            items: b.content.items.map((it) => (
+              it.id === exec.itemId
+                ? { ...it, status: exec.nextStatus!, updatedAt: Date.now() }
+                : it
+            )),
+          };
+          await api.saveProjectBoard({ entityId: exec.entityId, content: nextCard, baseHash: b.hash });
+          if (exec.nextStatus === 'done' && target.docRef) {
+            await api.syncDocCheckbox({ entityId: exec.entityId, docRef: target.docRef, title: target.title, done: true }).catch(() => {});
+          }
+          setBoardReloadKey((k) => k + 1);
+          notify(`"${exec.title}" movido automaticamente para ${exec.nextLabel}.`);
+        } catch {}
+      })();
+    }
+  }, [runningCardExec, snap, notify]);
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -720,7 +788,8 @@ export function App() {
                       reloadKey={boardReloadKey}
                       snapshotVersion={snap?.version}
                       onNotify={notify}
-                      onSendPrompt={(p) => setDraftPrompt(p)}
+                      onSendPrompt={(p) => { setPendingCardExec(null); setDraftPrompt(p); }}
+                      onExecuteItem={(intent) => { setPendingCardExec(intent); setDraftPrompt(intent.prompt); }}
                       onOpenDoc={(p) => { setActiveProjectDoc(p); setEntityTab('docs'); }}
                     />
                   ) : (
@@ -814,6 +883,9 @@ export function App() {
           onFocusSessionConsumed={() => setFocusSessionId('')}
           draftPrompt={draftPrompt}
           onDraftConsumed={() => setDraftPrompt('')}
+          pendingCardExec={pendingCardExec}
+          onCancelCardExec={() => setPendingCardExec(null)}
+          onCardExecAttached={attachCardExecToSession}
           onOpenNewSession={(initial) => {
             setNewChatPrompt(initial || '');
             setNewChatLocked(false);
@@ -911,7 +983,13 @@ export function App() {
         entities={ws?.entities || []}
         snapshot={snap}
         initialPrompt={newChatPrompt}
-        onCreated={() => pollNowRef.current()}
+        onCreated={(newSessionId) => {
+          if (newSessionId) {
+            setFocusSessionId(newSessionId);
+            attachCardExecToSession(newSessionId);
+          }
+          pollNowRef.current();
+        }}
         onNotify={notify}
       />
 

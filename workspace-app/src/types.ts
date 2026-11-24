@@ -23,6 +23,7 @@ export interface CardItem {
   docRef?: string;
   phase?: string;
   review?: CardReviewMeta | null;
+  updatedAt?: number;
 }
 
 export interface ProjectDocEntry {

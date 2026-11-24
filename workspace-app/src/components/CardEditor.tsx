@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  ArrowDown,
-  ArrowUp,
   Bot,
   CheckCircle2,
   Columns3,
@@ -23,8 +21,10 @@ import {
   ShieldAlert,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 import { api } from '../api';
+import type { CardExecIntent } from './LiveHudPane';
 import type {
   CardDoc,
   CardItem,
@@ -36,13 +36,20 @@ import type {
   ProjectDocEntry,
 } from '../types';
 
-const STATUSES: { id: CardStatus; label: string }[] = [
+export const BOARD_STATUSES: { id: CardStatus; label: string }[] = [
   { id: 'idea', label: 'Ideia' },
   { id: 'spec', label: 'Spec / Plano' },
   { id: 'in-progress', label: 'Em andamento' },
   { id: 'review', label: 'Revisão' },
   { id: 'done', label: 'Concluído' },
 ];
+
+export function nextWorkflowStatus(current: CardStatus): { status: CardStatus; label: string } | null {
+  const idx = BOARD_STATUSES.findIndex((s) => s.id === current);
+  if (idx < 0 || idx >= BOARD_STATUSES.length - 1) return null;
+  const next = BOARD_STATUSES[idx + 1];
+  return { status: next.id, label: next.label };
+}
 
 interface Props {
   entityId: string;
@@ -52,6 +59,7 @@ interface Props {
   snapshotVersion?: string;
   onNotify: (msg: string, err?: boolean) => void;
   onSendPrompt: (prompt: string) => void;
+  onExecuteItem?: (intent: CardExecIntent) => void;
   onOpenDoc?: (docPath: string) => void;
 }
 
@@ -62,6 +70,16 @@ function fmtTok(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 }
 
+function sortRecentFirst(items: CardItem[]): CardItem[] {
+  return items
+    .map((item, idx) => ({ item, idx }))
+    .sort((a, b) => {
+      const diff = (b.item.updatedAt || 0) - (a.item.updatedAt || 0);
+      return diff !== 0 ? diff : a.idx - b.idx;
+    })
+    .map((x) => x.item);
+}
+
 export function CardEditor({
   entityId,
   filePath,
@@ -70,6 +88,7 @@ export function CardEditor({
   snapshotVersion = '',
   onNotify,
   onSendPrompt,
+  onExecuteItem,
   onOpenDoc,
 }: Props) {
   const draftKey = `aiws.draft.${entityId}.${filePath}`;
@@ -80,9 +99,11 @@ export function CardEditor({
   const [dirty, setDirty] = useState(false);
   const [loadingBoard, setLoadingBoard] = useState(true);
   const [saving, setSaving] = useState(false);
-  const loadSeqRef = useRef(0);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentContent: CardDoc; currentHash: string } | null>(null);
+  const loadSeqRef = useRef(0);
+
+  // Modal de detalhes e edição de card
+  const [detailModal, setDetailModal] = useState<{ draft: CardItem; isNew: boolean; bodyPreview: boolean } | null>(null);
 
   // Descoberta e importação de docs/ (0 tokens + opção IA)
   const [projectDocs, setProjectDocs] = useState<ProjectDocEntry[]>([]);
@@ -101,7 +122,7 @@ export function CardEditor({
   const [aiStructLoading, setAiStructLoading] = useState(false);
   const [aiProposed, setAiProposed] = useState<CardItem[] | null>(null);
 
-  // Revisão Goldfish sob demanda direto do Quadro (modal sempre visível)
+  // Revisão Goldfish sob demanda (modal sempre visível)
   const [reviewModal, setReviewModal] = useState<{
     itemId: string;
     itemTitle: string;
@@ -113,21 +134,25 @@ export function CardEditor({
   } | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
 
-  // Drag-and-drop entre colunas + refresh automático sem F5
+  // Drag-and-drop entre colunas e reordenação dentro da coluna
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<CardStatus | null>(null);
+  const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
+  const wasDraggingRef = useRef(false);
+
   const [undoing, setUndoing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [recentImportCount, setRecentImportCount] = useState<number | null>(null);
-  const [externalUpdateBanner, setExternalUpdateBanner] = useState<'applied' | 'pending' | null>(null);
+  const [pendingExternalReload, setPendingExternalReload] = useState(false);
+
   const baseHashRef = useRef('');
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
-  const editingRef = useRef<string | null>(null);
+  const modalOpenRef = useRef(false);
   baseHashRef.current = baseHash;
   dirtyRef.current = dirty;
   savingRef.current = saving;
-  editingRef.current = editingId;
+  modalOpenRef.current = !!detailModal;
 
   async function load(ignoreDraft = false, showSkeleton = false) {
     const seq = ++loadSeqRef.current;
@@ -195,18 +220,18 @@ export function CardEditor({
   }
 
   useEffect(() => {
-    setEditingId(null);
+    setDetailModal(null);
     setImportOpen(false);
     setAiStructEstimate(null);
     setAiProposed(null);
     setReviewModal(null);
-    setExternalUpdateBanner(null);
+    setPendingExternalReload(false);
     setRecentImportCount(null);
     load(false, true);
     refreshProjectDocs();
   }, [entityId, filePath, hasProjectCwd, reloadKey]);
 
-  // Verifica silenciosamente se o board mudou em disco (ex.: atualizado por uma IA via arquivo ou MCP)
+  // Atualização transparente em disco (sem banner ruidoso — apenas reflete na tela!)
   async function checkExternalUpdate(manual = false) {
     if (savingRef.current) return;
     if (manual) setRefreshing(true);
@@ -232,21 +257,22 @@ export function CardEditor({
           setBaseHash(nextHash);
           setDirty(false);
           setConflict(null);
-          setExternalUpdateBanner(null);
+          setPendingExternalReload(false);
           sessionStorage.removeItem(draftKey);
-          onNotify(changed ? 'Quadro atualizado com as alterações do disco.' : 'Quadro já está atualizado.');
+          onNotify(changed ? 'Quadro atualizado.' : 'Quadro já está atualizado.');
         }
         return;
       }
 
       if (changed && r.content) {
-        if (!dirtyRef.current && !editingRef.current) {
+        if (!dirtyRef.current && !modalOpenRef.current) {
+          // Aplica silenciosamente e de forma transparente (Item 6)
           setCard(r.content);
           setBaseHash(nextHash);
           setConflict(null);
-          setExternalUpdateBanner('applied');
+          setPendingExternalReload(false);
         } else {
-          setExternalUpdateBanner('pending');
+          setPendingExternalReload(true);
         }
       }
     } catch (e) {
@@ -256,7 +282,6 @@ export function CardEditor({
     }
   }
 
-  // Polling leve a cada 5s + verificação imediata quando snapshot de sessões muda (fim de turno da IA)
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') checkExternalUpdate(false);
@@ -276,9 +301,9 @@ export function CardEditor({
     } catch {}
   }
 
-  async function save(cardOverride?: CardDoc) {
+  async function save(cardOverride?: CardDoc, silentToast = false) {
     const targetCard = cardOverride || card;
-    if (!targetCard || saving || offlineFallback) return;
+    if (!targetCard || saving || offlineFallback) return false;
     setSaving(true);
     try {
       const r = hasProjectCwd
@@ -287,9 +312,11 @@ export function CardEditor({
       setBaseHash(r.hash);
       setDirty(false);
       setConflict(null);
+      setPendingExternalReload(false);
       sessionStorage.removeItem(draftKey);
       if (hasProjectCwd) setStorage('in-project');
-      onNotify('Quadro salvo.');
+      if (!silentToast) onNotify('Quadro salvo.');
+      return true;
     } catch (e) {
       const ce = e as ConflictError;
       if (ce.conflict && ce.currentContent) {
@@ -298,6 +325,7 @@ export function CardEditor({
       } else {
         onNotify(ce.message, true);
       }
+      return false;
     } finally {
       setSaving(false);
     }
@@ -307,12 +335,18 @@ export function CardEditor({
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        save();
+        if (detailModal) {
+          saveDetailModal();
+        } else {
+          save();
+        }
+      } else if (e.key === 'Escape' && detailModal) {
+        setDetailModal(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [card, baseHash, saving, offlineFallback]);
+  }, [card, baseHash, saving, offlineFallback, detailModal]);
 
   if (loadingBoard || !card) {
     return (
@@ -325,7 +359,7 @@ export function CardEditor({
         </div>
         <div className="board-scroll">
           <div className="board-grid">
-            {STATUSES.map((col, colIdx) => (
+            {BOARD_STATUSES.map((col, colIdx) => (
               <div key={col.id} className="board-col">
                 <div className="board-col-head">
                   <span>{col.label}</span>
@@ -340,7 +374,6 @@ export function CardEditor({
                         <div className="skel" style={{ width: 52, height: 16 }} />
                       </div>
                       <div className="skel" style={{ width: '92%', height: 10 }} />
-                      <div className="skel" style={{ width: '65%', height: 10 }} />
                     </div>
                   ))}
                 </div>
@@ -352,32 +385,24 @@ export function CardEditor({
     );
   }
 
-  function addItem(status: CardStatus = 'idea') {
-    if (!card) return;
+  function openNewItemModal(status: CardStatus = 'idea') {
     const id = `item-${Date.now().toString(36)}`;
-    const nextItem: CardItem = { id, title: 'Novo item', body: '', status };
-    updateCard({ ...card, items: [...card.items, nextItem] });
-    setEditingId(id);
+    setDetailModal({
+      draft: { id, title: '', body: '', status, updatedAt: Date.now() },
+      isNew: true,
+      bodyPreview: false,
+    });
   }
 
-  function patchItem(id: string, patch: Partial<CardItem>) {
-    if (!card) return;
-    updateCard({ ...card, items: card.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+  function openItemModal(item: CardItem) {
+    setDetailModal({
+      draft: { ...item },
+      isNew: false,
+      bodyPreview: !!item.body,
+    });
   }
 
-  async function changeItemStatus(item: CardItem, nextStatus: CardStatus, autoSave = false) {
-    if (!card || offlineFallback) return;
-    const prevStatus = item.status || 'idea';
-    if (prevStatus === nextStatus) return;
-    const nextCard: CardDoc = {
-      ...card,
-      items: card.items.map((it) => (it.id === item.id ? { ...it, status: nextStatus } : it)),
-    };
-    updateCard(nextCard);
-    if (autoSave) {
-      await save(nextCard);
-    }
-    // Sync reverso Quadro -> docs/: ao entrar ou sair de "Concluído", atualiza `- [x]` / `- [ ]` no Markdown vinculado
+  async function syncCheckboxIfCrossedDone(prevStatus: CardStatus, nextStatus: CardStatus, item: CardItem) {
     const crossedDone = (prevStatus === 'done') !== (nextStatus === 'done');
     if (hasProjectCwd && item.docRef && crossedDone) {
       try {
@@ -394,24 +419,79 @@ export function CardEditor({
     }
   }
 
-  function removeItem(id: string) {
-    if (!card) return;
-    updateCard({ ...card, items: card.items.filter((it) => it.id !== id) });
-    if (editingId === id) setEditingId(null);
+  async function saveDetailModal() {
+    if (!card || !detailModal || offlineFallback) return;
+    const cleanTitle = detailModal.draft.title.trim();
+    if (!cleanTitle) return onNotify('Informe o título do item.', true);
+    const stamped: CardItem = {
+      ...detailModal.draft,
+      title: cleanTitle,
+      status: detailModal.draft.status || 'idea',
+      updatedAt: Date.now(),
+    };
+    const prev = card.items.find((i) => i.id === stamped.id);
+    const nextItems = detailModal.isNew
+      ? [stamped, ...card.items]
+      : card.items.map((it) => (it.id === stamped.id ? stamped : it));
+    const nextCard: CardDoc = { ...card, items: nextItems };
+    updateCard(nextCard);
+    const ok = await save(nextCard);
+    if (ok) {
+      setDetailModal(null);
+      if (prev) {
+        await syncCheckboxIfCrossedDone((prev.status || 'idea') as CardStatus, (stamped.status || 'idea') as CardStatus, stamped);
+      }
+    }
   }
 
-  function moveItem(id: string, delta: number) {
-    if (!card) return;
-    const idx = card.items.findIndex((i) => i.id === id);
-    const nextIdx = idx + delta;
-    if (idx < 0 || nextIdx < 0 || nextIdx >= card.items.length) return;
-    const copy = [...card.items];
-    const [moved] = copy.splice(idx, 1);
-    copy.splice(nextIdx, 0, moved);
-    updateCard({ ...card, items: copy });
+  async function deleteFromModal(id: string) {
+    if (!card || offlineFallback) return;
+    const nextCard: CardDoc = { ...card, items: card.items.filter((it) => it.id !== id) };
+    updateCard(nextCard);
+    setDetailModal(null);
+    await save(nextCard);
   }
 
-  async function handleImageUpload(itemId: string, file: File) {
+  async function handleDropCard(droppedId: string, targetCol: CardStatus, beforeItem?: CardItem) {
+    if (!card || offlineFallback) return;
+    const found = card.items.find((i) => i.id === droppedId);
+    if (!found) return;
+    if (beforeItem && beforeItem.id === droppedId) return;
+
+    const prevStatus = (found.status || 'idea') as CardStatus;
+    const now = Date.now();
+    // Calcula updatedAt para manter a ordenação "mais recente primeiro" e respeitar a posição solta sobre outro card
+    let nextUpdatedAt = now;
+    if (beforeItem) {
+      const colItems = sortRecentFirst(card.items.filter((i) => (i.status || 'idea') === targetCol && i.id !== droppedId));
+      const targetIdx = colItems.findIndex((i) => i.id === beforeItem.id);
+      const refTs = beforeItem.updatedAt || now;
+      if (targetIdx <= 0) {
+        nextUpdatedAt = Math.max(now, refTs + 1000);
+      } else {
+        const aboveTs = colItems[targetIdx - 1].updatedAt || (refTs + 2000);
+        nextUpdatedAt = aboveTs > refTs + 1 ? Math.floor((aboveTs + refTs) / 2) : refTs + 1;
+      }
+    }
+
+    const updatedItem: CardItem = { ...found, status: targetCol, updatedAt: nextUpdatedAt };
+    const others = card.items.filter((i) => i.id !== droppedId);
+    let nextItems: CardItem[];
+    if (beforeItem) {
+      const idx = others.findIndex((i) => i.id === beforeItem.id);
+      nextItems = idx >= 0 ? [...others.slice(0, idx), updatedItem, ...others.slice(idx)] : [updatedItem, ...others];
+    } else {
+      nextItems = [updatedItem, ...others];
+    }
+
+    const nextCard: CardDoc = { ...card, items: nextItems };
+    updateCard(nextCard);
+    await save(nextCard, true);
+    await syncCheckboxIfCrossedDone(prevStatus, targetCol, updatedItem);
+  }
+
+  async function handleModalImageUpload(file: File) {
+    if (!detailModal) return;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -420,8 +500,8 @@ export function CardEditor({
           fileName: file.name,
           base64Data: String(reader.result || ''),
         });
-        patchItem(itemId, { image: res.path, alt: file.name });
-        onNotify('Imagem anexada. Salve o quadro para persistir.');
+        setDetailModal((prev) => (prev ? { ...prev, draft: { ...prev.draft, image: res.path, alt: file.name } } : null));
+        onNotify('Imagem anexada. Clique em Salvar alterações.');
       } catch (e) {
         onNotify((e as Error).message, true);
       }
@@ -437,12 +517,16 @@ export function CardEditor({
         title: item.title,
         summary: item.body || '',
       });
+      const updatedItem: CardItem = { ...item, docRef: r.path, status: 'spec', updatedAt: Date.now() };
       const nextCard: CardDoc = {
         ...card,
-        items: card.items.map((it) => (it.id === item.id ? { ...it, docRef: r.path, status: 'spec' } : it)),
+        items: card.items.some((it) => it.id === item.id)
+          ? card.items.map((it) => (it.id === item.id ? updatedItem : it))
+          : [updatedItem, ...card.items],
       };
       setCard(nextCard);
-      await save(nextCard);
+      await save(nextCard, true);
+      setDetailModal(null);
       onNotify(`Spec criada em ${r.path}`);
       onOpenDoc?.(r.path);
     } catch (e) {
@@ -564,17 +648,18 @@ export function CardEditor({
     if (!card || !aiProposed || !aiProposed.length) return;
     const seen = new Set(card.items.map((i) => i.title.trim().toLowerCase()));
     const usedIds = new Set(card.items.map((i) => i.id));
+    const now = Date.now();
     const added: CardItem[] = [];
-    for (const it of aiProposed) {
-      if (seen.has(it.title.trim().toLowerCase())) continue;
+    aiProposed.forEach((it, idx) => {
+      if (seen.has(it.title.trim().toLowerCase())) return;
       let id = it.id;
       let n = 2;
       while (usedIds.has(id)) id = `${it.id}-${n++}`;
       usedIds.add(id);
       seen.add(it.title.trim().toLowerCase());
-      added.push({ ...it, id });
-    }
-    const nextCard = { ...card, items: [...card.items, ...added] };
+      added.push({ ...it, id, updatedAt: now - idx });
+    });
+    const nextCard = { ...card, items: [...added, ...card.items] };
     setAiProposed(null);
     setImportOpen(false);
     if (added.length > 0) setRecentImportCount(added.length);
@@ -609,192 +694,165 @@ export function CardEditor({
     return `Trabalhe na tarefa "${item.title}"${item.body ? `:\n${item.body}` : '.'}`;
   }
 
+  function triggerExecute(item: CardItem) {
+    const prompt = buildExecutePrompt(item);
+    const curSt = (item.status || 'idea') as CardStatus;
+    const nxt = nextWorkflowStatus(curSt);
+    if (onExecuteItem) {
+      onExecuteItem({
+        entityId,
+        itemId: item.id,
+        title: item.title,
+        currentStatus: curSt,
+        nextStatus: nxt ? nxt.status : null,
+        nextLabel: nxt ? nxt.label : '',
+        prompt,
+      });
+    } else {
+      onSendPrompt(prompt);
+    }
+  }
+
+  // Card limpo no Board (detalhes completos e edição abrem no modal ao clicar)
   function renderItemCard(item: CardItem) {
-    const isEditing = editingId === item.id;
     const docClean = (item.docRef || '').split('#')[0];
-    const canDrag = card?.template === 'board' && !isEditing && !offlineFallback;
+    const canDrag = card?.template === 'board' && !offlineFallback;
+    const isBoard = card?.template === 'board';
+
     return (
       <div
         key={item.id}
-        className={`card-item ${dragItemId === item.id ? 'dragging' : ''}`}
+        className={`card-item clean-card ${dragItemId === item.id ? 'dragging' : ''} ${dragOverCardId === item.id ? 'drag-over-card' : ''}`}
         draggable={canDrag}
         onDragStart={(e) => {
           if (!canDrag) return;
+          wasDraggingRef.current = true;
           setDragItemId(item.id);
           e.dataTransfer.setData('text/plain', item.id);
           e.dataTransfer.effectAllowed = 'move';
         }}
+        onDragOver={(e) => {
+          if (!canDrag || !dragItemId || dragItemId === item.id) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'move';
+          if (dragOverCardId !== item.id) setDragOverCardId(item.id);
+        }}
+        onDragLeave={() => {
+          setDragOverCardId((cur) => (cur === item.id ? null : cur));
+        }}
+        onDrop={(e) => {
+          if (!canDrag) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const droppedId = e.dataTransfer.getData('text/plain') || dragItemId;
+          setDragItemId(null);
+          setDragOverCol(null);
+          setDragOverCardId(null);
+          if (droppedId && droppedId !== item.id) {
+            handleDropCard(droppedId, (item.status || 'idea') as CardStatus, item);
+          }
+        }}
         onDragEnd={() => {
           setDragItemId(null);
           setDragOverCol(null);
+          setDragOverCardId(null);
+          window.setTimeout(() => { wasDraggingRef.current = false; }, 60);
         }}
+        onClick={() => {
+          if (wasDraggingRef.current) return;
+          openItemModal(item);
+        }}
+        title="Clique para ver detalhes ou editar (arraste para mover ou reordenar)"
       >
-        {isEditing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            <input
-              className="inp"
-              value={item.title}
-              onChange={(e) => patchItem(item.id, { title: e.target.value })}
-              placeholder="Título da tarefa"
-            />
-            <textarea
-              className="ta"
-              rows={3}
-              value={item.body || ''}
-              onChange={(e) => patchItem(item.id, { body: e.target.value })}
-              placeholder="Descrição / notas (suporta Markdown)"
-            />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <select
-                className="sel"
-                value={item.status || 'idea'}
-                onChange={(e) => patchItem(item.id, { status: e.target.value as CardStatus })}
-              >
-                {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-              <input
-                className="inp"
-                value={item.phase || ''}
-                onChange={(e) => patchItem(item.id, { phase: e.target.value || undefined })}
-                placeholder="Fase / tag (opcional)"
-              />
-            </div>
-            <input
-              className="inp mono"
-              style={{ fontSize: 11.5 }}
-              value={item.docRef || ''}
-              onChange={(e) => patchItem(item.id, { docRef: e.target.value || undefined })}
-              placeholder="Doc vinculado (ex.: docs/specs/auth.md)"
-            />
-            <input
-              className="inp"
-              value={item.prompt || ''}
-              onChange={(e) => patchItem(item.id, { prompt: e.target.value })}
-              placeholder="Prompt customizado para IA (opcional)"
-            />
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-                <ImagePlus size={13} /> Imagem
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleImageUpload(item.id, f);
-                  }}
-                />
-              </label>
-              <button className="btn btn-sm btn-primary" onClick={() => setEditingId(null)}>Concluir</button>
-              <button className="btn btn-sm btn-danger" onClick={() => removeItem(item.id)}>
-                <Trash2 size={13} />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-              <h4 style={{ flex: 1, cursor: 'pointer' }} onClick={() => setEditingId(item.id)}>
-                {item.title || '(sem título)'}
-              </h4>
-              {card?.template !== 'board' && item.status && (
-                <span className={`badge ${item.status}`}>{STATUSES.find((s) => s.id === item.status)?.label || item.status}</span>
-              )}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          <h4 className="card-title-clamp" style={{ flex: 1 }}>
+            {item.title || '(sem título)'}
+          </h4>
+          {!isBoard && item.status && (
+            <span className={`badge ${item.status}`}>
+              {BOARD_STATUSES.find((s) => s.id === item.status)?.label || item.status}
+            </span>
+          )}
+        </div>
 
-            {(item.phase || docClean || (item.review && item.review.status && item.review.status !== 'none')) && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
-                {item.phase && <span className="badge" style={{ fontSize: 10 }}>{item.phase}</span>}
-                {docClean && (
-                  <button
-                    type="button"
-                    className="doc-chip mono ell"
-                    title={`Abrir ${item.docRef} em Docs & Specs`}
-                    onClick={() => onOpenDoc?.(item.docRef!)}
-                  >
-                    <FileText size={11} style={{ flexShrink: 0 }} />
-                    <span className="ell">{docClean.split('/').pop()}</span>
-                  </button>
-                )}
-                {item.review && item.review.status && item.review.status !== 'none' && (
-                  <button
-                    type="button"
-                    className={`badge ${item.review.status === 'approved' ? 'done' : 'review'}`}
-                    style={{ fontSize: 10, cursor: item.review.reportPath ? 'pointer' : 'default' }}
-                    title={item.review.summary || 'Parecer da revisão Goldfish'}
-                    onClick={() => { if (item.review?.reportPath) onOpenDoc?.(item.review.reportPath); }}
-                  >
-                    {item.review.status === 'approved' ? <CheckCircle2 size={11} /> : <ShieldAlert size={11} />}
-                    {item.review.status === 'approved' ? 'Goldfish OK' : 'Ajustes'}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {item.image && <img src={api.entityAssetUrl(entityId, item.image)} alt={item.alt || item.title} />}
-            {item.body && (
-              <div className="md" style={{ fontSize: 12, color: 'var(--muted)' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.body}</ReactMarkdown>
-              </div>
-            )}
-            {item.url && (
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, marginTop: 4 }}
-              >
-                <ExternalLink size={12} /> {item.linkLabel || item.url}
-              </a>
-            )}
-
-            <div className="card-actions">
-              <button className="btn btn-sm" onClick={() => setEditingId(item.id)}>Editar</button>
-              {hasProjectCwd && !docClean && (item.status === 'idea' || !item.status) && (
-                <button
-                  className="btn btn-sm"
-                  title="Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)"
-                  onClick={() => handleCreateSpecForItem(item)}
-                >
-                  <FilePlus2 size={12} /> Spec
-                </button>
-              )}
-              {hasProjectCwd && docClean && (
-                <button
-                  className="btn btn-sm"
-                  title="Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)"
-                  onClick={() => requestItemReview(item)}
-                  disabled={reviewRunning}
-                >
-                  🐟 Revisar
-                </button>
-              )}
+        {(item.phase || docClean || (item.review && item.review.status && item.review.status !== 'none')) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+            {item.phase && <span className="badge" style={{ fontSize: 10 }}>{item.phase}</span>}
+            {docClean && (
               <button
-                className="btn btn-sm"
-                title="Enviar tarefa para a conversa com IA (contexto enxuto)"
-                onClick={() => onSendPrompt(buildExecutePrompt(item))}
+                type="button"
+                className="doc-chip mono ell"
+                title={`Abrir ${item.docRef} em Docs & Specs`}
+                onClick={(e) => { e.stopPropagation(); onOpenDoc?.(item.docRef!); }}
               >
-                <Play size={12} /> Executar
+                <FileText size={10} style={{ flexShrink: 0 }} />
+                <span className="ell">{docClean.split('/').pop()}</span>
               </button>
-              {card?.template === 'board' && (
-                <select
-                  className="sel"
-                  style={{ width: 'auto', padding: '3px 6px', fontSize: 11 }}
-                  value={item.status || 'idea'}
-                  onChange={(e) => changeItemStatus(item, e.target.value as CardStatus, false)}
-                >
-                  {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              )}
-              <button className="btn btn-sm btn-icon" title="Subir" onClick={() => moveItem(item.id, -1)}>
-                <ArrowUp size={12} />
+            )}
+            {item.review && item.review.status && item.review.status !== 'none' && (
+              <button
+                type="button"
+                className={`badge ${item.review.status === 'approved' ? 'done' : 'review'}`}
+                style={{ fontSize: 10, cursor: item.review.reportPath ? 'pointer' : 'default' }}
+                title={item.review.summary || 'Parecer da revisão Goldfish'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (item.review?.reportPath) onOpenDoc?.(item.review.reportPath);
+                }}
+              >
+                {item.review.status === 'approved' ? <CheckCircle2 size={10} /> : <ShieldAlert size={10} />}
+                {item.review.status === 'approved' ? 'Goldfish OK' : 'Ajustes'}
               </button>
-              <button className="btn btn-sm btn-icon" title="Descer" onClick={() => moveItem(item.id, 1)}>
-                <ArrowDown size={12} />
-              </button>
-            </div>
-          </>
+            )}
+          </div>
         )}
+
+        {item.image && (
+          <img
+            src={api.entityAssetUrl(entityId, item.image)}
+            alt={item.alt || item.title}
+            style={{ maxHeight: isBoard ? 96 : 170, marginTop: 6 }}
+          />
+        )}
+
+        {!isBoard && item.body && (
+          <div className="md" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.body}</ReactMarkdown>
+          </div>
+        )}
+
+        <div className="card-actions" style={{ marginTop: 7 }} onClick={(e) => e.stopPropagation()}>
+          <button
+            className="btn btn-sm"
+            style={{ padding: '3px 7px', fontSize: 11 }}
+            title="Executar tarefa com IA (avança para a próxima fase ao concluir)"
+            onClick={() => triggerExecute(item)}
+          >
+            <Play size={11} /> Executar
+          </button>
+          {hasProjectCwd && !docClean && (item.status === 'idea' || !item.status) && (
+            <button
+              className="btn btn-sm"
+              style={{ padding: '3px 7px', fontSize: 11 }}
+              title="Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)"
+              onClick={() => handleCreateSpecForItem(item)}
+            >
+              <FilePlus2 size={11} /> Spec
+            </button>
+          )}
+          {hasProjectCwd && docClean && (item.status === 'spec' || item.status === 'idea') && (
+            <button
+              className="btn btn-sm"
+              style={{ padding: '3px 7px', fontSize: 11 }}
+              title="Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)"
+              onClick={() => requestItemReview(item)}
+              disabled={reviewRunning}
+            >
+              🐟 Revisar
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -845,6 +903,264 @@ export function CardEditor({
         </div>
       )}
 
+      {/* Modal de Detalhes e Edição do Card (Item 1 e 3) */}
+      {detailModal && (
+        <div className="modal-bg" onClick={() => setDetailModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexShrink: 0 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>
+                {detailModal.isNew ? 'Novo item no Quadro' : 'Detalhes do card'}
+              </h3>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {!detailModal.isNew && (
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => {
+                      const item = detailModal.draft;
+                      setDetailModal(null);
+                      triggerExecute(item);
+                    }}
+                  >
+                    <Play size={12} /> Executar
+                  </button>
+                )}
+                <button className="btn btn-sm btn-icon" onClick={() => setDetailModal(null)} title="Fechar (Esc)">
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 4 }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Título</label>
+                <input
+                  className="inp"
+                  autoFocus={detailModal.isNew}
+                  disabled={offlineFallback}
+                  value={detailModal.draft.title}
+                  onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, title: e.target.value } } : null))}
+                  placeholder="Título da tarefa ou melhoria…"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Coluna / Fase</label>
+                  <select
+                    className="sel"
+                    disabled={offlineFallback}
+                    value={detailModal.draft.status || 'idea'}
+                    onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, status: e.target.value as CardStatus } } : null))}
+                  >
+                    {BOARD_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Tag / Etapa (opcional)</label>
+                  <input
+                    className="inp"
+                    disabled={offlineFallback}
+                    value={detailModal.draft.phase || ''}
+                    onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, phase: e.target.value || undefined } } : null))}
+                    placeholder="Ex.: Fase 1, Backend, UI…"
+                  />
+                </div>
+              </div>
+
+              <div className="field" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label style={{ margin: 0 }}>Detalhes / Descrição (Markdown)</label>
+                  <div className="seg">
+                    <button
+                      type="button"
+                      className={!detailModal.bodyPreview ? 'on' : ''}
+                      onClick={() => setDetailModal((p) => (p ? { ...p, bodyPreview: false } : null))}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className={detailModal.bodyPreview ? 'on' : ''}
+                      onClick={() => setDetailModal((p) => (p ? { ...p, bodyPreview: true } : null))}
+                    >
+                      Visualizar
+                    </button>
+                  </div>
+                </div>
+                {detailModal.bodyPreview ? (
+                  <div className="card-item md" style={{ minHeight: 110, marginBottom: 0, background: '#101216' }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{detailModal.draft.body || '*Sem descrição.*'}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <textarea
+                    className="ta"
+                    rows={5}
+                    disabled={offlineFallback}
+                    value={detailModal.draft.body || ''}
+                    onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, body: e.target.value } } : null))}
+                    placeholder="Contexto, critérios de aceite, notas técnicas…"
+                  />
+                )}
+              </div>
+
+              {hasProjectCwd && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <label style={{ margin: 0 }}>Documento / Spec vinculada</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {detailModal.draft.docRef ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={() => {
+                              const ref = detailModal.draft.docRef!;
+                              setDetailModal(null);
+                              onOpenDoc?.(ref);
+                            }}
+                          >
+                            <FileText size={12} /> Abrir doc
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={reviewRunning}
+                            onClick={() => {
+                              const item = detailModal.draft;
+                              setDetailModal(null);
+                              requestItemReview(item);
+                            }}
+                          >
+                            🐟 Revisar Spec
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={offlineFallback || !detailModal.draft.title.trim()}
+                          onClick={() => handleCreateSpecForItem(detailModal.draft)}
+                        >
+                          <FilePlus2 size={12} /> Criar Spec (0 tok)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <input
+                    className="inp mono"
+                    style={{ fontSize: 12 }}
+                    disabled={offlineFallback}
+                    value={detailModal.draft.docRef || ''}
+                    onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, docRef: e.target.value || undefined } } : null))}
+                    placeholder="Ex.: docs/specs/minha-feature.md"
+                  />
+                  {detailModal.draft.review && detailModal.draft.review.status && detailModal.draft.review.status !== 'none' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12 }}>
+                      <span className={`badge ${detailModal.draft.review.status === 'approved' ? 'done' : 'review'}`}>
+                        {detailModal.draft.review.status === 'approved' ? '✅ Goldfish OK' : '⚠️ Ajustes sugeridos'}
+                      </span>
+                      <span style={{ color: 'var(--muted)', flex: 1 }}>{detailModal.draft.review.summary}</span>
+                      {detailModal.draft.review.reportPath && (
+                        <button
+                          type="button"
+                          className="doc-chip"
+                          onClick={() => {
+                            const rp = detailModal.draft.review!.reportPath!;
+                            setDetailModal(null);
+                            onOpenDoc?.(rp);
+                          }}
+                        >
+                          Ver parecer
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Prompt customizado para IA (opcional)</label>
+                <input
+                  className="inp"
+                  disabled={offlineFallback}
+                  value={detailModal.draft.prompt || ''}
+                  onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, prompt: e.target.value } } : null))}
+                  placeholder="Deixe vazio para gerar automaticamente a partir do título e da spec…"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Link externo (opcional)</label>
+                  <input
+                    className="inp"
+                    disabled={offlineFallback}
+                    value={detailModal.draft.url || ''}
+                    onChange={(e) => setDetailModal((p) => (p ? { ...p, draft: { ...p.draft, url: e.target.value || undefined } } : null))}
+                    placeholder="https://…"
+                  />
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Anexo de imagem</label>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <label className="btn btn-sm" style={{ cursor: offlineFallback ? 'default' : 'pointer' }}>
+                      <ImagePlus size={13} /> {detailModal.draft.image ? 'Trocar imagem' : 'Anexar imagem'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={offlineFallback}
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleModalImageUpload(f);
+                        }}
+                      />
+                    </label>
+                    {detailModal.draft.url && (
+                      <a href={detailModal.draft.url} target="_blank" rel="noreferrer" className="btn btn-sm">
+                        <ExternalLink size={12} /> Abrir link
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {detailModal.draft.image && (
+                <img
+                  src={api.entityAssetUrl(entityId, detailModal.draft.image)}
+                  alt={detailModal.draft.alt || detailModal.draft.title}
+                  style={{ width: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)', background: '#101216' }}
+                />
+              )}
+
+              {detailModal.draft.updatedAt && (
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  Última alteração: {new Date(detailModal.draft.updatedAt).toLocaleString('pt-BR')}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+              {!detailModal.isNew && !offlineFallback && (
+                <button className="btn btn-sm btn-danger" onClick={() => deleteFromModal(detailModal.draft.id)}>
+                  <Trash2 size={13} /> Excluir
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-sm" onClick={() => setDetailModal(null)}>Cancelar</button>
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={saving || offlineFallback || !detailModal.draft.title.trim()}
+                onClick={saveDetailModal}
+              >
+                <Save size={13} /> {saving ? 'Salvando…' : detailModal.isNew ? 'Criar card' : 'Salvar alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Goldfish Review */}
       {reviewModal && (
         <div className="modal-bg" onClick={() => { if (!reviewRunning) setReviewModal(null); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
@@ -979,7 +1295,7 @@ export function CardEditor({
           ))}
         </div>
 
-        <button className="btn btn-sm" onClick={() => addItem('idea')} disabled={offlineFallback}>
+        <button className="btn btn-sm" onClick={() => openNewItemModal('idea')} disabled={offlineFallback}>
           <Plus size={14} /> Novo item
         </button>
 
@@ -1023,41 +1339,28 @@ export function CardEditor({
         </button>
 
         <span className="badge" title={storage === 'in-project' ? 'Salvo em .ai-workspace/board.card.json dentro da pasta do projeto (portátil entre workspaces)' : 'Salvo no Hub do AI Workspace'}>
-          <HardDrive size={11} /> {storage === 'in-project' ? '.ai-workspace (portátil)' : storage === 'hub-cache' ? 'Cache offline' : 'Hub'}
+          <HardDrive size={11} /> {storage === 'in-project' ? '.ai-workspace' : storage === 'hub-cache' ? 'Cache offline' : 'Hub'}
         </span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           {dirty && <span className="badge waiting">Não salvo</span>}
-          <button className="btn btn-primary btn-sm" disabled={!dirty || saving || offlineFallback} onClick={() => save()}>
-            <Save size={14} /> {saving ? 'Salvando…' : 'Salvar (Ctrl+S)'}
-          </button>
+          {dirty && (
+            <button className="btn btn-primary btn-sm" disabled={saving || offlineFallback} onClick={() => save()}>
+              <Save size={14} /> {saving ? 'Salvando…' : 'Salvar (Ctrl+S)'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Banner discreto quando o quadro foi atualizado em disco (ex.: por uma IA via MCP ou arquivo) */}
-      {externalUpdateBanner === 'applied' && (
-        <div className="docs-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px' }}>
-          <span style={{ fontSize: 12.5 }}>
-            🔄 Quadro sincronizado automaticamente com alterações em disco (ex.: atualizadas pela IA).
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {hasProjectCwd && (
-              <button className="btn btn-sm" disabled={undoing} onClick={() => { setExternalUpdateBanner(null); handleUndoBoard(true); }}>
-                <RotateCcw size={12} /> Desfazer
-              </button>
-            )}
-            <button className="btn btn-sm btn-primary" onClick={() => setExternalUpdateBanner(null)}>Ok</button>
-          </div>
-        </div>
-      )}
-      {externalUpdateBanner === 'pending' && (
+      {/* Só avisa mudança em disco quando há edição local aberta/não salva */}
+      {pendingExternalReload && (
         <div className="docs-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderColor: 'rgba(229, 192, 99, .45)', background: 'rgba(229, 192, 99, .10)' }}>
           <span style={{ fontSize: 12.5 }}>
             🔄 O quadro mudou em disco enquanto você editava.
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn btn-sm btn-primary" onClick={() => checkExternalUpdate(true)}>Recarregar do disco</button>
-            <button className="btn btn-sm" onClick={() => setExternalUpdateBanner(null)}>Ignorar</button>
+            <button className="btn btn-sm" onClick={() => setPendingExternalReload(false)}>Ignorar</button>
           </div>
         </div>
       )}
@@ -1203,8 +1506,8 @@ export function CardEditor({
       {card.template === 'board' && (
         <div className="board-scroll">
           <div className="board-grid">
-            {STATUSES.map((col) => {
-              const items = card.items.filter((i) => (i.status || 'idea') === col.id);
+            {BOARD_STATUSES.map((col) => {
+              const items = sortRecentFirst(card.items.filter((i) => (i.status || 'idea') === col.id));
               return (
                 <div
                   key={col.id}
@@ -1225,14 +1528,13 @@ export function CardEditor({
                     const droppedId = e.dataTransfer.getData('text/plain') || dragItemId;
                     setDragItemId(null);
                     setDragOverCol(null);
-                    if (!droppedId) return;
-                    const found = card.items.find((i) => i.id === droppedId);
-                    if (found) changeItemStatus(found, col.id, true);
+                    setDragOverCardId(null);
+                    if (droppedId) handleDropCard(droppedId, col.id);
                   }}
                 >
                   <div className="board-col-head">
                     <span>{col.label} ({items.length})</span>
-                    <button className="btn btn-sm btn-icon" onClick={() => addItem(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>
+                    <button className="btn btn-sm btn-icon" onClick={() => openNewItemModal(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>
                       <Plus size={12} />
                     </button>
                   </div>
@@ -1248,13 +1550,13 @@ export function CardEditor({
 
       {card.template === 'research' && (
         <div className="research-list">
-          {card.items.length === 0 ? <div className="empty">Nenhum item ainda. Clique em "Novo item" ou "Importar de docs/".</div> : card.items.map(renderItemCard)}
+          {card.items.length === 0 ? <div className="empty">Nenhum item ainda. Clique em "Novo item" ou "Importar de docs/".</div> : sortRecentFirst(card.items).map(renderItemCard)}
         </div>
       )}
 
       {card.template === 'gallery' && (
         <div className="gallery-grid">
-          {card.items.length === 0 ? <div className="empty">Galeria vazia. Adicione itens com imagens ou prompts.</div> : card.items.map(renderItemCard)}
+          {card.items.length === 0 ? <div className="empty">Galeria vazia. Adicione itens com imagens ou prompts.</div> : sortRecentFirst(card.items).map(renderItemCard)}
         </div>
       )}
     </div>

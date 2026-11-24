@@ -1,12 +1,26 @@
 // Rotas de sistema de arquivos somente leitura por projeto (/api/fs/preview, /api/fs/list, /api/fs/git).
 // Sempre restritas ao `cwd` da sessão ou a pastas conhecidas/autorizadas (path-guard).
+const fs = require('fs');
 const os = require('os');
-const { isCwdAllowed } = require('../../core/path-guard');
+const path = require('path');
+const { isCwdAllowed, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
 const { readWorkspaceJson } = require('../../collect/workspace');
 
-module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, json, text }) => {
+const IMAGE_MIMES = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+};
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
     const wsRoots = [];
@@ -133,6 +147,83 @@ module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pic
       }
       const r = await pickFolder({ initialDir });
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    // GET /api/fs/image?id=&cwd=&machine=&path=&download=1: serve imagem contida na pasta da sessão/projeto (com proxy binário multi-máquina)
+    { method: 'GET', path: '/api/fs/image', handler: async ({ res, url }) => {
+      const id = url.searchParams.get('id') || '';
+      const cwdParam = url.searchParams.get('cwd') || '';
+      const machine = url.searchParams.get('machine') || '';
+      const rawPath = url.searchParams.get('path') || '';
+      const download = url.searchParams.get('download') === '1';
+      if (!rawPath) return text(res, 400, 'informe o caminho da imagem');
+
+      const forwardBinary = (peer, routePath) => peers.forward(peer, 'GET', routePath).then((r) => {
+        if (r.status !== 200) return text(res, r.status, r.text || 'imagem indisponível');
+        const fname = path.basename(rawPath.split(/[?#]/)[0]).replace(/[^\w.-]+/g, '_') || 'imagem.png';
+        const headers = {
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, max-age=60',
+          ...(download ? { 'Content-Disposition': `attachment; filename="${fname}"` } : {}),
+        };
+        return send(res, 200, r.contentType || 'application/octet-stream', r.buffer, headers);
+      }, () => text(res, 502, 'o outro PC não respondeu'));
+
+      let baseCwd = cwdParam;
+      if (id) {
+        const remote = peers.byId(id);
+        if (remote) {
+          const q = `/api/fs/image?id=${encodeURIComponent(remote.rid)}&path=${encodeURIComponent(rawPath)}${download ? '&download=1' : ''}`;
+          return forwardBinary(remote.peer, q);
+        }
+        const s = collector.find((x) => x.id === id && !x.subagent);
+        if (!s || !s.cwd) return text(res, 404, 'sessão sem pasta de projeto');
+        baseCwd = s.cwd;
+      } else {
+        if (!baseCwd) return text(res, 400, 'informe id da sessão ou cwd autorizado');
+        if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+          const peer = peers.list.find((p) => p.name === machine);
+          if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
+          const q = `/api/fs/image?local=1&cwd=${encodeURIComponent(baseCwd)}&path=${encodeURIComponent(rawPath)}${download ? '&download=1' : ''}`;
+          return forwardBinary(peer, q);
+        }
+        const check = checkAuthorizedCwd(baseCwd);
+        if (!check.ok) return text(res, 403, check.reason);
+      }
+
+      if (!fs.existsSync(baseCwd)) return text(res, 404, 'pasta do projeto não encontrada');
+      let cleanPath = rawPath.split(/[?#]/)[0].trim();
+      try { cleanPath = decodeURIComponent(cleanPath); } catch {}
+      if (/^file:\/\//i.test(cleanPath)) {
+        cleanPath = cleanPath.replace(/^file:\/\/\//i, '').replace(/^file:\/\//i, '');
+        if (!/^[a-zA-Z]:/.test(cleanPath) && !cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
+      }
+
+      const rel = toSafeRelPath(cleanPath, baseCwd);
+      if (!rel || isSecretPath(rel)) return text(res, 403, 'caminho de imagem fora da pasta do projeto');
+      const ext = path.extname(rel).toLowerCase();
+      const mime = IMAGE_MIMES[ext];
+      if (!mime) return text(res, 400, 'extensão de imagem não permitida');
+
+      const realRoot = fs.realpathSync(baseCwd);
+      const target = resolveContainedPath(realRoot, rel);
+      if (!target || !isWithinRoot(realRoot, target) || !fs.existsSync(target)) {
+        return text(res, 404, 'imagem não encontrada');
+      }
+      const realFile = fs.realpathSync(target);
+      if (!isWithinRoot(realRoot, realFile)) return text(res, 403, 'link simbólico fora do projeto');
+      const st = fs.statSync(realFile);
+      if (!st.isFile() || st.size > MAX_IMAGE_BYTES) return text(res, 413, 'imagem inválida ou excede 15 MB');
+
+      const buf = fs.readFileSync(realFile);
+      const fname = path.basename(realFile).replace(/[^\w.-]+/g, '_') || 'imagem.png';
+      const headers = {
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'private, max-age=60',
+        ...(ext === '.svg' ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } : {}),
+        ...(download ? { 'Content-Disposition': `attachment; filename="${fname}"` } : {}),
+      };
+      return send(res, 200, mime, buf, headers);
     } },
   ];
 };

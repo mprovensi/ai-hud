@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft,
   Check,
+  Download,
   GitFork,
   MessageSquare,
   Paperclip,
@@ -18,7 +19,37 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { XtermPty } from './XtermPty';
-import type { SessionCard, SessionDetail, Snapshot } from '../types';
+import type { CardStatus, SessionCard, SessionDetail, Snapshot } from '../types';
+
+export interface CardExecIntent {
+  entityId: string;
+  itemId: string;
+  title: string;
+  currentStatus: CardStatus;
+  nextStatus: CardStatus | null;
+  nextLabel: string;
+  prompt: string;
+}
+
+const IMAGE_PATH_RE = /\.(png|jpe?g|webp|gif|svg|bmp|ico)(?:[?#].*)?$/i;
+
+function isLocalImageHref(raw?: string): boolean {
+  if (!raw) return false;
+  const s = raw.trim();
+  if (!s || /^https?:\/\//i.test(s) || /^data:/i.test(s) || /^javascript:/i.test(s)) return false;
+  return IMAGE_PATH_RE.test(s);
+}
+
+function safeMarkdownUrl(url: string): string {
+  const s = String(url || '').trim();
+  if (/^(javascript|vbscript|data:text\/html)/i.test(s)) return '';
+  return s;
+}
+
+function imageFileName(raw: string): string {
+  const clean = raw.split(/[?#]/)[0].replace(/\\/g, '/');
+  return clean.split('/').filter(Boolean).pop() || 'imagem.png';
+}
 
 interface Props {
   snapshot: Snapshot | null;
@@ -29,6 +60,9 @@ interface Props {
   onFocusSessionConsumed?: () => void;
   draftPrompt?: string;
   onDraftConsumed: () => void;
+  pendingCardExec?: CardExecIntent | null;
+  onCancelCardExec?: () => void;
+  onCardExecAttached?: (sessionId: string) => void;
   onOpenNewSession: (initialPrompt?: string) => void;
   onNotify: (msg: string, err?: boolean) => void;
   onPollNow: () => void;
@@ -53,6 +87,9 @@ export function LiveHudPane({
   onFocusSessionConsumed,
   draftPrompt,
   onDraftConsumed,
+  pendingCardExec = null,
+  onCancelCardExec,
+  onCardExecAttached,
   onOpenNewSession,
   onNotify,
   onPollNow,
@@ -64,6 +101,7 @@ export function LiveHudPane({
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
+  const [lightboxImg, setLightboxImg] = useState<{ src: string; download: string; name: string } | null>(null);
 
   // Handoff inline
   const [handoffOpen, setHandoffOpen] = useState(false);
@@ -166,6 +204,9 @@ export function LiveHudPane({
     stickBottomRef.current = true;
     try {
       await api.replySession({ id: detail.id, key: detail.key || '', tool: detail.tool, text: replyText.trim() });
+      if (pendingCardExec && onCardExecAttached) {
+        onCardExecAttached(detail.id);
+      }
       setReplyText('');
       onNotify('Mensagem enviada à sessão.');
       onPollNow();
@@ -439,7 +480,65 @@ export function LiveHudPane({
                         {m.role === 'user' ? (
                           <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
                         ) : (
-                          <div className="md"><ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown></div>
+                          <div className="md">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              urlTransform={safeMarkdownUrl}
+                              components={{
+                                img: ({ src, alt }) => {
+                                  const raw = String(src || '');
+                                  const isLocal = isLocalImageHref(raw);
+                                  const resolvedSrc = isLocal ? api.sessionImageUrl(detail.id, raw, false) : raw;
+                                  const dlSrc = isLocal ? api.sessionImageUrl(detail.id, raw, true) : raw;
+                                  const name = imageFileName(raw);
+                                  return (
+                                    <span className="chat-img-card">
+                                      <img
+                                        src={resolvedSrc}
+                                        alt={alt || name}
+                                        onClick={() => setLightboxImg({ src: resolvedSrc, download: dlSrc, name })}
+                                      />
+                                      <span className="chat-img-foot">
+                                        <span className="mono ell" style={{ flex: 1 }}>{name}</span>
+                                        <a href={dlSrc} download={name} className="btn btn-sm" style={{ textDecoration: 'none' }}>
+                                          <Download size={11} /> Baixar
+                                        </a>
+                                      </span>
+                                    </span>
+                                  );
+                                },
+                                a: ({ href, children }) => {
+                                  const raw = String(href || '');
+                                  if (isLocalImageHref(raw)) {
+                                    const imgSrc = api.sessionImageUrl(detail.id, raw, false);
+                                    const dlSrc = api.sessionImageUrl(detail.id, raw, true);
+                                    const name = imageFileName(raw);
+                                    return (
+                                      <span className="chat-img-card">
+                                        <img
+                                          src={imgSrc}
+                                          alt={name}
+                                          onClick={() => setLightboxImg({ src: imgSrc, download: dlSrc, name })}
+                                        />
+                                        <span className="chat-img-foot">
+                                          <span className="mono ell" style={{ flex: 1 }}>{name}</span>
+                                          <a href={dlSrc} download={name} className="btn btn-sm" style={{ textDecoration: 'none' }}>
+                                            <Download size={11} /> {children || 'Baixar'}
+                                          </a>
+                                        </span>
+                                      </span>
+                                    );
+                                  }
+                                  if (/^https?:\/\//i.test(raw)) {
+                                    return <a href={raw} target="_blank" rel="noreferrer">{children}</a>;
+                                  }
+                                  return <code className="mono">{children}</code>;
+                                },
+                              }}
+                            >
+                              {m.content}
+                            </ReactMarkdown>
+                          </div>
                         )}
                       </div>
                     ))
@@ -454,6 +553,16 @@ export function LiveHudPane({
 
               {/* Fixed Bottom Reply Composer */}
               <div className="hud-chat-footer">
+                {pendingCardExec && pendingCardExec.nextStatus && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 8px', borderRadius: 7, background: 'rgba(95, 184, 164, .10)', border: '1px solid rgba(95, 184, 164, .35)', marginBottom: 4 }}>
+                    <span className="ell" style={{ flex: 1 }}>
+                      🎯 Card <b>{pendingCardExec.title}</b> → avançará p/ <b>{pendingCardExec.nextLabel}</b> ao concluir
+                    </span>
+                    <button className="btn btn-sm btn-icon" style={{ padding: 2, border: 0, background: 'transparent' }} title="Não avançar automaticamente" onClick={onCancelCardExec}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
                 {replyText.startsWith('/') && skills.length > 0 && (
                   <div style={{ border: '1px solid var(--border-hi)', borderRadius: 8, background: '#111318', overflow: 'hidden' }}>
                     {skills
@@ -569,6 +678,19 @@ export function LiveHudPane({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {lightboxImg && (
+        <div className="img-lightbox" onClick={() => setLightboxImg(null)}>
+          <img src={lightboxImg.src} alt={lightboxImg.name} onClick={(e) => e.stopPropagation()} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()}>
+            <span className="mono" style={{ fontSize: 12, color: '#d8dee9' }}>{lightboxImg.name}</span>
+            <a href={lightboxImg.download} download={lightboxImg.name} className="btn btn-sm btn-primary" style={{ textDecoration: 'none' }}>
+              <Download size={13} /> Baixar imagem
+            </a>
+            <button className="btn btn-sm" onClick={() => setLightboxImg(null)}>Fechar</button>
+          </div>
         </div>
       )}
     </aside>

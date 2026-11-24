@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Folder, FolderOpen, Monitor, Star } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, FolderSearch, Monitor, Star } from 'lucide-react';
 import { api } from '../api';
 import type { FsEntry, MachineCaps, WorkspaceEntity } from '../types';
 
@@ -46,6 +46,7 @@ export function FolderPicker({
   const [browseBase, setBrowseBase] = useState('');
   const [browseRel, setBrowseRel] = useState('');
   const [browseDirs, setBrowseDirs] = useState<FsEntry[]>([]);
+  const [pickingNative, setPickingNative] = useState(false);
 
   const currentMachine = useMemo(() => caps.find((m) => m.name === machine) || caps[0] || null, [caps, machine]);
   const pinnedSet = useMemo(() => new Set((currentMachine?.pinned || []).map((p) => p.toLowerCase())), [currentMachine]);
@@ -97,6 +98,24 @@ export function FolderPicker({
     }
   }
 
+  async function openNativePicker() {
+    if (pickingNative) return;
+    setPickingNative(true);
+    try {
+      const r = await api.pickFolder({ machine: currentMachine?.name, initialDir: cwd.trim() || undefined });
+      if (!r.canceled && r.path) {
+        setBrowseBase('');
+        setBrowseRel('');
+        setBrowseDirs([]);
+        onChangeCwd(r.path);
+      }
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setPickingNative(false);
+    }
+  }
+
   return (
     <>
       {caps.length > 1 && (
@@ -140,13 +159,26 @@ export function FolderPicker({
           </div>
         </div>
 
-        <input
-          className="inp mono"
-          style={{ marginBottom: 6, fontSize: 12 }}
-          value={cwd}
-          onChange={(e) => onChangeCwd(e.target.value)}
-          placeholder="Caminho completo da pasta (ex.: D:\Projetos\meu-app)…"
-        />
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input
+            className="inp mono"
+            style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+            value={cwd}
+            onChange={(e) => onChangeCwd(e.target.value)}
+            placeholder="Caminho completo da pasta (ex.: D:\Projetos\meu-app)…"
+          />
+          <button
+            type="button"
+            className="btn btn-icon"
+            style={{ width: 36, flexShrink: 0 }}
+            disabled={pickingNative}
+            onClick={openNativePicker}
+            aria-label="Selecionar pasta no sistema"
+            title="Selecionar pasta no sistema (seletor nativo)"
+          >
+            <FolderSearch size={15} />
+          </button>
+        </div>
 
         {!browseBase ? (
           <>

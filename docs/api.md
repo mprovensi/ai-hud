@@ -68,6 +68,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `POST /api/fs/exec` | `{ cwd, machine?, command, timeoutMs? }` → `{ ok, code, timedOut, truncated, redacted, durationMs, stdout, stderr }` (terminal integrado em pastas autorizadas; desativável via `config.disableTerminal`) |
 | `GET /api/pty/status` | `{ ok, available, backend, active }` (status do PTY nativo — `win32-conpty` no Windows ou `unix-pty` no Linux/macOS) |
 | `WS /ws/pty` | WebSocket RFC 6455 nativo (`?cwd=&machine=&mode=resume\|cli\|shell&tool=&sessionId=&cols=&rows=&key=`) para terminal `xterm.js` interativo real (com proxy multi-máquina) |
+| `POST /api/fs/pick-folder` | `{ machine?, initialDir? }` → `{ ok, path, canceled }` (abre o seletor nativo de pastas do sistema operacional na máquina escolhida) |
 
 ## AI Workspace & Memória Compartilhada (`/api/workspace/*`, `/api/memory/*`)
 

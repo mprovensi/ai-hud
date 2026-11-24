@@ -177,6 +177,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  pickFolder: (body: { machine?: string; initialDir?: string } = {}) =>
+    apiFetch<{ ok: boolean; path: string; canceled: boolean }>('/api/fs/pick-folder', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   decidePermission: (body: { id: string; decision: 'allow' | 'deny'; session: string }) =>
     apiFetch<{ ok?: boolean }>('/api/permission', {
       method: 'POST',

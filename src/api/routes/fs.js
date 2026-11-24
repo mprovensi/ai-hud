@@ -4,7 +4,7 @@ const os = require('os');
 const { isCwdAllowed } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
 
-module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, peers, collector, config, machineName, relay, json, text }) => {
+module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pickFolder, peers, collector, config, machineName, relay, json, text }) => {
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
     return isCwdAllowed(cwd, {
@@ -104,6 +104,19 @@ module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pee
 
     { method: 'GET', path: '/api/pty/status', handler: ({ res }) => {
       json(res, ptyManager ? ptyManager.status() : { ok: true, available: false });
+    } },
+
+    { method: 'POST', path: '/api/fs/pick-folder', json: true, maxBytes: 4096, handler: async ({ res, url, body }) => {
+      if (!pickFolder) return text(res, 501, 'Seletor nativo indisponível.');
+      const machine = String((body && body.machine) || '').trim();
+      const initialDir = String((body && body.initialDir) || '').trim();
+      if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+        const peer = peers.list.find((p) => p.name === machine);
+        if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
+        return relay(res, peers.forward(peer, 'POST', '/api/fs/pick-folder?local=1', { initialDir }));
+      }
+      const r = await pickFolder({ initialDir });
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
   ];
 };

@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 
 const { acceptKey, encodeFrame, decodeFrames } = require('../../src/core/websocket');
 const { buildInteractiveCommand } = require('../../src/actions/pty');
+const { createFolderPicker } = require('../../src/actions/folder-picker');
 const { createApp } = require('../../src/main');
 
 function tmpDir(prefix) {
@@ -35,6 +36,25 @@ test('buildInteractiveCommand monta comandos interativos corretos para Claude, C
   assert.match(buildInteractiveCommand({ mode: 'resume', tool: 'Codex', sessionId: uuid, codexExe: 'codex' }), /codex resume 11111111/);
   assert.match(buildInteractiveCommand({ mode: 'resume', tool: 'Gemini', sessionId: uuid, agyExe: 'agy' }), /agy --conversation 11111111/);
   assert.match(buildInteractiveCommand({ mode: 'shell', platform: 'win32' }), /powershell\.exe/i);
+});
+
+test('createFolderPicker devolve pasta escolhida e trata cancelamento (mock Windows/macOS)', async () => {
+  const winOk = createFolderPicker({
+    platform: 'win32',
+    exec: (_exe, _args, _opts, cb) => cb(null, 'D:\\Projetos\\meu-app\r\n', ''),
+  });
+  const r1 = await winOk({});
+  assert.equal(r1.status, 200);
+  assert.equal(r1.body.path, 'D:\\Projetos\\meu-app');
+  assert.equal(r1.body.canceled, false);
+
+  const winCancel = createFolderPicker({
+    platform: 'win32',
+    exec: (_exe, _args, _opts, cb) => cb(null, '', ''),
+  });
+  const r2 = await winCancel({});
+  assert.equal(r2.status, 200);
+  assert.equal(r2.body.canceled, true);
 });
 
 test('WebSocket /ws/pty end-to-end: bloqueia sem auth/pasta não autorizada e roda PTY real interativo', async () => {

@@ -30,6 +30,7 @@ const { createPush } = require('./actions/push');
 const { createVoice } = require('./actions/voice');
 const { createTerminal } = require('./actions/terminal');
 const { createPtyManager } = require('./actions/pty');
+const { createFolderPicker } = require('./actions/folder-picker');
 const { attachWsPty } = require('./api/ws-pty');
 const { createRunning } = require('./actions/running');
 const { compareSessions } = require('./core/session');
@@ -168,11 +169,12 @@ function createApp({
   const voice = createVoice({ config, exec });
   const terminal = createTerminal({ config });
   const ptyManager = createPtyManager({ dataDir, config, claudeExe, codexExe, agyExe, log });
+  const pickFolder = createFolderPicker({ exec });
 
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, memory, push, voice, terminal, ptyManager, filePreview, fileList, projectGit,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, memory, push, voice, terminal, ptyManager, pickFolder, filePreview, fileList, projectGit,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });

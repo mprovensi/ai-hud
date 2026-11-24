@@ -84,6 +84,14 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `POST /api/workspace/entity/media` | Upload seguro de imagem (PNG/JPG/WEBP/GIF, até 10 MB) para `media/` da entidade |
 | `GET / PUT /api/workspace/doc` | Lê ou grava documento em `context/`, `knowledge/` ou `skills/` (com proteção `409`) |
 | `GET / POST /api/workspace/sync` | Status e sincronização Git segura de `data/workspace/` (`add` → `commit` → `pull --rebase` → `push`, abortando rebase sem perda em caso de conflito `409`) |
+| `GET /api/workspace/project/docs` | Lista documentos Markdown reais do projeto (`docs/`, `README.md`, `.ai-workspace/reviews/`) classificados (`plan`, `spec`, `doc`, `review`) + status portátil (0 tokens) |
+| `GET / PUT /api/workspace/project/doc` | Lê ou grava documento Markdown do projeto com proteção `409 Conflict` (`baseHash`) e federação multi-máquina |
+| `POST /api/workspace/project/spec` | Cria especificação enxuta EGM Lite em `docs/specs/<slug>.md` (0 tokens) |
+| `GET / PUT /api/workspace/project/board` | Lê ou grava o Quadro portátil em `<cwd>/.ai-workspace/board.card.json` (com `.git/info/exclude`, migração automática, cache offline no Hub e federação) |
+| `POST /api/workspace/project/import-docs` | Extrai checklists (`- [ ]`/`- [x]`) e seções de `docs/` para o Quadro sem usar LLM (0 tokens) |
+| `POST /api/workspace/project/review` | Revisão Goldfish (EGM Lite, 1 chamada contexto zero; `dryRun: true` retorna estimativa de tokens antes; salva parecer em `.ai-workspace/reviews/` e loga tokens) |
+| `POST /api/workspace/project/structure-ai` | Estruturação opcional de docs em texto corrido via IA (`dryRun: true` para ver estimativa; retorna prévia sem sobrescrever) |
+| `GET /api/workspace/usage` | Resumo e histórico de gasto de tokens do workflow EGM Lite (`data/workspace/workflow-usage.jsonl`) |
 | `GET /api/memory?project=&cwd=` | Sem filtro: lista todos os projetos e pendências de Dreaming; com projeto: lê `MEMORY.md`, `current-state.md`, `pinned.md`, `decisions.md`, `pitfalls.md`, `dream-log.md` e `episodic[]` |
 | `PUT /api/memory/file` | Edita arquivo de memória (ex.: `pinned.md`) com proteção `409` + backup |
 | `POST /api/memory/dream` | Dispara consolidação (Dreaming) manual cota-aware (`{ project, cwd?, engine?, dryRun?, force?, ignoreQuota? }`) |

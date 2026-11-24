@@ -32,6 +32,7 @@ import { MemoryPanel } from './components/MemoryPanel';
 import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjectDrawer';
 import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
+import { ProjectDocsPane } from './components/ProjectDocsPane';
 import { QuotaDrawer, type QuotaProvider } from './components/QuotaDrawer';
 import { TerminalPane } from './components/TerminalPane';
 import { WorkspaceHome } from './components/WorkspaceHome';
@@ -42,7 +43,7 @@ type Selection =
   | { kind: 'doc'; area: 'context' | 'knowledge' | 'skills' | 'handoffs'; name: string }
   | null;
 
-type EntityTab = 'step' | 'memory' | 'files' | 'terminal';
+type EntityTab = 'step' | 'docs' | 'memory' | 'files' | 'terminal';
 
 function quotaPair(q?: { windows?: Record<string, { used: number }> }): { primary: string; secondary: string | null } | null {
   if (!q?.windows) return null;
@@ -71,6 +72,8 @@ export function App() {
   const [selection, setSelection] = useState<Selection>(null);
   const [entityTab, setEntityTab] = useState<EntityTab>('step');
   const [stepIdx, setStepIdx] = useState(0);
+  const [activeProjectDoc, setActiveProjectDoc] = useState('');
+  const [boardReloadKey, setBoardReloadKey] = useState(0);
   const [search, setSearch] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState('');
@@ -661,15 +664,27 @@ export function App() {
                 </div>
 
                 <div className="tabs">
-                  {selectedEntity.steps.map((st, idx) => (
+                  {selectedEntity.steps.map((st, idx) => {
+                    // Em projetos com pasta vinculada, substitui a aba genérica "Notas" (notes.md) por "Docs & Specs"
+                    if (activeBinding && st.path === 'notes.md') return null;
+                    return (
+                      <button
+                        key={st.path}
+                        className={`tab ${entityTab === 'step' && stepIdx === idx ? 'active' : ''}`}
+                        onClick={() => { setEntityTab('step'); setStepIdx(idx); }}
+                      >
+                        <FileText size={14} /> {st.name}
+                      </button>
+                    );
+                  })}
+                  {activeBinding && (
                     <button
-                      key={st.path}
-                      className={`tab ${entityTab === 'step' && stepIdx === idx ? 'active' : ''}`}
-                      onClick={() => { setEntityTab('step'); setStepIdx(idx); }}
+                      className={`tab ${entityTab === 'docs' ? 'active' : ''}`}
+                      onClick={() => setEntityTab('docs')}
                     >
-                      <FileText size={14} /> {st.name}
+                      <BookOpen size={14} /> Docs & Specs
                     </button>
-                  ))}
+                  )}
                   <button
                     className={`tab ${entityTab === 'memory' ? 'active' : ''}`}
                     onClick={() => setEntityTab('memory')}
@@ -701,8 +716,11 @@ export function App() {
                     <CardEditor
                       entityId={selectedEntity.id}
                       filePath={activeStep.path}
+                      hasProjectCwd={!!activeBinding}
+                      reloadKey={boardReloadKey}
                       onNotify={notify}
                       onSendPrompt={(p) => setDraftPrompt(p)}
+                      onOpenDoc={(p) => { setActiveProjectDoc(p); setEntityTab('docs'); }}
                     />
                   ) : (
                     <NotesAndReports
@@ -713,6 +731,14 @@ export function App() {
                       onNotify={notify}
                     />
                   )
+                ) : entityTab === 'docs' && activeBinding ? (
+                  <ProjectDocsPane
+                    entityId={selectedEntity.id}
+                    initialDocPath={activeProjectDoc}
+                    onNotify={notify}
+                    onSendPrompt={(p) => setDraftPrompt(p)}
+                    onBoardChanged={() => setBoardReloadKey((k) => k + 1)}
+                  />
                 ) : entityTab === 'memory' ? (
                   <MemoryPanel
                     project={selectedEntity.id}

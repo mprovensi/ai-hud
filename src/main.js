@@ -25,6 +25,7 @@ const { createSessionMeta } = require('./actions/session-meta');
 const { createUpload } = require('./actions/upload');
 const { createWorkspaceActions } = require('./actions/workspace');
 const { createWorkspaceSync } = require('./actions/workspace/sync');
+const { createWorkspaceWorkflow } = require('./actions/workspace/workflow');
 const { createMemoryActions } = require('./actions/memory');
 const { createPush } = require('./actions/push');
 const { createVoice } = require('./actions/voice');
@@ -152,6 +153,9 @@ function createApp({
   const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });
   const workspaceSync = createWorkspaceSync({ dataDir, config, log });
+  const workspaceWorkflow = createWorkspaceWorkflow({
+    dataDir, config, quotas, ollama, claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel, log,
+  });
   const memory = createMemoryActions({
     dataDir, config, collector, quotas, ollama,
     claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel,
@@ -174,7 +178,7 @@ function createApp({
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, memory, push, voice, terminal, ptyManager, pickFolder, filePreview, fileList, projectGit,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, push, voice, terminal, ptyManager, pickFolder, filePreview, fileList, projectGit,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });

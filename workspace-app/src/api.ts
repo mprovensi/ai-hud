@@ -1,10 +1,15 @@
 import type {
   CardDoc,
+  CardItem,
   ConflictError,
+  DreamUsage,
   FsEntry,
   GitInfo,
+  GoldfishEstimate,
+  GoldfishReviewResult,
   MachineCaps,
   MemoryData,
+  ProjectDocEntry,
   SessionDetail,
   Snapshot,
   WorkspaceEntity,
@@ -284,4 +289,89 @@ export const api = {
     apiFetch<{ ok: boolean; path: string; mode: string; content: string; truncated?: boolean; binary?: boolean; redacted?: boolean; fallback?: string }>(
       `/api/fs/preview?cwd=${encodeURIComponent(opts.cwd)}&path=${encodeURIComponent(opts.path)}&mode=${opts.mode}${opts.machine ? `&machine=${encodeURIComponent(opts.machine)}` : ''}`,
     ),
+
+  // ---- Docs & Specs reais do projeto + Quadro portátil (.ai-workspace/) + EGM Lite ----
+
+  listProjectDocs: (entityId: string) =>
+    apiFetch<{ ok: boolean; cwd: string; hasPortableBoard: boolean; boardPath: string; gitMode: string; docs: ProjectDocEntry[] }>(
+      `/api/workspace/project/docs?entityId=${encodeURIComponent(entityId)}`,
+    ),
+
+  getProjectDoc: (entityId: string, docPath: string) =>
+    apiFetch<{ ok: boolean; path: string; category: string; title: string; content: string; hash: string; mtimeMs: number; size: number }>(
+      `/api/workspace/project/doc?entityId=${encodeURIComponent(entityId)}&path=${encodeURIComponent(docPath)}`,
+    ),
+
+  saveProjectDoc: (body: { entityId: string; path: string; content: string; baseHash?: string }) =>
+    apiFetch<{ ok: boolean; path: string; hash: string }>('/api/workspace/project/doc', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  createProjectSpec: (body: { entityId: string; title: string; summary?: string; folder?: string }) =>
+    apiFetch<{ ok: boolean; path: string; title: string; content: string; hash: string }>('/api/workspace/project/spec', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getProjectBoard: (entityId: string) =>
+    apiFetch<{
+      ok: boolean;
+      exists: boolean;
+      migrated?: boolean;
+      storage: 'in-project' | 'hub' | 'hub-cache';
+      offlineFallback?: boolean;
+      path?: string;
+      content: CardDoc | null;
+      hash: string;
+    }>(`/api/workspace/project/board?entityId=${encodeURIComponent(entityId)}`),
+
+  saveProjectBoard: (body: { entityId: string; content: CardDoc; baseHash?: string }) =>
+    apiFetch<{ ok: boolean; storage: string; path?: string; hash: string }>('/api/workspace/project/board', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  importProjectDocs: (body: { entityId: string; paths?: string[]; dryRun?: boolean }) =>
+    apiFetch<{
+      ok: boolean;
+      dryRun?: boolean;
+      tokensUsed: number;
+      docsScanned: { path: string; title: string; category: string; count: number }[];
+      totalDetected?: number;
+      toAdd?: CardItem[];
+      alreadyPresent?: number;
+      addedCount?: number;
+      totalItems?: number;
+      board?: CardDoc;
+      hash?: string;
+    }>('/api/workspace/project/import-docs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  reviewProjectSpec: (body: { entityId: string; docPath: string; itemId?: string; engine?: string; model?: string; dryRun?: boolean }) =>
+    apiFetch<GoldfishEstimate | GoldfishReviewResult>('/api/workspace/project/review', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  structureDocsAi: (body: { entityId: string; docPaths: string[]; engine?: string; model?: string; dryRun?: boolean }) =>
+    apiFetch<{
+      ok: boolean;
+      dryRun?: boolean;
+      available?: boolean;
+      engine?: string;
+      model?: string;
+      reason?: string;
+      estimatedInputTokens?: number;
+      estimatedOutputTokens?: number;
+      estimatedTotalTokens?: number;
+      durationMs?: number;
+      usage?: DreamUsage;
+      items?: CardItem[];
+    }>('/api/workspace/project/structure-ai', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

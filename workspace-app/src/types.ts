@@ -1,5 +1,12 @@
 export type CardTemplate = 'board' | 'research' | 'gallery';
-export type CardStatus = 'idea' | 'in-progress' | 'review' | 'done';
+export type CardStatus = 'idea' | 'spec' | 'in-progress' | 'review' | 'done';
+
+export interface CardReviewMeta {
+  status?: 'none' | 'approved' | 'changes';
+  at?: number;
+  summary?: string;
+  reportPath?: string;
+}
 
 export interface CardItem {
   id: string;
@@ -13,6 +20,51 @@ export interface CardItem {
   status?: CardStatus | '';
   sessionRef?: { machine?: string; id: string; tool?: string } | null;
   handoffPath?: string;
+  docRef?: string;
+  phase?: string;
+  review?: CardReviewMeta | null;
+}
+
+export interface ProjectDocEntry {
+  path: string;
+  name: string;
+  category: 'plan' | 'spec' | 'review' | 'doc';
+  title: string;
+  size: number;
+  mtimeMs: number;
+  taskCount: number;
+  doneCount: number;
+}
+
+export interface GoldfishEstimate {
+  ok: boolean;
+  dryRun: true;
+  docPath: string;
+  engine: string;
+  model: string;
+  reason: string;
+  available: boolean;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedTotalTokens: number;
+  promptChars: number;
+}
+
+export interface GoldfishReviewResult {
+  ok: boolean;
+  docPath: string;
+  engine: string;
+  model: string;
+  durationMs: number;
+  verdict: 'approved' | 'changes';
+  summary: string;
+  gaps: string[];
+  risks: string[];
+  cuts: string[];
+  markdown: string;
+  reportPath?: string;
+  review?: CardReviewMeta;
+  usage?: DreamUsage;
 }
 
 export interface CardDoc {
@@ -44,6 +96,7 @@ export interface WorkspaceEntity {
   status?: string;
   pinned?: boolean;
   folder: string;
+  storageMode?: 'in-project' | 'hub';
   projectBindings?: ProjectBinding[];
   defaultAgent?: string;
   steps: EntityStep[];

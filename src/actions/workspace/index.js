@@ -5,6 +5,8 @@ const { isSafeRelativePath, isWithinRoot, isSecretPath, resolveContainedPath } =
 const { slugifyEntity, validateCard, validateWorkspaceIndex, defaultCard } = require('../../core/workspace-schema');
 const { resolveWorkspaceRoot, hashContent, writeAtomicWithBackup } = require('../../infra/workspace-paths');
 const { readWorkspaceJson, findEntity, resolveEntityRoot } = require('../../collect/workspace');
+const { readPortableBoard } = require('../../collect/workspace/project-docs');
+const { savePortableBoard } = require('./project-storage');
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
@@ -55,6 +57,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     const folder = `entities/${day}_${id}`;
     const cardPath = 'overview.card.json';
     const notesPath = 'notes.md';
+    const hasBinding = bindings.some((b) => b && b.cwd);
     const entity = {
       id,
       title: cleanTitle.slice(0, 200),
@@ -64,6 +67,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       status: 'active',
       pinned: false,
       folder,
+      storageMode: hasBinding ? 'in-project' : 'hub',
       projectBindings: bindings,
       defaultAgent: String(defaultAgent || 'claude').slice(0, 40),
       steps: [
@@ -83,7 +87,19 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       return { status: e.status || 400, body: e.message };
     }
 
-    const card = defaultCard({ title: cleanTitle, template, summary: entity.description });
+    let card = defaultCard({ title: cleanTitle, template, summary: entity.description });
+    let restoredPortable = false;
+    const localCwd = bindings[0] && bindings[0].cwd;
+    if (localCwd && fs.existsSync(localCwd)) {
+      const existing = readPortableBoard(localCwd);
+      if (existing.status === 200 && existing.body.exists && existing.body.content) {
+        card = existing.body.content;
+        restoredPortable = true;
+      } else {
+        savePortableBoard({ cwd: localCwd, content: card, now });
+      }
+    }
+
     const entityDir = path.join(wsRoot, folder);
     fs.mkdirSync(path.join(entityDir, 'media'), { recursive: true });
     writeAtomicWithBackup({
@@ -99,7 +115,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       tag: `${id}_${notesPath}`,
     });
     saveIndex(nextIndex);
-    return { status: 200, body: { ok: true, entity } };
+    return { status: 200, body: { ok: true, entity, restoredPortable } };
   }
 
   function saveEntityFile({ entityId, relPath, content, baseHash = '' }) {

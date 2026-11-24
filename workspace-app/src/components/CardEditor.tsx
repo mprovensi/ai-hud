@@ -4,21 +4,37 @@ import remarkGfm from 'remark-gfm';
 import {
   ArrowDown,
   ArrowUp,
+  CheckCircle2,
+  Columns3,
+  Download,
+  ExternalLink,
+  FilePlus2,
+  FileText,
+  HardDrive,
   ImagePlus,
   LayoutGrid,
   List,
   Play,
   Plus,
   Save,
+  ShieldAlert,
+  Sparkles,
   Trash2,
-  Columns3,
-  ExternalLink,
 } from 'lucide-react';
 import { api } from '../api';
-import type { CardDoc, CardItem, CardStatus, CardTemplate, ConflictError } from '../types';
+import type {
+  CardDoc,
+  CardItem,
+  CardStatus,
+  CardTemplate,
+  ConflictError,
+  GoldfishEstimate,
+  ProjectDocEntry,
+} from '../types';
 
 const STATUSES: { id: CardStatus; label: string }[] = [
   { id: 'idea', label: 'Ideia' },
+  { id: 'spec', label: 'Spec / Plano' },
   { id: 'in-progress', label: 'Em andamento' },
   { id: 'review', label: 'Revisão' },
   { id: 'done', label: 'Concluído' },
@@ -27,46 +43,126 @@ const STATUSES: { id: CardStatus; label: string }[] = [
 interface Props {
   entityId: string;
   filePath: string;
+  hasProjectCwd?: boolean;
+  reloadKey?: number;
   onNotify: (msg: string, err?: boolean) => void;
   onSendPrompt: (prompt: string) => void;
+  onOpenDoc?: (docPath: string) => void;
 }
 
-export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props) {
+function fmtTok(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+}
+
+export function CardEditor({
+  entityId,
+  filePath,
+  hasProjectCwd = false,
+  reloadKey = 0,
+  onNotify,
+  onSendPrompt,
+  onOpenDoc,
+}: Props) {
   const draftKey = `aiws.draft.${entityId}.${filePath}`;
   const [card, setCard] = useState<CardDoc | null>(null);
   const [baseHash, setBaseHash] = useState('');
+  const [storage, setStorage] = useState<'in-project' | 'hub' | 'hub-cache'>('hub');
+  const [offlineFallback, setOfflineFallback] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentContent: CardDoc; currentHash: string } | null>(null);
 
-  async function load() {
+  // Descoberta e importação de docs/ (0 tokens + opção IA)
+  const [projectDocs, setProjectDocs] = useState<ProjectDocEntry[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
+  const [importingDocs, setImportingDocs] = useState(false);
+  const [aiStructEstimate, setAiStructEstimate] = useState<{
+    available?: boolean;
+    engine?: string;
+    model?: string;
+    reason?: string;
+    estimatedInputTokens?: number;
+    estimatedOutputTokens?: number;
+    estimatedTotalTokens?: number;
+  } | null>(null);
+  const [aiStructLoading, setAiStructLoading] = useState(false);
+  const [aiProposed, setAiProposed] = useState<CardItem[] | null>(null);
+
+  // Revisão Goldfish sob demanda direto do Quadro
+  const [reviewTarget, setReviewTarget] = useState<{ itemId: string; docPath: string; estimate: GoldfishEstimate } | null>(null);
+  const [reviewRunning, setReviewRunning] = useState(false);
+
+  async function load(ignoreDraft = false) {
     setConflict(null);
     try {
-      const r = await api.getEntityFile<CardDoc>(entityId, filePath);
-      const savedDraft = sessionStorage.getItem(draftKey);
+      const r = hasProjectCwd
+        ? await api.getProjectBoard(entityId)
+        : await api.getEntityFile<CardDoc>(entityId, filePath).then((f) => ({
+            ok: true,
+            exists: true,
+            storage: 'hub' as const,
+            offlineFallback: false,
+            content: f.content,
+            hash: f.hash,
+          }));
+      setStorage(r.storage);
+      setOfflineFallback(!!r.offlineFallback);
+      const serverCard: CardDoc = r.content || {
+        format: 'ai-card',
+        version: 1,
+        template: 'board',
+        title: 'Quadro',
+        summary: '',
+        items: [],
+      };
+      const savedDraft = !ignoreDraft ? sessionStorage.getItem(draftKey) : null;
       if (savedDraft) {
         try {
           setCard(JSON.parse(savedDraft));
           setDirty(true);
         } catch {
-          setCard(r.content);
+          setCard(serverCard);
           setDirty(false);
         }
       } else {
-        setCard(r.content);
+        setCard(serverCard);
         setDirty(false);
       }
-      setBaseHash(r.hash);
+      setBaseHash(r.hash || '');
     } catch (e) {
       onNotify((e as Error).message, true);
     }
   }
 
+  async function refreshProjectDocs() {
+    if (!hasProjectCwd) {
+      setProjectDocs([]);
+      return;
+    }
+    try {
+      const r = await api.listProjectDocs(entityId);
+      const list = r.docs || [];
+      setProjectDocs(list);
+      const defaults = list
+        .filter((d) => d.category === 'plan' || d.category === 'spec' || d.taskCount > 0)
+        .map((d) => d.path);
+      setSelectedDocs(defaults.length ? defaults : list.slice(0, 5).map((d) => d.path));
+    } catch {
+      setProjectDocs([]);
+    }
+  }
+
   useEffect(() => {
     setEditingId(null);
+    setImportOpen(false);
+    setAiStructEstimate(null);
+    setAiProposed(null);
+    setReviewTarget(null);
     load();
-  }, [entityId, filePath]);
+    refreshProjectDocs();
+  }, [entityId, filePath, hasProjectCwd, reloadKey]);
 
   function updateCard(next: CardDoc) {
     setCard(next);
@@ -76,21 +172,25 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
     } catch {}
   }
 
-  async function save() {
-    if (!card || saving) return;
+  async function save(cardOverride?: CardDoc) {
+    const targetCard = cardOverride || card;
+    if (!targetCard || saving || offlineFallback) return;
     setSaving(true);
     try {
-      const r = await api.saveEntityFile({ id: entityId, path: filePath, content: card, baseHash });
+      const r = hasProjectCwd
+        ? await api.saveProjectBoard({ entityId, content: targetCard, baseHash })
+        : await api.saveEntityFile({ id: entityId, path: filePath, content: targetCard, baseHash });
       setBaseHash(r.hash);
       setDirty(false);
       setConflict(null);
       sessionStorage.removeItem(draftKey);
-      onNotify('Card salvo.');
+      if (hasProjectCwd) setStorage('in-project');
+      onNotify('Quadro salvo.');
     } catch (e) {
       const ce = e as ConflictError;
       if (ce.conflict && ce.currentContent) {
         setConflict({ currentContent: ce.currentContent as CardDoc, currentHash: ce.currentHash });
-        onNotify('Conflito detectado: o arquivo foi alterado em disco.', true);
+        onNotify('Conflito detectado: o quadro foi alterado em disco.', true);
       } else {
         onNotify(ce.message, true);
       }
@@ -108,9 +208,9 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [card, baseHash, saving]);
+  }, [card, baseHash, saving, offlineFallback]);
 
-  if (!card) return <div className="empty">Carregando card…</div>;
+  if (!card) return <div className="empty">Carregando quadro…</div>;
 
   function addItem(status: CardStatus = 'idea') {
     if (!card) return;
@@ -131,18 +231,18 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
     if (editingId === id) setEditingId(null);
   }
 
-  function moveItem(id: string, dir: -1 | 1) {
+  function moveItem(id: string, delta: number) {
     if (!card) return;
-    const idx = card.items.findIndex((x) => x.id === id);
-    const to = idx + dir;
-    if (idx < 0 || to < 0 || to >= card.items.length) return;
-    const copy = card.items.slice();
-    const [m] = copy.splice(idx, 1);
-    copy.splice(to, 0, m);
+    const idx = card.items.findIndex((i) => i.id === id);
+    const nextIdx = idx + delta;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= card.items.length) return;
+    const copy = [...card.items];
+    const [moved] = copy.splice(idx, 1);
+    copy.splice(nextIdx, 0, moved);
     updateCard({ ...card, items: copy });
   }
 
-  async function uploadImage(id: string, file: File) {
+  async function handleImageUpload(itemId: string, file: File) {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -151,8 +251,8 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
           fileName: file.name,
           base64Data: String(reader.result || ''),
         });
-        patchItem(id, { image: res.path, alt: file.name });
-        onNotify('Imagem enviada — clique em Salvar para fixar no card.');
+        patchItem(itemId, { image: res.path, alt: file.name });
+        onNotify('Imagem anexada. Salve o quadro para persistir.');
       } catch (e) {
         onNotify((e as Error).message, true);
       }
@@ -160,111 +260,317 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
     reader.readAsDataURL(file);
   }
 
-  function renderItemCard(it: CardItem) {
-    const editing = editingId === it.id;
+  async function handleCreateSpecForItem(item: CardItem) {
+    if (!hasProjectCwd || !card) return;
+    try {
+      const r = await api.createProjectSpec({
+        entityId,
+        title: item.title,
+        summary: item.body || '',
+      });
+      const nextCard: CardDoc = {
+        ...card,
+        items: card.items.map((it) => (it.id === item.id ? { ...it, docRef: r.path, status: 'spec' } : it)),
+      };
+      setCard(nextCard);
+      await save(nextCard);
+      onNotify(`Spec criada em ${r.path}`);
+      onOpenDoc?.(r.path);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    }
+  }
+
+  async function requestItemReview(item: CardItem) {
+    const docPath = (item.docRef || '').split('#')[0];
+    if (!docPath || reviewRunning) return;
+    setReviewRunning(true);
+    try {
+      const r = await api.reviewProjectSpec({ entityId, docPath, itemId: item.id, dryRun: true });
+      if ('dryRun' in r && r.dryRun) {
+        setReviewTarget({ itemId: item.id, docPath, estimate: r });
+      }
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setReviewRunning(false);
+    }
+  }
+
+  async function confirmItemReview() {
+    if (!reviewTarget || reviewRunning) return;
+    setReviewRunning(true);
+    try {
+      const r = await api.reviewProjectSpec({
+        entityId,
+        docPath: reviewTarget.docPath,
+        itemId: reviewTarget.itemId,
+        dryRun: false,
+      });
+      if (!('dryRun' in r)) {
+        const tok = r.usage ? ` · ${fmtTok(r.usage.totalTokens)} tok${r.usage.estimated ? ' est.' : ''}` : '';
+        onNotify(`Goldfish (${r.engine}${tok}): ${r.verdict === 'approved' ? 'Spec aprovada' : 'Ajustes sugeridos'}`);
+        setReviewTarget(null);
+        await load(true);
+      }
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setReviewRunning(false);
+    }
+  }
+
+  async function handleDeterministicImport() {
+    if (!selectedDocs.length || importingDocs) return;
+    setImportingDocs(true);
+    try {
+      const r = await api.importProjectDocs({ entityId, paths: selectedDocs, dryRun: false });
+      if (r.board) {
+        setCard(r.board);
+        setBaseHash(r.hash || '');
+        setDirty(false);
+        sessionStorage.removeItem(draftKey);
+      }
+      setImportOpen(false);
+      onNotify(
+        r.addedCount && r.addedCount > 0
+          ? `${r.addedCount} item(ns) importado(s) para o Quadro (0 tokens).`
+          : 'Nenhum item novo encontrado nos documentos selecionados (0 tokens).',
+      );
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setImportingDocs(false);
+    }
+  }
+
+  async function handleAiStructureDryRun() {
+    if (!selectedDocs.length || aiStructLoading) return;
+    setAiStructLoading(true);
+    setAiProposed(null);
+    try {
+      const r = await api.structureDocsAi({ entityId, docPaths: selectedDocs.slice(0, 6), dryRun: true });
+      setAiStructEstimate(r);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setAiStructLoading(false);
+    }
+  }
+
+  async function handleAiStructureConfirm() {
+    if (!selectedDocs.length || aiStructLoading) return;
+    setAiStructLoading(true);
+    try {
+      const r = await api.structureDocsAi({ entityId, docPaths: selectedDocs.slice(0, 6), dryRun: false });
+      setAiStructEstimate(null);
+      setAiProposed(r.items || []);
+      const tok = r.usage ? ` · ${fmtTok(r.usage.totalTokens)} tok${r.usage.estimated ? ' est.' : ''}` : '';
+      onNotify(`IA sugeriu ${(r.items || []).length} item(ns) (${r.engine}${tok}). Revise e clique em Aplicar.`);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setAiStructLoading(false);
+    }
+  }
+
+  function applyAiProposed() {
+    if (!card || !aiProposed || !aiProposed.length) return;
+    const seen = new Set(card.items.map((i) => i.title.trim().toLowerCase()));
+    const usedIds = new Set(card.items.map((i) => i.id));
+    const added: CardItem[] = [];
+    for (const it of aiProposed) {
+      if (seen.has(it.title.trim().toLowerCase())) continue;
+      let id = it.id;
+      let n = 2;
+      while (usedIds.has(id)) id = `${it.id}-${n++}`;
+      usedIds.add(id);
+      seen.add(it.title.trim().toLowerCase());
+      added.push({ ...it, id });
+    }
+    const nextCard = { ...card, items: [...card.items, ...added] };
+    setAiProposed(null);
+    setImportOpen(false);
+    updateCard(nextCard);
+    save(nextCard);
+  }
+
+  function buildExecutePrompt(item: CardItem): string {
+    if (item.prompt) return item.prompt;
+    if (item.docRef) {
+      return `Leia \`${item.docRef}\` e trabalhe na tarefa "${item.title}"${item.body ? `:\n${item.body}` : '.'}`;
+    }
+    return `Trabalhe na tarefa "${item.title}"${item.body ? `:\n${item.body}` : '.'}`;
+  }
+
+  function renderItemCard(item: CardItem) {
+    const isEditing = editingId === item.id;
+    const docClean = (item.docRef || '').split('#')[0];
     return (
-      <div className="card-item" key={it.id}>
-        {editing ? (
+      <div key={item.id} className="card-item">
+        {isEditing ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             <input
               className="inp"
-              value={it.title}
-              onChange={(e) => patchItem(it.id, { title: e.target.value })}
-              placeholder="Título do item"
+              value={item.title}
+              onChange={(e) => patchItem(item.id, { title: e.target.value })}
+              placeholder="Título da tarefa"
             />
             <textarea
               className="ta"
               rows={3}
-              value={it.body || ''}
-              onChange={(e) => patchItem(it.id, { body: e.target.value })}
-              placeholder="Notas em Markdown…"
+              value={item.body || ''}
+              onChange={(e) => patchItem(item.id, { body: e.target.value })}
+              placeholder="Descrição / notas (suporta Markdown)"
             />
             <div style={{ display: 'flex', gap: 6 }}>
               <select
                 className="sel"
-                value={it.status || 'idea'}
-                onChange={(e) => patchItem(it.id, { status: e.target.value as CardStatus })}
+                value={item.status || 'idea'}
+                onChange={(e) => patchItem(item.id, { status: e.target.value as CardStatus })}
               >
-                {STATUSES.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
+                {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
-              <label className="btn btn-sm" title="Enviar imagem">
-                <ImagePlus size={14} /> Imagem
+              <input
+                className="inp"
+                value={item.phase || ''}
+                onChange={(e) => patchItem(item.id, { phase: e.target.value || undefined })}
+                placeholder="Fase / tag (opcional)"
+              />
+            </div>
+            <input
+              className="inp mono"
+              style={{ fontSize: 11.5 }}
+              value={item.docRef || ''}
+              onChange={(e) => patchItem(item.id, { docRef: e.target.value || undefined })}
+              placeholder="Doc vinculado (ex.: docs/specs/auth.md)"
+            />
+            <input
+              className="inp"
+              value={item.prompt || ''}
+              onChange={(e) => patchItem(item.id, { prompt: e.target.value })}
+              placeholder="Prompt customizado para IA (opcional)"
+            />
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+                <ImagePlus size={13} /> Imagem
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  accept="image/*"
                   style={{ display: 'none' }}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (f) uploadImage(it.id, f);
+                    if (f) handleImageUpload(item.id, f);
                   }}
                 />
               </label>
-            </div>
-            <input
-              className="inp"
-              value={it.prompt || ''}
-              onChange={(e) => patchItem(it.id, { prompt: e.target.value })}
-              placeholder="Prompt salvo para enviar a uma IA (opcional)…"
-            />
-            <input
-              className="inp"
-              value={it.url || ''}
-              onChange={(e) => patchItem(it.id, { url: e.target.value })}
-              placeholder="URL de referência https://… (opcional)"
-            />
-            <div className="card-actions">
-              <button className="btn btn-sm btn-primary" onClick={() => setEditingId(null)}>Concluir edição</button>
-              <button className="btn btn-sm btn-danger" onClick={() => removeItem(it.id)}>
-                <Trash2 size={13} /> Remover
+              <button className="btn btn-sm btn-primary" onClick={() => setEditingId(null)}>Concluir</button>
+              <button className="btn btn-sm btn-danger" onClick={() => removeItem(item.id)}>
+                <Trash2 size={13} />
               </button>
             </div>
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-              <h4 style={{ flex: 1, cursor: 'pointer' }} onClick={() => setEditingId(it.id)}>{it.title}</h4>
-              {it.status && card?.template !== 'board' && (
-                <span className={`badge ${it.status}`}>
-                  {STATUSES.find((s) => s.id === it.status)?.label || it.status}
-                </span>
+              <h4 style={{ flex: 1, cursor: 'pointer' }} onClick={() => setEditingId(item.id)}>
+                {item.title || '(sem título)'}
+              </h4>
+              {card?.template !== 'board' && item.status && (
+                <span className={`badge ${item.status}`}>{STATUSES.find((s) => s.id === item.status)?.label || item.status}</span>
               )}
             </div>
-            {it.image && <img src={api.entityAssetUrl(entityId, it.image)} alt={it.alt || it.title} />}
-            {it.body && (
-              <div className="md" style={{ fontSize: 12.5 }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{it.body}</ReactMarkdown>
+
+            {(item.phase || docClean || (item.review && item.review.status && item.review.status !== 'none')) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                {item.phase && <span className="badge" style={{ fontSize: 10 }}>{item.phase}</span>}
+                {docClean && (
+                  <button
+                    type="button"
+                    className="doc-chip mono ell"
+                    title={`Abrir ${item.docRef} em Docs & Specs`}
+                    onClick={() => onOpenDoc?.(item.docRef!)}
+                  >
+                    <FileText size={11} style={{ flexShrink: 0 }} />
+                    <span className="ell">{docClean.split('/').pop()}</span>
+                  </button>
+                )}
+                {item.review && item.review.status && item.review.status !== 'none' && (
+                  <button
+                    type="button"
+                    className={`badge ${item.review.status === 'approved' ? 'done' : 'review'}`}
+                    style={{ fontSize: 10, cursor: item.review.reportPath ? 'pointer' : 'default' }}
+                    title={item.review.summary || 'Parecer da revisão Goldfish'}
+                    onClick={() => { if (item.review?.reportPath) onOpenDoc?.(item.review.reportPath); }}
+                  >
+                    {item.review.status === 'approved' ? <CheckCircle2 size={11} /> : <ShieldAlert size={11} />}
+                    {item.review.status === 'approved' ? 'Goldfish OK' : 'Ajustes'}
+                  </button>
+                )}
               </div>
             )}
-            {it.url && (
-              <a href={it.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <ExternalLink size={12} /> {it.linkLabel || it.url}
+
+            {item.image && <img src={api.entityAssetUrl(entityId, item.image)} alt={item.alt || item.title} />}
+            {item.body && (
+              <div className="md" style={{ fontSize: 12, color: 'var(--muted)' }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.body}</ReactMarkdown>
+              </div>
+            )}
+            {item.url && (
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, marginTop: 4 }}
+              >
+                <ExternalLink size={12} /> {item.linkLabel || item.url}
               </a>
             )}
+
             <div className="card-actions">
-              <button className="btn btn-sm" onClick={() => setEditingId(it.id)}>Editar</button>
-              {(it.prompt || it.body) && (
+              <button className="btn btn-sm" onClick={() => setEditingId(item.id)}>Editar</button>
+              {hasProjectCwd && !docClean && (item.status === 'idea' || !item.status) && (
                 <button
                   className="btn btn-sm"
-                  title="Enviar este item para iniciar uma sessão de IA"
-                  onClick={() => onSendPrompt(it.prompt || `${it.title}\n\n${it.body || ''}`)}
+                  title="Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)"
+                  onClick={() => handleCreateSpecForItem(item)}
                 >
-                  <Play size={12} /> Enviar p/ IA
+                  <FilePlus2 size={12} /> Spec
                 </button>
               )}
+              {hasProjectCwd && docClean && (
+                <button
+                  className="btn btn-sm"
+                  title="Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)"
+                  onClick={() => requestItemReview(item)}
+                  disabled={reviewRunning}
+                >
+                  🐟 Revisar
+                </button>
+              )}
+              <button
+                className="btn btn-sm"
+                title="Enviar tarefa para a conversa com IA (contexto enxuto)"
+                onClick={() => onSendPrompt(buildExecutePrompt(item))}
+              >
+                <Play size={12} /> Executar
+              </button>
               {card?.template === 'board' && (
                 <select
                   className="sel"
-                  style={{ width: 'auto', padding: '2px 6px', fontSize: 11.5 }}
-                  value={it.status || 'idea'}
-                  onChange={(e) => patchItem(it.id, { status: e.target.value as CardStatus })}
+                  style={{ width: 'auto', padding: '3px 6px', fontSize: 11 }}
+                  value={item.status || 'idea'}
+                  onChange={(e) => patchItem(item.id, { status: e.target.value as CardStatus })}
                 >
                   {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               )}
-              <button className="btn btn-sm btn-icon" title="Subir" onClick={() => moveItem(it.id, -1)}><ArrowUp size={12} /></button>
-              <button className="btn btn-sm btn-icon" title="Descer" onClick={() => moveItem(it.id, 1)}><ArrowDown size={12} /></button>
+              <button className="btn btn-sm btn-icon" title="Subir" onClick={() => moveItem(item.id, -1)}>
+                <ArrowUp size={12} />
+              </button>
+              <button className="btn btn-sm btn-icon" title="Descer" onClick={() => moveItem(item.id, 1)}>
+                <ArrowDown size={12} />
+              </button>
             </div>
           </>
         )}
@@ -272,13 +578,15 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
     );
   }
 
+  const totalTasksInDocs = projectDocs.reduce((acc, d) => acc + (d.taskCount || 0), 0);
+
   return (
     <div>
       {conflict && (
         <div className="conflict-box">
-          <h4>Conflito de edição (409) — um agente ou outra janela alterou este card</h4>
-          <p style={{ margin: '0 0 8px', fontSize: 12.5 }}>
-            Seu rascunho continua preservado. Você pode recarregar a versão mais recente do disco ou salvar por cima explicitamente.
+          <h4>Conflito 409 — o quadro mudou em disco</h4>
+          <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--muted)' }}>
+            Um agente ou outra aba salvou uma versão mais recente. Escolha como resolver:
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -289,30 +597,69 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
                 setDirty(false);
                 setConflict(null);
                 sessionStorage.removeItem(draftKey);
-                onNotify('Versão mais recente carregada.');
               }}
             >
-              Descartar rascunho e carregar do disco
+              Carregar versão do disco
             </button>
             <button
-              className="btn btn-sm btn-danger"
+              className="btn btn-sm"
               onClick={() => {
                 setBaseHash(conflict.currentHash);
                 setConflict(null);
-                onNotify('Hash atualizado — clique em Salvar novamente para confirmar.');
+                onNotify('Base atualizada — clique em Salvar novamente para sobrescrever.');
               }}
             >
-              Manter meu rascunho (pronto para salvar)
+              Manter minhas edições
             </button>
           </div>
         </div>
       )}
 
+      {offlineFallback && (
+        <div className="conflict-box" style={{ background: 'rgba(229, 192, 99, .10)', borderColor: 'rgba(229, 192, 99, .45)' }}>
+          <h4 style={{ color: 'var(--warn)' }}>Máquina do projeto offline — exibindo cópia em cache</h4>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+            Ligue a máquina dona da pasta para editar <code className="mono">.ai-workspace/board.card.json</code>.
+          </div>
+        </div>
+      )}
+
+      {reviewTarget && (
+        <div className="goldfish-box">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ fontSize: 13 }}>🐟 Revisão Goldfish de <code className="mono">{reviewTarget.docPath}</code></strong>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+                {reviewTarget.estimate.available ? (
+                  <>
+                    1 chamada isolada (contexto zero) · Motor: <b style={{ color: 'var(--text)' }}>{reviewTarget.estimate.engine}{reviewTarget.estimate.model ? `/${reviewTarget.estimate.model}` : ''}</b> ·
+                    Estimativa: <b style={{ color: 'var(--text)' }}>~{fmtTok(reviewTarget.estimate.estimatedTotalTokens)} tokens</b>
+                    {reviewTarget.estimate.engine === 'Ollama' ? ' (0 de cota!)' : ''}
+                  </>
+                ) : (
+                  <span style={{ color: 'var(--warn)' }}>Nenhum motor disponível: {reviewTarget.estimate.reason}</span>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-sm" onClick={() => setReviewTarget(null)}>Cancelar</button>
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={!reviewTarget.estimate.available || reviewRunning}
+                onClick={confirmItemReview}
+              >
+                {reviewRunning ? 'Revisando…' : 'Confirmar revisão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="toolbar">
-        <div className="seg" role="group" aria-label="Visualização">
+        <div className="seg">
           {([
             ['board', 'Board', Columns3],
-            ['research', 'Research', List],
+            ['research', 'Lista', List],
             ['gallery', 'Gallery', LayoutGrid],
           ] as [CardTemplate, string, typeof Columns3][]).map(([tpl, label, Icon]) => (
             <button
@@ -320,45 +667,194 @@ export function CardEditor({ entityId, filePath, onNotify, onSendPrompt }: Props
               className={card.template === tpl ? 'on' : ''}
               onClick={() => updateCard({ ...card, template: tpl })}
             >
-              <Icon size={13} style={{ verticalAlign: -2, marginRight: 4 }} />
-              {label}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Icon size={13} /> {label}
+              </span>
             </button>
           ))}
         </div>
 
-        <button className="btn btn-sm" onClick={() => addItem('idea')}>
+        <button className="btn btn-sm" onClick={() => addItem('idea')} disabled={offlineFallback}>
           <Plus size={14} /> Novo item
         </button>
 
+        {hasProjectCwd && (
+          <button
+            className="btn btn-sm"
+            onClick={() => { setImportOpen((v) => !v); setAiStructEstimate(null); setAiProposed(null); }}
+            disabled={offlineFallback}
+            title="Importar planos, specs e checklists da pasta docs/ do projeto"
+          >
+            <Download size={13} /> Importar de docs/
+          </button>
+        )}
+
+        <span className="badge" title={storage === 'in-project' ? 'Salvo em .ai-workspace/board.card.json dentro da pasta do projeto (portátil entre workspaces)' : 'Salvo no Hub do AI Workspace'}>
+          <HardDrive size={11} /> {storage === 'in-project' ? '.ai-workspace (portátil)' : storage === 'hub-cache' ? 'Cache offline' : 'Hub'}
+        </span>
+
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {dirty && <span className="badge waiting">Alterações não salvas</span>}
-          <button className="btn btn-primary btn-sm" disabled={!dirty || saving} onClick={save}>
+          {dirty && <span className="badge waiting">Não salvo</span>}
+          <button className="btn btn-primary btn-sm" disabled={!dirty || saving || offlineFallback} onClick={() => save()}>
             <Save size={14} /> {saving ? 'Salvando…' : 'Salvar (Ctrl+S)'}
           </button>
         </div>
       </div>
 
-      {card.template === 'board' ? (
-        <div className="board-grid">
-          {STATUSES.map((col) => {
-            const items = card.items.filter((x) => (x.status || 'idea') === col.id);
-            return (
-              <div className="board-col" key={col.id}>
-                <div className="board-col-head">
-                  <span>{col.label} ({items.length})</span>
-                  <button className="btn btn-sm btn-icon" onClick={() => addItem(col.id)} title={`Adicionar em ${col.label}`}>
-                    <Plus size={12} />
-                  </button>
-                </div>
-                {items.map(renderItemCard)}
-              </div>
-            );
-          })}
+      {/* Onboarding automático quando o quadro está vazio e existem docs/ no projeto */}
+      {hasProjectCwd && card.items.length === 0 && projectDocs.length > 0 && !importOpen && !offlineFallback && (
+        <div className="docs-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <strong style={{ fontSize: 13.5 }}>📚 Encontramos {projectDocs.length} documento(s) neste projeto</strong>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+              {totalTasksInDocs > 0
+                ? `${totalTasksInDocs} tarefa(s)/seção(ões) prontas para montar o Quadro inicial com 0 tokens.`
+                : 'Você pode importar esses documentos ou estruturar o Quadro inicial a partir deles.'}
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setImportOpen(true)}>
+            <Download size={13} /> Montar Quadro a partir de docs/
+          </button>
         </div>
-      ) : card.template === 'gallery' ? (
-        <div className="gallery-grid">{card.items.map(renderItemCard)}</div>
-      ) : (
-        <div className="research-list">{card.items.map(renderItemCard)}</div>
+      )}
+
+      {importOpen && hasProjectCwd && (
+        <div className="docs-banner">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <strong style={{ fontSize: 13.5 }}>📥 Estruturar Quadro a partir dos documentos do projeto</strong>
+            <button className="btn btn-sm" onClick={() => setImportOpen(false)}>Fechar</button>
+          </div>
+          {projectDocs.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Nenhum arquivo Markdown encontrado em <code className="mono">docs/</code> ou na raiz do projeto.
+            </div>
+          ) : (
+            <>
+              <div style={{ maxHeight: 190, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                {projectDocs.filter((d) => d.category !== 'review').map((d) => {
+                  const checked = selectedDocs.includes(d.path);
+                  return (
+                    <label
+                      key={d.path}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 7, background: 'var(--card)', cursor: 'pointer', fontSize: 12 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setSelectedDocs((prev) => (e.target.checked ? [...prev, d.path] : prev.filter((p) => p !== d.path)));
+                        }}
+                      />
+                      <span className="ell" style={{ fontWeight: 600 }}>{d.title}</span>
+                      <span className="mono ell" style={{ color: 'var(--muted)', fontSize: 11, flex: 1 }}>{d.path}</span>
+                      {d.taskCount > 0 && <span className="badge">{d.taskCount} item(ns)</span>}
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={!selectedDocs.length || importingDocs}
+                  onClick={handleDeterministicImport}
+                >
+                  <Download size={13} /> {importingDocs ? 'Importando…' : 'Importar checklists e seções (0 tokens)'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={!selectedDocs.length || aiStructLoading}
+                  onClick={handleAiStructureDryRun}
+                  title="Útil quando os docs são texto corrido sem checkboxes — mostra estimativa de tokens antes de rodar"
+                >
+                  <Sparkles size={13} /> {aiStructLoading ? 'Calculando…' : 'Estruturar com IA (ver custo antes)'}
+                </button>
+              </div>
+
+              {aiStructEstimate && (
+                <div className="goldfish-box" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 12 }}>
+                      {aiStructEstimate.available ? (
+                        <>
+                          Motor: <b>{aiStructEstimate.engine}{aiStructEstimate.model ? `/${aiStructEstimate.model}` : ''}</b> ·
+                          Estimativa: <b>~{fmtTok(aiStructEstimate.estimatedTotalTokens || 0)} tokens</b>
+                          {' '}(in ~{fmtTok(aiStructEstimate.estimatedInputTokens || 0)} / out ~{fmtTok(aiStructEstimate.estimatedOutputTokens || 0)})
+                        </>
+                      ) : (
+                        <span style={{ color: 'var(--warn)' }}>Indisponível: {aiStructEstimate.reason}</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-sm" onClick={() => setAiStructEstimate(null)}>Cancelar</button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={!aiStructEstimate.available || aiStructLoading}
+                        onClick={handleAiStructureConfirm}
+                      >
+                        {aiStructLoading ? 'Gerando…' : 'Confirmar e gerar prévia'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {aiProposed && (
+                <div className="goldfish-box" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <strong style={{ fontSize: 12.5 }}>Prévia sugerida pela IA ({aiProposed.length} itens)</strong>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-sm" onClick={() => setAiProposed(null)}>Descartar</button>
+                      <button className="btn btn-sm btn-primary" onClick={applyAiProposed}>Aplicar ao Quadro</button>
+                    </div>
+                  </div>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {aiProposed.map((it) => (
+                      <div key={it.id} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span className={`badge ${it.status || 'idea'}`}>{it.status || 'idea'}</span>
+                        <b>{it.title}</b>
+                        {it.docRef && <span className="mono" style={{ color: 'var(--muted)', fontSize: 11 }}>{it.docRef}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {card.template === 'board' && (
+        <div className="board-scroll">
+          <div className="board-grid">
+            {STATUSES.map((col) => {
+              const items = card.items.filter((i) => (i.status || 'idea') === col.id);
+              return (
+                <div key={col.id} className="board-col">
+                  <div className="board-col-head">
+                    <span>{col.label} ({items.length})</span>
+                    <button className="btn btn-sm btn-icon" onClick={() => addItem(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                  {items.map(renderItemCard)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {card.template === 'research' && (
+        <div className="research-list">
+          {card.items.length === 0 ? <div className="empty">Nenhum item ainda. Clique em "Novo item" ou "Importar de docs/".</div> : card.items.map(renderItemCard)}
+        </div>
+      )}
+
+      {card.template === 'gallery' && (
+        <div className="gallery-grid">
+          {card.items.length === 0 ? <div className="empty">Galeria vazia. Adicione itens com imagens ou prompts.</div> : card.items.map(renderItemCard)}
+        </div>
       )}
     </div>
   );

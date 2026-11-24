@@ -8,7 +8,8 @@ const CARD_VERSION = 1;
 const CARD_MAX_BYTES = 1024 * 1024;
 const CARD_MAX_ITEMS = 200;
 const CARD_TEMPLATES = Object.freeze(['board', 'research', 'gallery']);
-const CARD_STATUSES = Object.freeze(['idea', 'in-progress', 'review', 'done']);
+const CARD_STATUSES = Object.freeze(['idea', 'spec', 'in-progress', 'review', 'done']);
+const REVIEW_STATUSES = Object.freeze(['none', 'approved', 'changes']);
 const ENTITY_CATEGORIES = Object.freeze(['dev', 'project', 'research', 'ops', 'creative', 'general']);
 const ENTITY_STATUSES = Object.freeze(['active', 'paused', 'archived']);
 const STEP_VIEWERS = Object.freeze(['card', 'markdown', 'html']);
@@ -77,7 +78,7 @@ function validateCard(value, { draft = false } = {}) {
   for (const item of value.items) {
     assertKeys(
       item,
-      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath'],
+      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review'],
       'Um item do card',
     );
     if (typeof item.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(item.id) || seen.has(item.id)) {
@@ -89,6 +90,27 @@ function validateCard(value, { draft = false } = {}) {
     assertText(item.alt, 'Texto alternativo da imagem', 300);
     assertText(item.prompt, 'Prompt salvo', 8000);
     assertText(item.linkLabel, 'Rótulo do link', 120);
+    assertText(item.phase, 'Fase/grupo do item', 120);
+    if (item.docRef !== undefined && item.docRef !== '') {
+      assertText(item.docRef, 'Referência de documento', 400);
+      const cleanDocPath = item.docRef.split('#')[0];
+      if (!isSafeRelativePath(cleanDocPath)) {
+        throw fail(`Caminho de documento inválido no item "${item.id}".`);
+      }
+    }
+    if (item.review !== undefined && item.review !== null) {
+      assertKeys(item.review, ['status', 'at', 'summary', 'reportPath'], 'review');
+      if (item.review.status !== undefined && !REVIEW_STATUSES.includes(item.review.status)) {
+        throw fail(`Status de revisão inválido no item "${item.id}".`);
+      }
+      if (item.review.at !== undefined && (typeof item.review.at !== 'number' || !Number.isFinite(item.review.at))) {
+        throw fail(`Timestamp de revisão inválido no item "${item.id}".`);
+      }
+      assertText(item.review.summary, 'Resumo da revisão', 400);
+      if (item.review.reportPath !== undefined && item.review.reportPath !== '' && !isSafeRelativePath(item.review.reportPath)) {
+        throw fail(`Caminho de parecer inválido no item "${item.id}".`);
+      }
+    }
     if (item.image !== undefined && item.image !== '' && !isSafeRelativePath(item.image)) {
       throw fail(`Caminho de imagem inválido no item "${item.id}".`);
     }
@@ -138,7 +160,7 @@ function validateWorkspaceIndex(value) {
   for (const e of value.entities) {
     assertKeys(
       e,
-      ['id', 'title', 'description', 'group', 'category', 'status', 'pinned', 'folder', 'projectBindings', 'defaultAgent', 'steps', 'created', 'updated'],
+      ['id', 'title', 'description', 'group', 'category', 'status', 'pinned', 'folder', 'storageMode', 'projectBindings', 'defaultAgent', 'steps', 'created', 'updated'],
       'Entidade do workspace',
     );
     if (typeof e.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(e.id) || seen.has(e.id)) {

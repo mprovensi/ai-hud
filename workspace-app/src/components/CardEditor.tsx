@@ -1318,8 +1318,8 @@ export function CardEditor({
         const modalStageLabel = BOARD_STATUSES.find((s) => s.id === modalStage)?.label || modalStage;
         const modalCommitSt = !detailModal.isNew && projectCwd ? resolveCardCommitStatus(detailModal.draft, gitInfo) : null;
         return (
-        <div className="modal-bg" onClick={() => setDetailModal(null)}>
-          <div className={`modal card-detail-modal stage-${modalStage}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="modal-bg">
+          <div className={`modal card-detail-modal stage-${modalStage}`} style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                 <h3 style={{ margin: 0, fontSize: 16 }}>

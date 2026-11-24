@@ -460,6 +460,13 @@
     return html + '</div>';
   }
 
+  function setConvoFit(on) {
+    var ov = $('overlay');
+    if (!ov) return;
+    var cls = String(ov.className || '').replace(/\bconvo-fit\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    ov.className = on ? (cls ? cls + ' convo-fit' : 'convo-fit') : cls;
+  }
+
   function renderDetail(d) {
     if (d.id !== detailSessionId) {
       detailSessionId = d.id;
@@ -573,6 +580,7 @@
     html += '</div>';
 
     setOverlay(html);
+    setConvoFit(onConvo);
     rememberViewed(d);
     bindQuestion(d);
     bindReply(d);
@@ -589,6 +597,7 @@
     function switchTab(next) {
       detailTab = next;
       var cOn = next !== 'details';
+      setConvoFit(cOn);
       if ($('tabConvo')) { $('tabConvo').className = 'dtab' + (cOn ? ' active' : ''); $('tabConvo').setAttribute('aria-selected', cOn ? 'true' : 'false'); }
       if ($('tabDetails')) { $('tabDetails').className = 'dtab' + (!cOn ? ' active' : ''); $('tabDetails').setAttribute('aria-selected', !cOn ? 'true' : 'false'); }
       if ($('paneConvo')) $('paneConvo').className = 'dtab-pane' + (cOn ? ' active' : '');

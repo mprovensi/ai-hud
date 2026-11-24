@@ -26,10 +26,11 @@ function createDetailHarness() {
     }, extra);
   }
 
-  for (const id of ['tabConvo', 'tabDetails', 'paneConvo', 'paneDetails', 'qbox', 'qSend', 'qDeny',
+  for (const id of ['overlay', 'tabConvo', 'tabDetails', 'paneConvo', 'paneDetails', 'qbox', 'qSend', 'qDeny',
     'replyText', 'sendReply', 'toggleChips', 'quickChips', 'overlayBody', 'lastReply']) {
     nodes[id] = makeNode(id);
   }
+  nodes.overlay.className = 'show';
   nodes.lastReply.className = 'convo lastreply';
   let focusCount = 0;
   nodes.lastReply.focus = () => { focusCount++; };
@@ -156,9 +157,11 @@ test('detalhe renderiza histórico em chat com ferramentas, abas e cartão inter
   assert.deepEqual({ ...h.posted[0].body.answers }, { 'Como prefere organizar?': 'Abas' });
 
   // Alternância de abas Conversa <-> Detalhes
+  assert.match(h.nodes.overlay.className, /\bconvo-fit\b/, 'aba Conversa ativa ajuste de altura no mobile');
   h.nodes.tabDetails.onclick();
   assert.equal(h.nodes.paneDetails.className, 'dtab-pane active');
   assert.equal(h.nodes.paneConvo.className, 'dtab-pane');
+  assert.doesNotMatch(h.nodes.overlay.className, /\bconvo-fit\b/, 'aba Detalhes volta a rolar livremente');
 });
 
 test('atalhos contextuais aparecem visíveis e tocam para preencher a caixa de texto sem enviar', () => {

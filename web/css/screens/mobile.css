@@ -20,24 +20,49 @@
   .reading-options .btn { margin: 4px 2px; padding-left: .5em; padding-right: .5em; }
   body.read-large .rform textarea, body.read-larger .rform textarea { font-size: 1em; }
   .stat { width: 50%; }
-  /* Gaveta de sessão no celular: conversa mais compacta para manter atalhos e Responder visíveis */
-  #overlay { padding: 10px 12px 14px; }
+  /* Gaveta de sessão no celular (ex.: S20 FE 20:9): ocupa toda a altura útil para a conversa e mantém Responder no rodapé */
+  #overlay { padding: 8px 10px 10px; }
+  #overlay.convo-fit #overlayBody { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
+  #overlay.convo-fit #overlayBody > .dtop,
+  #overlay.convo-fit #overlayBody > .dstate,
+  #overlay.convo-fit #overlayBody > .dtabs,
+  #overlay.convo-fit #overlayBody > .permbox { -webkit-flex-shrink: 0; flex-shrink: 0; }
+  #overlay.convo-fit #paneConvo.active {
+    display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+    -webkit-flex: 1 1 0%; flex: 1 1 0%; min-height: 0; padding-bottom: 6px;
+  }
+  #overlay.convo-fit #paneConvo.active > .convpanel {
+    display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+    -webkit-flex: 1 1 0%; flex: 1 1 0%; min-height: 180px;
+  }
+  #overlay.convo-fit #paneConvo.active > .convpanel.has-q { min-height: 130px; }
+  #overlay.convo-fit #paneConvo.active > .convpanel .chead { -webkit-flex-shrink: 0; flex-shrink: 0; }
+  #overlay.convo-fit #paneConvo.active > .convpanel .convo { -webkit-flex: 1 1 0%; flex: 1 1 0%; min-height: 0; max-height: none; }
+  #overlay.convo-fit #paneConvo.active > .reply,
+  #overlay.convo-fit #paneConvo.active > .qbox,
+  #overlay.convo-fit #paneConvo.active > .ctxwarn,
+  #overlay.convo-fit #paneConvo.active > .testbox,
+  #overlay.convo-fit #paneConvo.active > .handoff-box,
+  #overlay.convo-fit #paneConvo.active > .stopturn { -webkit-flex-shrink: 0; flex-shrink: 0; }
   #overlay .dtop { margin-bottom: 4px; }
-  #overlay .dtitle { font-size: 1.2em; }
-  #overlay .dtop .dsub { font-size: .82em; margin: 1px 0 0; }
-  #overlay .dstate { font-size: .8em; margin-bottom: 6px; }
-  #overlay .dtabs { margin-bottom: 8px; }
-  #overlay .dtab { min-height: 36px; padding: .35em .5em; font-size: .84em; }
-  #overlay .convpanel { padding: 8px 10px; margin-bottom: 8px; }
-  #overlay .chead { margin-bottom: 5px; }
-  #overlay .convo { max-height: 34vh; }
-  #overlay .convpanel.has-q .convo { max-height: 20vh; }
-  #overlay .msg { font-size: .88em; padding: 7px 10px; margin-bottom: 7px; }
-  #overlay .reply { padding: 8px 10px; margin-bottom: 0; }
-  #overlay .rhead { margin-bottom: 5px; }
-  #overlay .schips { margin-bottom: 5px; scrollbar-width: none; -ms-overflow-style: none; }
+  #overlay .dtitle { font-size: 1.12em; }
+  #overlay .dtop .dsub { font-size: .8em; margin: 1px 0 0; }
+  #overlay .dstate { font-size: .78em; margin-bottom: 5px; }
+  #overlay .dtabs { margin-bottom: 6px; padding: 2px; }
+  #overlay .dtab { min-height: 34px; padding: .3em .5em; font-size: .82em; }
+  #overlay .convpanel { padding: 8px 9px; margin-bottom: 6px; }
+  #overlay .chead { margin-bottom: 4px; }
+  #overlay .convo { max-height: 54vh; }
+  #overlay .convpanel.has-q .convo { max-height: 30vh; }
+  #overlay .msg { max-width: 98%; font-size: .88em; line-height: 1.44; padding: 7px 10px; margin-bottom: 6px; }
+  #overlay .msg.me { max-width: 88%; }
+  #overlay .reply { padding: 7px 9px; margin-bottom: 0; }
+  #overlay .rhead { margin-bottom: 4px; }
+  #overlay .schips { margin-bottom: 5px; padding-bottom: 0; scrollbar-width: none; -ms-overflow-style: none; }
   #overlay .schips::-webkit-scrollbar { display: none; width: 0; height: 0; }
-  #overlay .rform textarea { padding: 6px 9px; }
+  #overlay .schip { min-height: 32px; padding: .24em .7em; font-size: .8em; }
+  #overlay .rform textarea { padding: 6px 9px; line-height: 1.3; }
+  #overlay .pcaction.stopturn { margin: 6px 0 0; padding: .48em; min-height: 40px; }
 }
 @media (max-width: 420px) {
   /* Celular estreito (~360px): do "ao vivo" fica só a bolinha */

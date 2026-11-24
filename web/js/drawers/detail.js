@@ -485,6 +485,7 @@
     html += sessHead(d);
     var places = { vscode: 'VS Code', terminal: 'terminal', 'claude-desktop': 'app Claude', 'codex-desktop': 'app Codex', antigravity: 'Antigravity', 'antigravity-cli': 'terminal', 'gemini-cli': 'terminal', 'ollama-app': 'app Ollama', 'ollama-run': 'terminal' };
     html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
+      (d.tool === 'Gemini' && d.where === 'antigravity' ? '<button type="button" class="pcmini assume-btn" id="assumeHud" title="Assumir esta conversa no celular/iPad agora via Handoff para o agy CLI">📱 Assumir</button>' : '') +
       (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ')">🖥 Abrir no PC</button>' : '') + '</div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
@@ -626,6 +627,30 @@
         flash(err ? 'Falhou: ' + err.message : r.message, !err && r.ok);
         if (!err && r.ok) { d.canStop = false; if (d.state === 'working') d.state = 'waiting'; renderDetail(d); }
       }, { id: d.id });
+    };
+    if ($('assumeHud')) $('assumeHud').onclick = function () {
+      var b = this;
+      var typed = $('replyText') ? $('replyText').value.replace(/^\s+|\s+$/g, '') : '';
+      var beforeIds = snapshotKnownIds();
+      b.disabled = true;
+      b.textContent = 'Assumindo…';
+      request('POST', '/api/handoff', function (err, r) {
+        b.disabled = false;
+        b.textContent = '📱 Assumir';
+        if (err) return flash('Falhou: ' + err.message, false);
+        if ($('replyText')) $('replyText').value = '';
+        poll();
+        flash('Controle assumido no HUD — abrindo conversa ao vivo.');
+        openPendingSessionDrawer({
+          id: r && r.id ? r.id : '',
+          tool: 'Gemini',
+          machine: (r && r.machine) || d.machine || '',
+          cwd: d.cwd || '',
+          project: d.project || '',
+          prompt: typed || 'Assumindo conversa da IDE Antigravity via Handoff…',
+          beforeIds: beforeIds,
+        });
+      }, { id: d.id, targetTool: 'Gemini', note: typed });
     };
     if ($('focusPc')) $('focusPc').onclick = function () {
       var b = this;

@@ -140,6 +140,7 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   assert.match(nodes.overlayBody.innerHTML, /web\/js\/drawers\/detail\.js/);
   assert.match(nodes.overlayBody.innerHTML, /3×/);
   assert.match(nodes.overlayBody.innerHTML, /id="focusPc"/);
+  assert.match(nodes.overlayBody.innerHTML, /id="assumeHud"/);
   assert.match(nodes.overlayBody.innerHTML, /id="replyText"/);
 
   // Sessão criada pelo Antigravity CLI (`antigravity-cli`, ex.: via + Nova ou terminal) exibe a caixa de resposta
@@ -159,5 +160,6 @@ test('HUD renderiza cartão, gaveta de uso, estatísticas e detalhe de sessão d
   });
   requests[reqLinux].onreadystatechange();
   assert.doesNotMatch(nodes.overlayBody.innerHTML, /id="focusPc"/);
+  assert.doesNotMatch(nodes.overlayBody.innerHTML, /id="assumeHud"/);
   assert.match(nodes.overlayBody.innerHTML, /id="replyText"/);
 });

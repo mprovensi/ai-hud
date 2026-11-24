@@ -23,6 +23,7 @@
       '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
       (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button></div>';
     if (d.tool === 'Ollama') html += '<div class="rnote">A resposta é gerada no Ollama e fica no HUD; não aparece no app do Ollama.</div>';
+    if (isIdeAgy && !live && d.state !== 'working') html += '<div class="rnote">Sessão parada na IDE: Enviar entra na fila. Toque em <b>📱 Assumir</b> no topo para responder na hora pelo HUD.</div>';
     if (d.queued) html += '<div class="rqueued">Na fila: “' + esc(d.queued) + '” <button class="link" id="cancelReply">cancelar</button></div>';
     if (sugg.length) {
       html += '<div class="schips" id="suggChips">';

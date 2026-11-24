@@ -18,7 +18,7 @@ const {
 } = require('../../core/memory');
 const { redactSecrets } = require('../../core/redact');
 const { resolveWorkspaceRoot, hashContent, writeAtomic, writeAtomicWithBackup } = require('../../infra/workspace-paths');
-const { resolveProjectMemoryDir, readDreamState, readProjectMemory, listAllProjectMemories } = require('../../collect/memory');
+const { resolveProjectMemoryDir, readDreamState, readProjectMemory, listAllProjectMemories, collectMemorySessions } = require('../../collect/memory');
 const { readProjectGit } = require('../../collect/file-preview');
 const { hasExe } = require('../../collect/capabilities');
 
@@ -205,7 +205,7 @@ function createMemoryActions({
     }
     inFlight.add(resolved.slug);
     try {
-      const sessions = (collector && collector.current().sessions) || [];
+      const sessions = collectMemorySessions(collector);
       const currentMem = readProjectMemory({ workspaceRoot: root(), project: project || resolved.slug, cwd, mode: resolved.mode, sessions });
       const dreamState = readDreamState(resolved.dir);
       const delta = selectDeltaSessions(sessions, dreamState, { project: project || resolved.slug, cwd, force });
@@ -368,6 +368,12 @@ function createMemoryActions({
   // Agendador leve fora do horário de trabalho (config.dream.schedule = { enabled: true, hour: 3 })
   let lastAutoDay = '';
   function startScheduler() {
+    const sched0 = config && config.dream && config.dream.schedule;
+    if (sched0 && sched0.enabled) {
+      const h = Number.isInteger(sched0.hour) ? sched0.hour : 3;
+      const pct = typeof config.dream.maxQuotaPct === 'number' ? config.dream.maxQuotaPct : 60;
+      log(`[dream-auto] agendado diariamente às ${String(h).padStart(2, '0')}:00 (teto cota ${pct}%)`);
+    }
     const t = setInterval(async () => {
       const sched = config && config.dream && config.dream.schedule;
       if (!sched || !sched.enabled) return;
@@ -377,7 +383,7 @@ function createMemoryActions({
       if (d.getHours() !== targetHour || lastAutoDay === dayKey) return;
       lastAutoDay = dayKey;
       try {
-        const sessions = (collector && collector.current().sessions) || [];
+        const sessions = collectMemorySessions(collector);
         const all = listAllProjectMemories({ workspaceRoot: root(), sessions }).filter((p) => p.pendingCount > 0);
         for (const p of all) {
           const r = await dream({ project: p.project, cwd: p.cwd, ignoreQuota: false });

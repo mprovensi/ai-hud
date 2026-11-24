@@ -1,7 +1,7 @@
 // Rotas REST da Base de Memória Compartilhada por Projeto e Dreaming (/api/memory/*).
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
 const { readWorkspaceJson } = require('../../collect/workspace');
-const { readProjectMemory, listAllProjectMemories } = require('../../collect/memory');
+const { readProjectMemory, listAllProjectMemories, collectMemorySessions } = require('../../collect/memory');
 
 module.exports = ({ dataDir, config, collector, memory, json, text }) => {
   const wsRoot = () => resolveWorkspaceRoot(dataDir, config);
@@ -11,7 +11,7 @@ module.exports = ({ dataDir, config, collector, memory, json, text }) => {
       const project = (url.searchParams.get('project') || '').trim();
       const cwd = (url.searchParams.get('cwd') || '').trim();
       const mode = (url.searchParams.get('mode') || '').trim();
-      const sessions = collector.current().sessions || [];
+      const sessions = collectMemorySessions(collector);
       if (!project && !cwd) {
         const ws = readWorkspaceJson(wsRoot());
         return json(res, {

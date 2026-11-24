@@ -116,9 +116,47 @@ function listAllProjectMemories({ workspaceRoot, sessions = [], workspaceEntitie
   return out;
 }
 
+function toIsoTime(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return new Date(v).toISOString();
+  return '';
+}
+
+// Combina sessões locais do coletor com sessões federadas dos peers presentes no snapshot (inclusive peer-cache offline)
+function collectMemorySessions(collector) {
+  const cur = collector && typeof collector.current === 'function' ? collector.current() : null;
+  const local = Array.isArray(cur && cur.sessions) ? cur.sessions : [];
+  const out = local.slice();
+  const seen = new Set(local.map((s) => s && s.id).filter(Boolean));
+  const snap = cur && cur.snapshot;
+  const cards = [...((snap && snap.active) || []), ...((snap && snap.recent) || [])];
+  for (const c of cards) {
+    if (!c || !c.id || seen.has(c.id)) continue;
+    // Sessões locais já entraram completas em `local`; aqui entram principalmente sessões de peers (id `m0:...`)
+    if (!String(c.id).includes(':')) continue;
+    seen.add(c.id);
+    out.push({
+      id: c.id,
+      tool: c.tool || 'AI',
+      project: c.project || '',
+      title: c.title || '',
+      cwd: c.cwd || '',
+      machine: c.machine || '',
+      start: toIsoTime(c.start),
+      end: toIsoTime(c.end),
+      prompts: c.prompts || 0,
+      lastPrompt: c.lastPrompt || '',
+      lastReply: c.lastReply || '',
+    });
+  }
+  return out;
+}
+
 module.exports = {
   resolveProjectMemoryDir,
   readDreamState,
   readProjectMemory,
   listAllProjectMemories,
+  collectMemorySessions,
 };

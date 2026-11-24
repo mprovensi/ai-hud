@@ -12,6 +12,8 @@ import {
   GitFork,
   Layers,
   LayoutDashboard,
+  MoreHorizontal,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -83,12 +85,27 @@ export function App() {
   const [newChatPrompt, setNewChatPrompt] = useState('');
   const [newChatLocked, setNewChatLocked] = useState(false);
 
-  // Gaveta lateral esquerda em altura total para Novo Projeto / Novo Englobador
-  const [projectDrawer, setProjectDrawer] = useState<{ open: boolean; mode: ProjectDrawerMode; presetGroup: string }>({
+  // Gaveta lateral esquerda em altura total para Criar / Editar Projeto ou Workspace
+  const [projectDrawer, setProjectDrawer] = useState<{
+    open: boolean;
+    mode: ProjectDrawerMode;
+    presetGroup: string;
+    editEntity: WorkspaceEntity | null;
+    editGroup: string | null;
+  }>({
     open: false,
     mode: 'project',
     presetGroup: '',
+    editEntity: null,
+    editGroup: null,
   });
+
+  // Menuzinho flutuante dos três pontinhos (...) na sidebar
+  const [itemMenu, setItemMenu] = useState<
+    | { kind: 'entity'; entity: WorkspaceEntity; x: number; y: number }
+    | { kind: 'group'; name: string; count: number; x: number; y: number }
+    | null
+  >(null);
 
   // Resize das 3 colunas (esquerda | centro flex:1 | direita)
   const [leftW, setLeftW] = useState(() => readStoredWidth('ai_ws_left_w', 260, 180, 480));
@@ -229,12 +246,27 @@ export function App() {
   }, []);
 
   const openNewModal = useCallback((presetGroup = '') => {
-    setProjectDrawer({ open: true, mode: 'project', presetGroup });
+    setProjectDrawer({ open: true, mode: 'project', presetGroup, editEntity: null, editGroup: null });
   }, []);
 
   const openNewGroup = useCallback(() => {
-    setProjectDrawer({ open: true, mode: 'group', presetGroup: '' });
+    setProjectDrawer({ open: true, mode: 'group', presetGroup: '', editEntity: null, editGroup: null });
   }, []);
+
+  const openEditEntity = useCallback((entity: WorkspaceEntity) => {
+    setProjectDrawer({ open: true, mode: 'project', presetGroup: entity.group || '', editEntity: entity, editGroup: null });
+  }, []);
+
+  const openEditGroup = useCallback((groupName: string) => {
+    setProjectDrawer({ open: true, mode: 'group', presetGroup: '', editEntity: null, editGroup: groupName });
+  }, []);
+
+  useEffect(() => {
+    if (!itemMenu) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setItemMenu(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [itemMenu]);
 
   async function handleChangeEntityGroup(entity: WorkspaceEntity, nextGroup: string) {
     if (nextGroup === '__new__') {
@@ -487,12 +519,22 @@ export function App() {
                     </button>
                     {sec.name && (
                       <button
-                        className="btn btn-sm btn-icon"
-                        style={{ padding: 2, border: 0, background: 'transparent' }}
-                        title={`Apagar workspace "${sec.name}"`}
-                        onClick={() => setConfirmDelete({ kind: 'group', name: sec.name, count: sec.items.length })}
+                        className={`sb-more ${itemMenu?.kind === 'group' && itemMenu.name === sec.name ? 'open' : ''}`}
+                        title={`Opções do workspace "${sec.name}"`}
+                        aria-label={`Opções do workspace ${sec.name}`}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          const rect = ev.currentTarget.getBoundingClientRect();
+                          setItemMenu({
+                            kind: 'group',
+                            name: sec.name,
+                            count: sec.items.length,
+                            x: Math.min(rect.left, window.innerWidth - 170),
+                            y: Math.min(rect.bottom + 4, window.innerHeight - 96),
+                          });
+                        }}
                       >
-                        <Trash2 size={12} color="var(--muted)" />
+                        <MoreHorizontal size={13} />
                       </button>
                     )}
                   </div>
@@ -507,17 +549,35 @@ export function App() {
                         sec.items.map((e) => {
                           const active = selection?.kind === 'entity' && selection.id === e.id;
                           return (
-                            <button
-                              key={e.id}
-                              className={`sb-item ${active ? 'active' : ''}`}
-                              onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
-                            >
-                              <FolderKanban size={14} color={active ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
-                              <span className="ell">{e.title}</span>
-                              {e.projectBindings?.[0] && (
-                                <span className="meta">{e.projectBindings[0].machine}</span>
-                              )}
-                            </button>
+                            <div key={e.id} className="sb-row">
+                              <button
+                                className={`sb-item ${active ? 'active' : ''}`}
+                                onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
+                              >
+                                <FolderKanban size={14} color={active ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+                                <span className="ell">{e.title}</span>
+                                {e.projectBindings?.[0] && (
+                                  <span className="meta">{e.projectBindings[0].machine}</span>
+                                )}
+                              </button>
+                              <button
+                                className={`sb-more ${itemMenu?.kind === 'entity' && itemMenu.entity.id === e.id ? 'open' : ''}`}
+                                title={`Opções de "${e.title}"`}
+                                aria-label={`Opções do projeto ${e.title}`}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  const rect = ev.currentTarget.getBoundingClientRect();
+                                  setItemMenu({
+                                    kind: 'entity',
+                                    entity: e,
+                                    x: Math.min(rect.left, window.innerWidth - 170),
+                                    y: Math.min(rect.bottom + 4, window.innerHeight - 96),
+                                  });
+                                }}
+                              >
+                                <MoreHorizontal size={13} />
+                              </button>
+                            </div>
                           );
                         })
                       )}
@@ -606,19 +666,6 @@ export function App() {
                     title="Abrir nova conversa neste projeto"
                   >
                     <Plus size={13} /> Nova conversa
-                  </button>
-                  <button
-                    className="btn btn-sm btn-icon btn-danger"
-                    onClick={() => setConfirmDelete({
-                      kind: 'entity',
-                      id: selectedEntity.id,
-                      title: selectedEntity.title,
-                      cwd: activeBinding?.cwd,
-                    })}
-                    aria-label="Apagar projeto"
-                    title="Apagar projeto do AI Workspace"
-                  >
-                    <Trash2 size={13} />
                   </button>
                 </div>
 
@@ -760,27 +807,73 @@ export function App() {
         />
       </div>
 
-      {/* Gaveta lateral esquerda: Novo Projeto / Novo Englobador (com seletor de pasta) */}
+      {/* Gaveta lateral esquerda: Criar / Editar Projeto ou Workspace */}
       <NewProjectDrawer
         open={projectDrawer.open}
         initialMode={projectDrawer.mode}
         presetGroup={projectDrawer.presetGroup}
+        editEntity={projectDrawer.editEntity}
+        editGroup={projectDrawer.editGroup}
         groups={allGroups}
         entities={ws?.entities || []}
-        onClose={() => setProjectDrawer((prev) => ({ ...prev, open: false }))}
-        onProjectCreated={async (entity) => {
+        onClose={() => setProjectDrawer((prev) => ({ ...prev, open: false, editEntity: null, editGroup: null }))}
+        onProjectSaved={async (entity, isEdit) => {
           await loadWorkspace();
-          setSelection({ kind: 'entity', id: entity.id });
-          setEntityTab('step');
-          setStepIdx(0);
-          notify(`Projeto "${entity.title}" criado.`);
+          if (!isEdit) {
+            setSelection({ kind: 'entity', id: entity.id });
+            setEntityTab('step');
+            setStepIdx(0);
+          }
+          notify(isEdit ? `Projeto "${entity.title}" atualizado.` : `Projeto "${entity.title}" criado.`);
         }}
-        onGroupCreated={async (name) => {
+        onGroupSaved={async (name, renamedFrom) => {
           await loadWorkspace();
-          notify(`Workspace "${name}" criado.`);
+          notify(renamedFrom ? `Workspace renomeado para "${name}".` : `Workspace "${name}" criado.`);
         }}
         onNotify={notify}
       />
+
+      {/* Menuzinho (...) da sidebar para Editar / Excluir Projeto ou Workspace */}
+      {itemMenu && (
+        <div className="ctx-menu-bg" onClick={() => setItemMenu(null)}>
+          <div
+            className="ctx-menu"
+            style={{ left: itemMenu.x, top: itemMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="ctx-menu-item"
+              onClick={() => {
+                const cur = itemMenu;
+                setItemMenu(null);
+                if (cur.kind === 'entity') openEditEntity(cur.entity);
+                else openEditGroup(cur.name);
+              }}
+            >
+              <Pencil size={13} /> Editar
+            </button>
+            <button
+              className="ctx-menu-item danger"
+              onClick={() => {
+                const cur = itemMenu;
+                setItemMenu(null);
+                if (cur.kind === 'entity') {
+                  setConfirmDelete({
+                    kind: 'entity',
+                    id: cur.entity.id,
+                    title: cur.entity.title,
+                    cwd: cur.entity.projectBindings?.[0]?.cwd,
+                  });
+                } else {
+                  setConfirmDelete({ kind: 'group', name: cur.name, count: cur.count });
+                }
+              }}
+            >
+              <Trash2 size={13} /> Excluir
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Gaveta lateral direita: Nova Conversa com IA */}
       <NewSessionDrawer

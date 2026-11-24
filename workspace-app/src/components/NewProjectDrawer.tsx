@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FolderKanban, Layers, Plus, X } from 'lucide-react';
+import { FolderKanban, Layers, Plus, Save, X } from 'lucide-react';
 import { api } from '../api';
 import { FolderPicker, shortFolderName } from './FolderPicker';
 import type { MachineCaps, WorkspaceEntity } from '../types';
@@ -10,11 +10,13 @@ interface Props {
   open: boolean;
   initialMode: ProjectDrawerMode;
   presetGroup?: string;
+  editEntity?: WorkspaceEntity | null;
+  editGroup?: string | null;
   groups: string[];
   entities: WorkspaceEntity[];
   onClose: () => void;
-  onProjectCreated: (entity: WorkspaceEntity) => void;
-  onGroupCreated: (groupName: string) => void;
+  onProjectSaved: (entity: WorkspaceEntity, isEdit: boolean) => void;
+  onGroupSaved: (groupName: string, renamedFrom?: string) => void;
   onNotify: (msg: string, err?: boolean) => void;
 }
 
@@ -22,13 +24,17 @@ export function NewProjectDrawer({
   open,
   initialMode,
   presetGroup = '',
+  editEntity = null,
+  editGroup = null,
   groups,
   entities,
   onClose,
-  onProjectCreated,
-  onGroupCreated,
+  onProjectSaved,
+  onGroupSaved,
   onNotify,
 }: Props) {
+  const isEditingEntity = !!editEntity;
+  const isEditingGroup = !!editGroup;
   const [mode, setMode] = useState<ProjectDrawerMode>(initialMode);
   const [caps, setCaps] = useState<MachineCaps[]>([]);
   const [loadingCaps, setLoadingCaps] = useState(false);
@@ -42,34 +48,48 @@ export function NewProjectDrawer({
   const [group, setGroup] = useState(presetGroup);
   const [template, setTemplate] = useState('board');
 
-  // Campos de englobador (workspace)
+  // Campos de workspace
   const [newGroupName, setNewGroupName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setMode(initialMode);
-    setGroup(presetGroup || '');
-    setTitle('');
-    setTitleTouched(false);
-    setDesc('');
-    setTemplate('board');
-    setNewGroupName('');
+    setMode(editEntity ? 'project' : editGroup ? 'group' : initialMode);
+    if (editEntity) {
+      setTitle(editEntity.title || '');
+      setTitleTouched(true);
+      setDesc(editEntity.description || '');
+      setGroup(editEntity.group || '');
+      setTemplate('board');
+    } else {
+      setGroup(presetGroup || '');
+      setTitle('');
+      setTitleTouched(false);
+      setDesc('');
+      setTemplate('board');
+    }
+    setNewGroupName(editGroup || '');
 
     setLoadingCaps(true);
     api.getCapabilities()
       .then((r) => {
         const list = r.machines || [];
         setCaps(list);
-        const first = list.find((m) => m.online) || list[0];
-        if (first) {
-          setMachine(first.name);
-          setCwd(first.pinned?.[0] || first.cwds?.[0] || '');
+        const existingBinding = editEntity?.projectBindings?.[0];
+        if (existingBinding) {
+          setMachine(existingBinding.machine || list[0]?.name || '');
+          setCwd(existingBinding.cwd || '');
+        } else {
+          const first = list.find((m) => m.online) || list[0];
+          if (first) {
+            setMachine(first.name);
+            setCwd(editEntity ? '' : (first.pinned?.[0] || first.cwds?.[0] || ''));
+          }
         }
       })
       .catch(() => {})
       .finally(() => setLoadingCaps(false));
-  }, [open, initialMode, presetGroup]);
+  }, [open, initialMode, presetGroup, editEntity, editGroup]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,14 +112,25 @@ export function NewProjectDrawer({
     setSubmitting(true);
     try {
       const bindings = machine && cwd.trim() ? [{ machine, cwd: cwd.trim() }] : [];
-      const r = await api.createEntity({
-        title: cleanTitle,
-        description: desc.trim(),
-        group: group.trim(),
-        template,
-        projectBindings: bindings,
-      });
-      onProjectCreated(r.entity);
+      if (editEntity) {
+        const r = await api.updateEntity({
+          id: editEntity.id,
+          title: cleanTitle,
+          description: desc.trim(),
+          group: group.trim(),
+          projectBindings: bindings,
+        });
+        onProjectSaved(r.entity, true);
+      } else {
+        const r = await api.createEntity({
+          title: cleanTitle,
+          description: desc.trim(),
+          group: group.trim(),
+          template,
+          projectBindings: bindings,
+        });
+        onProjectSaved(r.entity, false);
+      }
       onClose();
     } catch (e) {
       onNotify((e as Error).message, true);
@@ -114,8 +145,8 @@ export function NewProjectDrawer({
     if (submitting) return;
     setSubmitting(true);
     try {
-      await api.saveGroup({ name: clean });
-      onGroupCreated(clean);
+      await api.saveGroup(editGroup ? { renameFrom: editGroup, name: clean } : { name: clean });
+      onGroupSaved(clean, editGroup || undefined);
       onClose();
     } catch (e) {
       onNotify((e as Error).message, true);
@@ -128,16 +159,22 @@ export function NewProjectDrawer({
 
   return (
     <div className="side-drawer-bg" onClick={onClose}>
-      <aside className="side-drawer" onClick={(e) => e.stopPropagation()} aria-label="Criar projeto ou workspace">
+      <aside className="side-drawer" onClick={(e) => e.stopPropagation()} aria-label="Projeto ou workspace">
         <div className="side-drawer-head">
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>
-              {mode === 'project' ? 'Novo projeto' : 'Novo workspace'}
+              {isEditingEntity
+                ? 'Editar projeto'
+                : isEditingGroup
+                  ? 'Editar workspace'
+                  : mode === 'project'
+                    ? 'Novo projeto'
+                    : 'Novo workspace'}
             </h3>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
               {mode === 'project'
-                ? 'Escolha a pasta do código e organize dentro de um workspace'
-                : 'Agrupe vários projetos relacionados (ex.: TRT, Jogos, Pessoal)'}
+                ? 'Configure a pasta do código, o workspace e os detalhes do projeto'
+                : 'Agrupe projetos relacionados (ex.: TRT, Jogos, Pessoal)'}
             </div>
           </div>
           <button className="btn btn-sm btn-icon" onClick={onClose} title="Fechar (Esc)">
@@ -145,26 +182,28 @@ export function NewProjectDrawer({
           </button>
         </div>
 
-        <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
-          <div className="seg" style={{ width: '100%' }}>
-            <button
-              type="button"
-              className={mode === 'project' ? 'on' : ''}
-              style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
-              onClick={() => setMode('project')}
-            >
-              <FolderKanban size={13} /> Novo Projeto
-            </button>
-            <button
-              type="button"
-              className={mode === 'group' ? 'on' : ''}
-              style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
-              onClick={() => setMode('group')}
-            >
-              <Layers size={13} /> Novo Workspace
-            </button>
+        {!isEditingEntity && !isEditingGroup && (
+          <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
+            <div className="seg" style={{ width: '100%' }}>
+              <button
+                type="button"
+                className={mode === 'project' ? 'on' : ''}
+                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
+                onClick={() => setMode('project')}
+              >
+                <FolderKanban size={13} /> Novo Projeto
+              </button>
+              <button
+                type="button"
+                className={mode === 'group' ? 'on' : ''}
+                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
+                onClick={() => setMode('group')}
+              >
+                <Layers size={13} /> Novo Workspace
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {mode === 'project' ? (
           <>
@@ -232,14 +271,16 @@ export function NewProjectDrawer({
                 />
               </div>
 
-              <div className="field" style={{ marginBottom: 0 }}>
-                <label>6. Visão inicial do card</label>
-                <select className="sel" value={template} onChange={(e) => setTemplate(e.target.value)}>
-                  <option value="board">Board (Kanban: Ideia / Em andamento / Revisão / Concluído)</option>
-                  <option value="research">Research (Lista rica com notas e links)</option>
-                  <option value="gallery">Gallery (Grade visual com imagens e prompts)</option>
-                </select>
-              </div>
+              {!isEditingEntity && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>6. Visão inicial do card</label>
+                  <select className="sel" value={template} onChange={(e) => setTemplate(e.target.value)}>
+                    <option value="board">Board (Kanban: Ideia / Em andamento / Revisão / Concluído)</option>
+                    <option value="research">Research (Lista rica com notas e links)</option>
+                    <option value="gallery">Gallery (Grade visual com imagens e prompts)</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="side-drawer-foot">
@@ -250,7 +291,8 @@ export function NewProjectDrawer({
                 disabled={submitting || !title.trim()}
                 onClick={submitProject}
               >
-                <Plus size={14} /> {submitting ? 'Criando…' : 'Criar projeto'}
+                {isEditingEntity ? <Save size={14} /> : <Plus size={14} />}
+                {submitting ? 'Salvando…' : isEditingEntity ? 'Salvar alterações' : 'Criar projeto'}
               </button>
             </div>
           </>
@@ -269,7 +311,7 @@ export function NewProjectDrawer({
                 />
               </div>
 
-              {groups.length > 0 && (
+              {!isEditingGroup && groups.length > 0 && (
                 <div className="field" style={{ marginBottom: 0 }}>
                   <label>Workspaces já existentes ({groups.length})</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -281,7 +323,9 @@ export function NewProjectDrawer({
               )}
 
               <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
-                Depois de criar o workspace, clique no botão <b>+</b> ao lado dele na barra esquerda para adicionar projetos ou mova projetos existentes usando o seletor no cabeçalho.
+                {isEditingGroup
+                  ? 'Todos os projetos dentro deste workspace serão atualizados automaticamente para o novo nome.'
+                  : <>Depois de criar o workspace, clique no botão <b>+</b> ao lado dele na barra esquerda para adicionar projetos ou mova projetos existentes usando o seletor no cabeçalho.</>}
               </div>
             </div>
 
@@ -293,7 +337,8 @@ export function NewProjectDrawer({
                 disabled={submitting || !newGroupName.trim()}
                 onClick={submitGroup}
               >
-                <Layers size={14} /> {submitting ? 'Criando…' : 'Criar workspace'}
+                {isEditingGroup ? <Save size={14} /> : <Layers size={14} />}
+                {submitting ? 'Salvando…' : isEditingGroup ? 'Salvar nome' : 'Criar workspace'}
               </button>
             </div>
           </>

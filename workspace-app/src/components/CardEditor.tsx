@@ -16,6 +16,7 @@ import {
   List,
   Play,
   Plus,
+  RotateCcw,
   Save,
   ShieldAlert,
   Sparkles,
@@ -97,6 +98,8 @@ export function CardEditor({
   // Drag-and-drop entre colunas
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<CardStatus | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const [recentImportCount, setRecentImportCount] = useState<number | null>(null);
 
   async function load(ignoreDraft = false) {
     setConflict(null);
@@ -365,11 +368,12 @@ export function CardEditor({
         sessionStorage.removeItem(draftKey);
       }
       setImportOpen(false);
-      onNotify(
-        r.addedCount && r.addedCount > 0
-          ? `${r.addedCount} item(ns) importado(s) para o Quadro (0 tokens).`
-          : 'Nenhum item novo encontrado nos documentos selecionados (0 tokens).',
-      );
+      if (r.addedCount && r.addedCount > 0) {
+        setRecentImportCount(r.addedCount);
+        onNotify(`${r.addedCount} item(ns) importado(s) para o Quadro (0 tokens).`);
+      } else {
+        onNotify('Nenhum item novo encontrado nos documentos selecionados (0 tokens).');
+      }
     } catch (e) {
       onNotify((e as Error).message, true);
     } finally {
@@ -424,8 +428,28 @@ export function CardEditor({
     const nextCard = { ...card, items: [...card.items, ...added] };
     setAiProposed(null);
     setImportOpen(false);
+    if (added.length > 0) setRecentImportCount(added.length);
     updateCard(nextCard);
     save(nextCard);
+  }
+
+  async function handleUndoBoard(skipConfirm = false) {
+    if (!hasProjectCwd || undoing || offlineFallback) return;
+    if (!skipConfirm && !window.confirm('Restaurar a versão anterior do Quadro (desfazer última alteração/importação)?')) return;
+    setUndoing(true);
+    try {
+      const r = await api.undoProjectBoard(entityId);
+      setCard(r.board);
+      setBaseHash(r.hash);
+      setDirty(false);
+      setRecentImportCount(null);
+      sessionStorage.removeItem(draftKey);
+      onNotify(`Quadro restaurado para a versão anterior (${r.board.items.length} itens).`);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setUndoing(false);
+    }
   }
 
   function buildExecutePrompt(item: CardItem): string {
@@ -727,14 +751,24 @@ export function CardEditor({
         </button>
 
         {hasProjectCwd && (
-          <button
-            className="btn btn-sm"
-            onClick={() => { setImportOpen((v) => !v); setAiStructEstimate(null); setAiProposed(null); }}
-            disabled={offlineFallback}
-            title="Importar planos, specs e checklists da pasta docs/ do projeto"
-          >
-            <Download size={13} /> Importar de docs/
-          </button>
+          <>
+            <button
+              className="btn btn-sm"
+              onClick={() => { setImportOpen((v) => !v); setAiStructEstimate(null); setAiProposed(null); }}
+              disabled={offlineFallback}
+              title="Importar planos, specs e checklists da pasta docs/ do projeto"
+            >
+              <Download size={13} /> Importar de docs/
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => handleUndoBoard(false)}
+              disabled={undoing || offlineFallback}
+              title="Restaurar versão anterior do Quadro (desfazer importação ou última gravação)"
+            >
+              <RotateCcw size={13} /> {undoing ? 'Desfazendo…' : 'Desfazer'}
+            </button>
+          </>
         )}
 
         <span className="badge" title={storage === 'in-project' ? 'Salvo em .ai-workspace/board.card.json dentro da pasta do projeto (portátil entre workspaces)' : 'Salvo no Hub do AI Workspace'}>
@@ -748,6 +782,21 @@ export function CardEditor({
           </button>
         </div>
       </div>
+
+      {/* Banner de desfazer rápido logo após importação de docs/ */}
+      {recentImportCount !== null && hasProjectCwd && !offlineFallback && (
+        <div className="docs-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px' }}>
+          <span style={{ fontSize: 12.5 }}>
+            📥 <b>{recentImportCount} item(ns)</b> importado(s) para o Quadro. Não ficou como queria?
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-sm btn-primary" disabled={undoing} onClick={() => handleUndoBoard(true)}>
+              <RotateCcw size={12} /> Desfazer importação
+            </button>
+            <button className="btn btn-sm" onClick={() => setRecentImportCount(null)}>Manter</button>
+          </div>
+        </div>
+      )}
 
       {/* Onboarding automático quando o quadro está vazio e existem docs/ no projeto */}
       {hasProjectCwd && card.items.length === 0 && projectDocs.length > 0 && !importOpen && !offlineFallback && (
@@ -908,7 +957,9 @@ export function CardEditor({
                       <Plus size={12} />
                     </button>
                   </div>
-                  {items.map(renderItemCard)}
+                  <div className="board-col-body">
+                    {items.map(renderItemCard)}
+                  </div>
                 </div>
               );
             })}

@@ -386,6 +386,12 @@ export const api = {
       { method: 'POST', body: JSON.stringify(body) },
     ),
 
+  undoProjectBoard: (entityId: string) =>
+    apiFetch<{ ok: boolean; restoredBackup: string; remainingBackups: number; board: CardDoc; hash: string }>(
+      '/api/workspace/project/board-undo',
+      { method: 'POST', body: JSON.stringify({ entityId }) },
+    ),
+
   getWorkflowUsage: () =>
     apiFetch<UsageAggregate>('/api/workspace/usage'),
 };

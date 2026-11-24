@@ -14,6 +14,7 @@ const {
   createSpecDoc,
   saveReviewReport,
   importDocsToBoard,
+  undoPortableBoard,
   syncDocCheckbox,
 } = require('../../actions/workspace/project-storage');
 
@@ -457,6 +458,39 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
         title: (target.entity && target.entity.title) || body.title || '',
       });
       if (r.status === 200 && !body.dryRun && r.body && r.body.board && entityId) {
+        try { workspace.saveEntityFile({ entityId, relPath: 'overview.card.json', content: r.body.board }); } catch {}
+      }
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    { method: 'POST', path: '/api/workspace/project/board-undo', json: true, maxBytes: 16 * 1024, handler: async ({ res, url, body }) => {
+      const isLocal = url.searchParams.get('local') === '1';
+      const entityId = body.entityId || '';
+      const target = resolveTarget({
+        entityId,
+        cwd: body.cwd || '',
+        machine: body.machine || '',
+        isLocalCall: isLocal,
+      });
+      if (!target.cwd) return text(res, 400, 'Desfazer quadro requer projeto com pasta vinculada (.ai-workspace).');
+      if (target.peer) {
+        try {
+          const pr = await forwardJson(target.peer, 'POST', '/api/workspace/project/board-undo?local=1', { cwd: target.cwd });
+          if (pr.status === 200 && pr.json && pr.json.board && entityId) {
+            try { workspace.saveEntityFile({ entityId, relPath: 'overview.card.json', content: pr.json.board }); } catch {}
+          }
+          return send(res, pr.status, pr.status === 200 ? 'application/json' : 'text/plain; charset=utf-8', pr.text);
+        } catch {
+          return text(res, 502, `Máquina "${target.machine}" não respondeu ao desfazer o quadro.`);
+        }
+      }
+      if (!isLocal && target.machine && target.machine !== machineName) {
+        return text(res, 404, `Máquina "${target.machine}" não encontrada.`);
+      }
+      const chk = checkAuthorizedCwd(target.cwd, isLocal);
+      if (!chk.ok) return text(res, 403, chk.reason);
+      const r = undoPortableBoard({ cwd: target.cwd });
+      if (r.status === 200 && r.body && r.body.board && entityId) {
         try { workspace.saveEntityFile({ entityId, relPath: 'overview.card.json', content: r.body.board }); } catch {}
       }
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);

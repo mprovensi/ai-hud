@@ -89,6 +89,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `POST /api/workspace/project/spec` | Cria especificação enxuta EGM Lite em `docs/specs/<slug>.md` (0 tokens) |
 | `GET / PUT /api/workspace/project/board` | Lê ou grava o Quadro portátil em `<cwd>/.ai-workspace/board.card.json` (com `.git/info/exclude`, migração automática, cache offline no Hub e federação) |
 | `POST /api/workspace/project/import-docs` | Extrai checklists (`- [ ]`/`- [x]`) e seções de `docs/` para o Quadro sem usar LLM (0 tokens) |
+| `POST /api/workspace/project/board-undo` | Restaura o backup imediatamente anterior de `.ai-workspace/board.card.json` (desfazer importação ou última gravação) |
 | `POST /api/workspace/project/sync-checkbox` | Sync reverso Quadro → Markdown: marca/desmarca `- [x]` / `- [ ]` no `docRef` ao concluir/reabrir card |
 | `POST /api/workspace/project/review` | Revisão Goldfish (EGM Lite, 1 chamada contexto zero; `dryRun: true` retorna estimativa de tokens antes; salva parecer em `.ai-workspace/reviews/` e loga tokens) |
 | `POST /api/workspace/project/structure-ai` | Estruturação opcional de docs em texto corrido via IA (`dryRun: true` para ver estimativa; retorna prévia sem sobrescrever) |

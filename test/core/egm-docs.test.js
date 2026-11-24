@@ -99,4 +99,15 @@ test('egm.js gera template enxuto, prompt Goldfish sem segredos e parseia revis√
   assert.equal(items.length, 1);
   assert.equal(items[0].status, 'spec');
   assert.equal(items[0].docRef, 'docs/ideia.md');
+
+  // Formato real do Antigravity CLI (`agy --output-format json`): campo `response` com markdown fence
+  const agyWrapped = JSON.stringify({
+    conversation_id: '5068aeb9-f002-4073-9975-6ba11bade461',
+    status: 'SUCCESS',
+    response: '```json\n{"items":[{"title":"Tarefa do agy","body":"ok","status":"idea","docRef":"README.md"}]}\n```\n',
+    usage: { input_tokens: 9312, output_tokens: 385, cache_read_tokens: 120 },
+  });
+  const agyItems = parseStructuredItems(agyWrapped);
+  assert.equal(agyItems.length, 1);
+  assert.equal(agyItems[0].title, 'Tarefa do agy');
 });

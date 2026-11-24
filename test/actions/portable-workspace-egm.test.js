@@ -81,12 +81,14 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
         });
       }
       return JSON.stringify({
-        result: JSON.stringify({
+        conversation_id: '5068aeb9-f002-4073-9975-6ba11bade461',
+        status: 'SUCCESS',
+        response: JSON.stringify({
           items: [
             { title: 'Item estruturado por IA', body: 'Detalhe curto.', status: 'spec', phase: 'IA', docRef: 'README.md' },
           ],
         }),
-        usage: { input_tokens: 900, output_tokens: 210 },
+        usage: { input_tokens: 900, output_tokens: 210, cache_read_tokens: 50 },
       });
     },
     brands: false,
@@ -119,7 +121,7 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(docsList.json.gitMode, 'git-exclude');
     assert.ok(docsList.json.docs.some((d) => d.path === 'docs/plano-v2.md' && d.category === 'plan' && d.taskCount === 3));
 
-    // 3. Importa checklists de docs/plano-v2.md para o Quadro (0 tokens!)
+    // 3. Importa checklists de docs/plano-v2.md para o Quadro (0 tokens!) e valida Desfazer importação
     const imp = await reqJson(port, 'POST', '/api/workspace/project/import-docs', tok, {
       entityId: entId1,
       paths: ['docs/plano-v2.md'],
@@ -129,8 +131,33 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(imp.json.addedCount, 3);
     assert.equal(modelCalls, 0);
 
-    // 3b. Sync reverso Quadro -> Markdown: concluir item 2 marca `- [x]` em docs/plano-v2.md
-    const item2 = imp.json.board.items[1];
+    // Desfaz importação -> volta a 0 itens; depois reimporta normalmente
+    const undoneBoard = await reqJson(port, 'POST', '/api/workspace/project/board-undo', tok, { entityId: entId1 });
+    assert.equal(undoneBoard.status, 200);
+    assert.equal(undoneBoard.json.board.items.length, 0);
+
+    const imp2 = await reqJson(port, 'POST', '/api/workspace/project/import-docs', tok, {
+      entityId: entId1,
+      paths: ['docs/plano-v2.md'],
+    });
+    assert.equal(imp2.status, 200);
+    assert.equal(imp2.json.addedCount, 3);
+
+    // 3b. Estruturação com IA no formato real de `agy --output-format json` (`response` + `usage`)
+    const aiStruct = await reqJson(port, 'POST', '/api/workspace/project/structure-ai', tok, {
+      entityId: entId1,
+      docPaths: ['README.md'],
+      engine: 'Claude Code',
+      dryRun: false,
+    });
+    assert.equal(aiStruct.status, 200);
+    assert.equal(aiStruct.json.items.length, 1);
+    assert.equal(aiStruct.json.items[0].title, 'Item estruturado por IA');
+    assert.equal(aiStruct.json.usage.totalTokens, 1110);
+    assert.equal(aiStruct.json.usage.cacheReadTokens, 50);
+
+    // 3c. Sync reverso Quadro -> Markdown: concluir item 2 marca `- [x]` em docs/plano-v2.md
+    const item2 = imp2.json.board.items[1];
     const synced = await reqJson(port, 'POST', '/api/workspace/project/sync-checkbox', tok, {
       entityId: entId1,
       docRef: item2.docRef,
@@ -173,7 +200,7 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(est.status, 200);
     assert.equal(est.json.dryRun, true);
     assert.ok(est.json.estimatedTotalTokens > 0);
-    assert.equal(modelCalls, 0);
+    assert.equal(modelCalls, 1);
 
     const rev = await reqJson(port, 'POST', '/api/workspace/project/review', tok, {
       entityId: entId1,
@@ -187,13 +214,13 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(rev.json.usage.totalTokens, 1480);
     assert.equal(rev.json.usage.estimated, false);
     assert.ok(fs.existsSync(path.join(projDir, rev.json.reportPath)));
-    assert.equal(modelCalls, 1);
+    assert.equal(modelCalls, 2);
 
-    // Log global de tokens do workflow registrado
+    // Log global de tokens do workflow registrado (1 structure-ai + 1 goldfish)
     const usage = await reqJson(port, 'GET', '/api/workspace/usage', tok);
     assert.equal(usage.status, 200);
-    assert.equal(usage.json.runs, 1);
-    assert.equal(usage.json.totalTokens, 1480);
+    assert.equal(usage.json.runs, 2);
+    assert.equal(usage.json.totalTokens, 1110 + 1480);
 
     // 6. PORTABILIDADE REAL: remove projeto do WorkspaceA e recria no WorkspaceB apontando para a mesma pasta!
     const del = await reqJson(port, 'POST', '/api/workspace/entity/delete', tok, { id: entId1 });

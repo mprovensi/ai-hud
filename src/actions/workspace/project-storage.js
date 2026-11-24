@@ -211,6 +211,12 @@ function importDocsToBoard({ cwd, paths = null, dryRun = false, title = '', now 
     };
   }
 
+  // Se ainda não existia board.card.json no projeto, grava o estado inicial vazio antes de importar
+  // para que "Desfazer importação" sempre consiga restaurar o quadro anterior.
+  if (!(cur.status === 200 && cur.body.exists)) {
+    savePortableBoard({ cwd, content: baseCard, now });
+  }
+
   const nextCard = { ...baseCard, items: merged.items };
   const saved = savePortableBoard({ cwd, content: nextCard, now });
   if (saved.status !== 200) return saved;
@@ -225,6 +231,46 @@ function importDocsToBoard({ cwd, paths = null, dryRun = false, title = '', now 
       totalItems: merged.items.length,
       board: nextCard,
       hash: saved.body.hash,
+    },
+  };
+}
+
+function undoPortableBoard({ cwd }) {
+  if (!cwd || !fs.existsSync(cwd)) return { status: 404, body: 'Pasta do projeto não encontrada nesta máquina.' };
+  const realRoot = fs.realpathSync(cwd);
+  const backupDir = path.join(realRoot, PORTABLE_DIR, 'backups', 'cards');
+  let files = [];
+  try {
+    files = fs.readdirSync(backupDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.bak'))
+      .map((e) => e.name)
+      .sort()
+      .reverse();
+  } catch {}
+  if (!files.length) {
+    return { status: 404, body: 'Nenhuma versão anterior do quadro disponível para desfazer.' };
+  }
+  const latestName = files[0];
+  const latestPath = path.join(backupDir, latestName);
+  const raw = fs.readFileSync(latestPath, 'utf8');
+  let parsed = null;
+  try {
+    parsed = validateCard(JSON.parse(raw));
+  } catch {
+    return { status: 422, body: 'O backup anterior do quadro está corrompido.' };
+  }
+  const serialized = JSON.stringify(parsed, null, 2) + '\n';
+  const target = path.join(realRoot, PORTABLE_BOARD_REL);
+  writeAtomic(target, serialized);
+  try { fs.unlinkSync(latestPath); } catch {}
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      restoredBackup: latestName,
+      remainingBackups: files.length - 1,
+      board: parsed,
+      hash: hashContent(serialized),
     },
   };
 }
@@ -270,5 +316,6 @@ module.exports = {
   createSpecDoc,
   saveReviewReport,
   importDocsToBoard,
+  undoPortableBoard,
   syncDocCheckbox,
 };

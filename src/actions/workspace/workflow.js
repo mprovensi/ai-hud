@@ -47,15 +47,18 @@ function postJsonHttp(urlStr, payload, timeoutMs = 120e3) {
   });
 }
 
-function runCliCapture(exe, args, cwd, exec = execFile, timeout = 120e3) {
+function runCliCapture(exe, args, cwd, exec = execFile, timeout = 120e3, stdinText = null) {
   return new Promise((resolve, reject) => {
-    exec(exe, args, { cwd, windowsHide: true, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const child = exec(exe, args, { cwd, windowsHide: true, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         const msg = String(stderr || err.message || '').trim().split(/\r?\n/)[0];
         return reject(new Error(msg || 'Falha ao executar CLI para workflow EGM.'));
       }
       resolve(String(stdout || ''));
     });
+    if (stdinText !== null && child && child.stdin) {
+      try { child.stdin.end(stdinText); } catch {}
+    }
   });
 }
 
@@ -119,20 +122,21 @@ function createWorkspaceWorkflow({
       return { raw, text: (parsed && parsed.message && parsed.message.content) || raw };
     }
     if (engine === 'Gemini') {
-      const args = [`--print=${prompt}`, '--output-format', 'stream-json'];
+      const args = ['--output-format', 'json', '--disable-slash-commands'];
       if (model) args.push('--model', model);
+      args.push(`--print=${prompt}`);
       return runCliCapture(agyExe, args, runCwd, exec);
     }
     if (engine === 'Codex') {
       const args = ['exec', '--skip-git-repo-check', '--json', '-C', runCwd];
       if (model) args.push('-m', model);
-      args.push(prompt);
-      return runCliCapture(codexExe, args, runCwd, exec);
+      args.push('-');
+      return runCliCapture(codexExe, args, runCwd, exec, 120e3, prompt);
     }
     if (engine === 'Claude Code') {
-      const args = ['-p', prompt, '--output-format', 'json'];
+      const args = ['-p', '--output-format', 'json'];
       if (model) args.push('--model', model);
-      return runCliCapture(claudeExe, args, runCwd, exec);
+      return runCliCapture(claudeExe, args, runCwd, exec, 120e3, prompt);
     }
     throw new Error(`Motor não suportado: ${engine}`);
   }
@@ -215,6 +219,7 @@ function createWorkspaceWorkflow({
         },
       };
     } catch (e) {
+      log(`[egm-goldfish] erro em ${project} (${docPath}): ${e.message}`);
       return { status: e.status || 502, body: e.message || 'Falha durante a revisão Goldfish.' };
     }
   }
@@ -288,6 +293,7 @@ function createWorkspaceWorkflow({
         },
       };
     } catch (e) {
+      log(`[egm-structure] erro em ${project}: ${e.message}`);
       return { status: e.status || 502, body: e.message || 'Falha ao estruturar documentos com IA.' };
     }
   }

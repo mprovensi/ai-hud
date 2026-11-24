@@ -80,6 +80,7 @@ function unwrapCliText(raw) {
   const whole = tryJson(s);
   if (whole) {
     if (whole.verdict || whole.items) return s;
+    if (typeof whole.response === 'string') return whole.response;
     if (typeof whole.result === 'string') return whole.result;
   }
   const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -91,7 +92,8 @@ function unwrapCliText(raw) {
     if (!obj) continue;
     jsonLines++;
     if (obj.verdict || obj.items) return line;
-    if (typeof obj.result === 'string') chunks.push(obj.result);
+    if (typeof obj.response === 'string') chunks.push(obj.response);
+    else if (typeof obj.result === 'string') chunks.push(obj.result);
     else if (typeof obj.text === 'string') chunks.push(obj.text);
     else if (obj.item && typeof obj.item.text === 'string') chunks.push(obj.item.text);
     else if (obj.message && typeof obj.message.content === 'string') chunks.push(obj.message.content);
@@ -185,13 +187,25 @@ function buildStructureFromDocsPrompt({ project = '', docs = [] }) {
 }
 
 function parseStructuredItems(raw) {
-  const obj = parseJsonPayload(raw);
-  if (!obj || !Array.isArray(obj.items)) {
+  let obj = parseJsonPayload(raw);
+  let list = obj && Array.isArray(obj.items) ? obj.items : null;
+  if (!list) {
+    const text = unwrapCliText(raw);
+    const s = text.indexOf('[');
+    const e = text.lastIndexOf(']');
+    if (s >= 0 && e > s) {
+      try {
+        const arr = JSON.parse(text.slice(s, e + 1));
+        if (Array.isArray(arr)) list = arr;
+      } catch {}
+    }
+  }
+  if (!list) {
     throw Object.assign(new Error('O modelo não retornou uma lista JSON válida de itens.'), { status: 502 });
   }
   const out = [];
-  for (let i = 0; i < Math.min(obj.items.length, 25); i++) {
-    const it = obj.items[i];
+  for (let i = 0; i < Math.min(list.length, 25); i++) {
+    const it = list[i];
     if (!it || typeof it.title !== 'string' || !it.title.trim()) continue;
     const title = clip(redactSecrets(it.title).text, 180);
     out.push({

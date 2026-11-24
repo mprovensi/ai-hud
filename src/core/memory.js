@@ -135,7 +135,13 @@ function tryJson(str) {
 function extractTextFromCliStream(raw) {
   const s = String(raw || '').trim();
   if (!s) return '';
-  // Tenta extrair de JSONL (Codex `--json` ou Antigravity `--output-format stream-json`)
+  const whole = tryJson(s);
+  if (whole) {
+    if (whole.memoryMd !== undefined) return s;
+    if (typeof whole.response === 'string') return whole.response;
+    if (typeof whole.result === 'string') return whole.result;
+  }
+  // Tenta extrair de JSONL (Codex `--json`, Antigravity `--output-format json|stream-json` ou Claude `--output-format json`)
   const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const chunks = [];
   let jsonLines = 0;
@@ -145,7 +151,8 @@ function extractTextFromCliStream(raw) {
     if (!obj) continue;
     jsonLines++;
     if (obj.memoryMd !== undefined) return line;
-    if (typeof obj.result === 'string') chunks.push(obj.result);
+    if (typeof obj.response === 'string') chunks.push(obj.response);
+    else if (typeof obj.result === 'string') chunks.push(obj.result);
     else if (typeof obj.text === 'string') chunks.push(obj.text);
     else if (obj.item && typeof obj.item.text === 'string') chunks.push(obj.item.text);
     else if (obj.message && typeof obj.message.content === 'string') chunks.push(obj.message.content);
@@ -209,7 +216,7 @@ function extractDreamUsage(raw, { prompt = '', outputText = '' } = {}) {
     if (u && typeof u === 'object') {
       const inp = numOrZero(u.input_tokens ?? u.promptTokenCount ?? u.prompt_tokens);
       const out = numOrZero(u.output_tokens ?? u.candidatesTokenCount ?? u.completion_tokens);
-      const cache = numOrZero(u.cache_read_input_tokens ?? u.cached_input_tokens ?? u.cachedContentTokenCount ?? u.cache_creation_input_tokens);
+      const cache = numOrZero(u.cache_read_input_tokens ?? u.cache_read_tokens ?? u.cached_input_tokens ?? u.cachedContentTokenCount ?? u.cache_creation_input_tokens);
       if (inp > 0 || out > 0 || cache > 0) {
         inputTokens = inp;
         outputTokens = out;

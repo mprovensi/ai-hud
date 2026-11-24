@@ -300,6 +300,21 @@ export const api = {
       `/api/fs/git?cwd=${encodeURIComponent(cwd)}${machine ? `&machine=${encodeURIComponent(machine)}` : ''}`,
     ),
 
+  commitGit: (body: { cwd: string; machine?: string; message: string; push?: boolean }) =>
+    apiFetch<{
+      ok: boolean;
+      committed: boolean;
+      nothingToCommit?: boolean;
+      branch?: string;
+      hash?: string;
+      message?: string;
+      pushed?: boolean;
+      pushError?: string;
+    }>('/api/fs/git-commit', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   previewFile: (opts: { cwd: string; path: string; mode: 'diff' | 'content'; machine?: string }) =>
     apiFetch<{ ok: boolean; path: string; mode: string; content: string; truncated?: boolean; binary?: boolean; redacted?: boolean; fallback?: string }>(
       `/api/fs/preview?cwd=${encodeURIComponent(opts.cwd)}&path=${encodeURIComponent(opts.path)}&mode=${opts.mode}${opts.machine ? `&machine=${encodeURIComponent(opts.machine)}` : ''}`,

@@ -66,6 +66,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `GET /api/fs/image?id=&cwd=&machine=&path=&download=1` | Serve imagem binária (PNG/JPG/WEBP/GIF/SVG/BMP/ICO, até 15 MB) contida na pasta da sessão/projeto, com proxy multi-máquina e cabeçalho `Content-Disposition` opcional |
 | `GET /api/fs/list?cwd=&path=&machine=` | `{ ok, dir, entries: [{ name, path, type, size }], truncated }` (pastas autorizadas) |
 | `GET /api/fs/git?cwd=&machine=` | `{ ok, isRepo, branch, modified[], commits[] }` (pastas autorizadas) |
+| `POST /api/fs/git-commit` | `{ cwd, machine?, message, push? }` → `{ ok, committed, nothingToCommit?, branch, hash, pushed, pushError? }` (`git add -A && git commit` seguro no projeto, com proxy multi-máquina) |
 | `POST /api/fs/exec` | `{ cwd, machine?, command, timeoutMs? }` → `{ ok, code, timedOut, truncated, redacted, durationMs, stdout, stderr }` (terminal integrado em pastas autorizadas; desativável via `config.disableTerminal`) |
 | `GET /api/pty/status` | `{ ok, available, backend, active }` (status do PTY nativo — `win32-conpty` no Windows ou `unix-pty` no Linux/macOS) |
 | `WS /ws/pty` | WebSocket RFC 6455 nativo (`?cwd=&machine=&mode=resume\|cli\|shell&tool=&sessionId=&cols=&rows=&key=`) para terminal `xterm.js` interativo real (com proxy multi-máquina) |

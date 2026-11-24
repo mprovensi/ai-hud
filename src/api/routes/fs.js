@@ -20,7 +20,7 @@ const IMAGE_MIMES = {
 };
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
-module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
+module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
   function checkAuthorizedCwd(cwd) {
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
     const wsRoots = [];
@@ -110,6 +110,25 @@ module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pic
       if (!check.ok) return text(res, 403, check.reason);
       const r = await projectGit(cwd);
       return r.status !== 200 ? text(res, r.status, r.error) : json(res, r.body);
+    } },
+
+    { method: 'POST', path: '/api/fs/git-commit', json: true, maxBytes: 16 * 1024, handler: async ({ res, url, body }) => {
+      if (!projectGitCommit) return text(res, 501, 'Commit Git indisponível.');
+      const cwd = String((body && body.cwd) || '').trim();
+      const machine = String((body && body.machine) || '').trim();
+      const message = String((body && body.message) || '').trim();
+      const push = !!(body && body.push);
+      if (!cwd) return text(res, 400, 'informe cwd do projeto');
+      if (!message) return text(res, 400, 'informe a mensagem do commit');
+      if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+        const peer = peers.list.find((p) => p.name === machine);
+        if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
+        return relay(res, peers.forward(peer, 'POST', '/api/fs/git-commit?local=1', { cwd, message, push }, 60000));
+      }
+      const check = checkAuthorizedCwd(cwd);
+      if (!check.ok) return text(res, 403, check.reason);
+      const r = await projectGitCommit({ cwd, message, push });
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 
     { method: 'POST', path: '/api/fs/exec', json: true, maxBytes: 16 * 1024, handler: async ({ res, url, body }) => {

@@ -372,25 +372,31 @@ button.qchip:hover { border-color: var(--border-hi); background: var(--card-hove
 .col-dot.review { background: #e5c063; }
 .col-dot.done { background: #6fd195; }
 
-/* Sidebar drag-and-drop + destaque de projetos com alteração recente (Itens 1 e 2) */
+/* Diferenciação visual sutil por etapa no Modal de Detalhes do Card */
+.modal.card-detail-modal { border-top: 3px solid var(--border-hi); transition: border-color .15s, background .15s; }
+.modal.card-detail-modal.stage-idea { border-top-color: #7c8ba6; background: linear-gradient(180deg, rgba(124, 139, 166, .08), transparent 110px), var(--panel); }
+.modal.card-detail-modal.stage-spec { border-top-color: #b692f6; background: linear-gradient(180deg, rgba(182, 146, 246, .10), transparent 110px), var(--panel); }
+.modal.card-detail-modal.stage-in-progress { border-top-color: #6ea3f7; background: linear-gradient(180deg, rgba(110, 163, 247, .10), transparent 110px), var(--panel); }
+.modal.card-detail-modal.stage-review { border-top-color: #e5c063; background: linear-gradient(180deg, rgba(229, 192, 99, .10), transparent 110px), var(--panel); }
+.modal.card-detail-modal.stage-done { border-top-color: #6fd195; background: linear-gradient(180deg, rgba(111, 209, 149, .09), transparent 110px), var(--panel); }
+
+/* Prompt rápido de commit ao concluir tarefa */
+.quick-commit-bar {
+  border: 1px solid rgba(111, 209, 149, .38);
+  background: rgba(111, 209, 149, .07);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Sidebar drag-and-drop + indicador discreto (somente bolinha) */
 .ws-group.sb-drag-over > .ws-group-head { background: rgba(95, 184, 164, .16); box-shadow: inset 0 2px 0 var(--accent); }
 .sb-row.sb-drag-over { box-shadow: inset 0 2px 0 var(--accent); background: rgba(95, 184, 164, .10); }
 .sb-row.sb-dragging, .ws-group.sb-dragging { opacity: .45; }
-.sb-item.sb-recent:not(.active) {
-  background: rgba(95, 184, 164, .07);
-  box-shadow: inset 2px 0 0 rgba(95, 184, 164, .7);
-  color: #e4ebf5;
-}
-.sb-item.sb-attention:not(.active) {
-  background: rgba(229, 192, 99, .09);
-  box-shadow: inset 2px 0 0 var(--warn);
-  color: #f4e6be;
-}
-.sb-item.sb-working:not(.active) {
-  background: rgba(111, 209, 149, .09);
-  box-shadow: inset 2px 0 0 var(--ok);
-  color: #e2f7ea;
-}
 .sb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .sb-dot.working { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
 .sb-dot.attention { background: var(--warn); box-shadow: 0 0 6px var(--warn); }

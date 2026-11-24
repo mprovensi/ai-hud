@@ -325,6 +325,36 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.equal(wsIdx.json.entities[0].id, ent2.json.entity.id);
     assert.equal(wsIdx.json.entities[0].group, 'Beta');
     assert.equal(wsIdx.json.entities[1].id, recreated.json.entity.id);
+
+    // 11. Commit rápido via POST /api/fs/git-commit em repositório Git real
+    const { execFileSync } = require('child_process');
+    const gitProj = tmpDir('hud-git-commit-');
+    execFileSync('git', ['init'], { cwd: gitProj });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: gitProj });
+    execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: gitProj });
+    fs.writeFileSync(path.join(gitProj, 'app.txt'), 'v1\n');
+    await reqJson(port, 'POST', '/api/workspace/entity', tok, {
+      title: 'Projeto Git',
+      group: 'Beta',
+      projectBindings: [{ machine: 'NoteLocal', cwd: gitProj }],
+    });
+
+    const commitRes = await reqJson(port, 'POST', '/api/fs/git-commit', tok, {
+      cwd: gitProj,
+      message: 'feat: concluir tarefa de teste',
+      push: false,
+    });
+    assert.equal(commitRes.status, 200);
+    assert.equal(commitRes.json.ok, true);
+    assert.equal(commitRes.json.committed, true);
+    assert.ok(commitRes.json.hash.length >= 4);
+
+    const commitAgain = await reqJson(port, 'POST', '/api/fs/git-commit', tok, {
+      cwd: gitProj,
+      message: 'feat: nada novo',
+    });
+    assert.equal(commitAgain.status, 200);
+    assert.equal(commitAgain.json.nothingToCommit, true);
   } finally {
     app.server.close();
   }

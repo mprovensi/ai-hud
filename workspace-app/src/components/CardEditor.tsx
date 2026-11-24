@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FilePlus2,
   FileText,
+  GitCommitHorizontal,
   HardDrive,
   ImagePlus,
   LayoutGrid,
@@ -55,6 +56,9 @@ interface Props {
   entityId: string;
   filePath: string;
   hasProjectCwd?: boolean;
+  projectCwd?: string;
+  projectMachine?: string;
+  lastAutoDone?: { entityId: string; title: string; ts: number } | null;
   reloadKey?: number;
   snapshotVersion?: string;
   onNotify: (msg: string, err?: boolean) => void;
@@ -84,6 +88,9 @@ export function CardEditor({
   entityId,
   filePath,
   hasProjectCwd = false,
+  projectCwd = '',
+  projectMachine = '',
+  lastAutoDone = null,
   reloadKey = 0,
   snapshotVersion = '',
   onNotify,
@@ -144,6 +151,17 @@ export function CardEditor({
   const [refreshing, setRefreshing] = useState(false);
   const [recentImportCount, setRecentImportCount] = useState<number | null>(null);
   const [pendingExternalReload, setPendingExternalReload] = useState(false);
+
+  // Prompt rápido de commit ao concluir tarefa (0 tokens)
+  const [quickCommit, setQuickCommit] = useState<{
+    taskTitle: string;
+    message: string;
+    branch: string;
+    modified: { code: string; path: string }[];
+    push: boolean;
+    committing: boolean;
+  } | null>(null);
+  const lastHandledAutoDoneRef = useRef(0);
 
   const baseHashRef = useRef('');
   const dirtyRef = useRef(false);
@@ -293,6 +311,72 @@ export function CardEditor({
     if (snapshotVersion && baseHashRef.current) checkExternalUpdate(false);
   }, [snapshotVersion]);
 
+  useEffect(() => {
+    setQuickCommit(null);
+  }, [entityId, projectCwd]);
+
+  async function promptQuickCommit(taskTitle: string, explicit = false) {
+    if (!projectCwd || offlineFallback) return;
+    try {
+      const g = await api.getGit(projectCwd, projectMachine);
+      if (!g.isRepo) {
+        if (explicit) onNotify('Esta pasta não é um repositório Git.', true);
+        return;
+      }
+      const mod = g.modified || [];
+      if (mod.length === 0) {
+        if (explicit) onNotify('Nenhuma alteração pendente para commitar no Git.');
+        return;
+      }
+      const cleanTitle = taskTitle.trim().replace(/\s+/g, ' ').slice(0, 80);
+      setQuickCommit({
+        taskTitle: cleanTitle,
+        message: cleanTitle ? `feat: ${cleanTitle}` : 'chore: atualizar tarefa',
+        branch: g.branch || 'HEAD',
+        modified: mod,
+        push: false,
+        committing: false,
+      });
+    } catch (e) {
+      if (explicit) onNotify((e as Error).message, true);
+    }
+  }
+
+  async function runQuickCommit() {
+    if (!quickCommit || !projectCwd || quickCommit.committing) return;
+    const msg = quickCommit.message.trim();
+    if (!msg) return;
+    setQuickCommit((prev) => (prev ? { ...prev, committing: true } : null));
+    try {
+      const r = await api.commitGit({
+        cwd: projectCwd,
+        machine: projectMachine,
+        message: msg,
+        push: quickCommit.push,
+      });
+      setQuickCommit(null);
+      if (r.nothingToCommit) {
+        onNotify('Nada para commitar no Git.');
+      } else if (r.pushError) {
+        onNotify(`Commit ${r.hash || ''} criado em ${r.branch || 'git'}, mas o push falhou: ${r.pushError}`, true);
+      } else if (r.pushed) {
+        onNotify(`Commit ${r.hash || ''} criado e enviado (push) em ${r.branch || 'git'}.`);
+      } else {
+        onNotify(`Commit ${r.hash || ''} criado em ${r.branch || 'git'}.`);
+      }
+    } catch (e) {
+      setQuickCommit((prev) => (prev ? { ...prev, committing: false } : null));
+      onNotify((e as Error).message, true);
+    }
+  }
+
+  useEffect(() => {
+    if (!lastAutoDone || lastAutoDone.entityId !== entityId) return;
+    if (lastAutoDone.ts <= lastHandledAutoDoneRef.current) return;
+    lastHandledAutoDoneRef.current = lastAutoDone.ts;
+    promptQuickCommit(lastAutoDone.title, false);
+  }, [lastAutoDone, entityId, projectCwd, projectMachine]);
+
   function updateCard(next: CardDoc) {
     setCard(next);
     setDirty(true);
@@ -438,8 +522,13 @@ export function CardEditor({
     const ok = await save(nextCard);
     if (ok) {
       setDetailModal(null);
+      const prevSt = (prev?.status || 'idea') as CardStatus;
+      const nextSt = (stamped.status || 'idea') as CardStatus;
       if (prev) {
-        await syncCheckboxIfCrossedDone((prev.status || 'idea') as CardStatus, (stamped.status || 'idea') as CardStatus, stamped);
+        await syncCheckboxIfCrossedDone(prevSt, nextSt, stamped);
+      }
+      if (prevSt !== 'done' && nextSt === 'done') {
+        promptQuickCommit(stamped.title, false);
       }
     }
   }
@@ -488,6 +577,9 @@ export function CardEditor({
     updateCard(nextCard);
     await save(nextCard, true);
     await syncCheckboxIfCrossedDone(prevStatus, targetCol, updatedItem);
+    if (prevStatus !== 'done' && targetCol === 'done') {
+      promptQuickCommit(updatedItem.title, false);
+    }
   }
 
   async function handleModalImageUpload(file: File) {
@@ -909,15 +1001,24 @@ export function CardEditor({
       )}
 
       {/* Modal de Detalhes e Edição do Card (Item 1 e 3) */}
-      {detailModal && (
+      {detailModal && (() => {
+        const modalStage = (detailModal.draft.status || 'idea') as CardStatus;
+        const modalStageLabel = BOARD_STATUSES.find((s) => s.id === modalStage)?.label || modalStage;
+        return (
         <div className="modal-bg" onClick={() => setDetailModal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className={`modal card-detail-modal stage-${modalStage}`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexShrink: 0 }}>
-              <h3 style={{ margin: 0, fontSize: 16 }}>
-                {detailModal.isNew ? 'Novo item no Quadro' : 'Detalhes do card'}
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>
+                  {detailModal.isNew ? 'Novo item no Quadro' : 'Detalhes do card'}
+                </h3>
+                <span className={`badge ${modalStage}`} style={{ gap: 5 }}>
+                  <span className={`col-dot ${modalStage}`} />
+                  {modalStageLabel}
+                </span>
+              </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                {!detailModal.isNew && (detailModal.draft.status || 'idea') !== 'done' && (
+                {!detailModal.isNew && modalStage !== 'done' && (
                   <button
                     className="btn btn-sm btn-primary"
                     onClick={() => {
@@ -927,6 +1028,19 @@ export function CardEditor({
                     }}
                   >
                     <Play size={12} /> Executar
+                  </button>
+                )}
+                {!detailModal.isNew && modalStage === 'done' && projectCwd && !offlineFallback && (
+                  <button
+                    className="btn btn-sm"
+                    title="Commitar alterações pendentes no Git do projeto (0 tokens)"
+                    onClick={() => {
+                      const title = detailModal.draft.title;
+                      setDetailModal(null);
+                      promptQuickCommit(title, true);
+                    }}
+                  >
+                    <GitCommitHorizontal size={13} /> Commitar
                   </button>
                 )}
                 <button className="btn btn-sm btn-icon" onClick={() => setDetailModal(null)} title="Fechar (Esc)">
@@ -1163,7 +1277,8 @@ export function CardEditor({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Modal Goldfish Review */}
       {reviewModal && (
@@ -1356,6 +1471,67 @@ export function CardEditor({
           )}
         </div>
       </div>
+
+      {/* Prompt rápido de commit ao concluir tarefa (0 tokens) */}
+      {quickCommit && projectCwd && !offlineFallback && (
+        <div className="quick-commit-bar">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
+              <GitCommitHorizontal size={15} color="var(--ok)" />
+              <span>
+                Tarefa concluída · <b>{quickCommit.modified.length} arquivo(s)</b> alterado(s) em <code className="mono">{quickCommit.branch}</code>
+              </span>
+              <span
+                className="badge"
+                title={quickCommit.modified.slice(0, 12).map((m) => `${m.code} ${m.path}`).join('\n')}
+                style={{ cursor: 'help' }}
+              >
+                ver arquivos
+              </span>
+            </div>
+            <button className="btn btn-sm btn-icon" onClick={() => setQuickCommit(null)} title="Fechar" disabled={quickCommit.committing}>
+              <X size={13} />
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              className="inp"
+              style={{ flex: 1, minWidth: 220, padding: '6px 10px', fontSize: 12.5 }}
+              value={quickCommit.message}
+              disabled={quickCommit.committing}
+              onChange={(e) => setQuickCommit((prev) => (prev ? { ...prev, message: e.target.value } : null))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  runQuickCommit();
+                } else if (e.key === 'Escape') {
+                  setQuickCommit(null);
+                }
+              }}
+              placeholder="Mensagem do commit…"
+            />
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--muted)', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={quickCommit.push}
+                disabled={quickCommit.committing}
+                onChange={(e) => setQuickCommit((prev) => (prev ? { ...prev, push: e.target.checked } : null))}
+              />
+              Fazer push
+            </label>
+            <button className="btn btn-sm" disabled={quickCommit.committing} onClick={() => setQuickCommit(null)}>
+              Agora não
+            </button>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={quickCommit.committing || !quickCommit.message.trim()}
+              onClick={runQuickCommit}
+            >
+              <GitCommitHorizontal size={13} /> {quickCommit.committing ? 'Commitando…' : 'Commitar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Só avisa mudança em disco quando há edição local aberta/não salva */}
       {pendingExternalReload && (

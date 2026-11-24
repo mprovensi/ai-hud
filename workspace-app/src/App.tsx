@@ -101,6 +101,7 @@ export function App() {
 
   // Gaveta lateral direita com detalhes de uso da assinatura de IA
   const [quotaProvider, setQuotaProvider] = useState<QuotaProvider | null>(null);
+  const [lastAutoDone, setLastAutoDone] = useState<{ entityId: string; title: string; ts: number } | null>(null);
 
   // Gaveta lateral esquerda em altura total para Criar / Editar Projeto ou Workspace
   const [projectDrawer, setProjectDrawer] = useState<{
@@ -226,6 +227,9 @@ export function App() {
           await api.saveProjectBoard({ entityId: exec.entityId, content: nextCard, baseHash: b.hash });
           if (exec.nextStatus === 'done' && target.docRef) {
             await api.syncDocCheckbox({ entityId: exec.entityId, docRef: target.docRef, title: target.title, done: true }).catch(() => {});
+          }
+          if (exec.nextStatus === 'done') {
+            setLastAutoDone({ entityId: exec.entityId, title: exec.title, ts: Date.now() });
           }
           setBoardReloadKey((k) => k + 1);
           notify(`"${exec.title}" movido automaticamente para ${exec.nextLabel}.`);
@@ -803,13 +807,13 @@ export function App() {
                               onDragEnd={() => { setDragSb(null); setDragOverSb(null); }}
                             >
                               <button
-                                className={`sb-item ${active ? 'active' : act ? `sb-${act.kind}` : ''}`}
+                                className={`sb-item ${active ? 'active' : ''}`}
                                 title={act ? `${e.title} · ${act.tip}` : `${e.title} (arraste para reordenar)`}
                                 onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
                               >
-                                <FolderKanban size={14} color={active ? 'var(--accent)' : act ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
-                                <span className="ell">{e.title}</span>
+                                <FolderKanban size={14} color={active ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
                                 {act && <span className={`sb-dot ${act.kind}`} title={act.tip} />}
+                                <span className="ell">{e.title}</span>
                                 {e.projectBindings?.[0] && (
                                   <span className="meta">{e.projectBindings[0].machine}</span>
                                 )}
@@ -966,6 +970,9 @@ export function App() {
                       entityId={selectedEntity.id}
                       filePath={activeStep.path}
                       hasProjectCwd={!!activeBinding}
+                      projectCwd={activeBinding?.cwd}
+                      projectMachine={activeBinding?.machine}
+                      lastAutoDone={lastAutoDone}
                       reloadKey={boardReloadKey}
                       snapshotVersion={snap?.version}
                       onNotify={notify}

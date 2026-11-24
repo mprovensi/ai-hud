@@ -24,7 +24,9 @@ const { createProjectPins } = require('./actions/projects');
 const { createSessionMeta } = require('./actions/session-meta');
 const { createUpload } = require('./actions/upload');
 const { createWorkspaceActions } = require('./actions/workspace');
+const { createWorkspaceSync } = require('./actions/workspace/sync');
 const { createMemoryActions } = require('./actions/memory');
+const { createPush } = require('./actions/push');
 const { createRunning } = require('./actions/running');
 const { compareSessions } = require('./core/session');
 const { createPermissions } = require('./actions/permissions');
@@ -112,6 +114,7 @@ function createApp({
   }
   // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation) + metadados (pin/alias/grupo)
   const sessionMeta = createSessionMeta(dataDir);
+  const push = createPush({ dataDir, config, log });
   function applyMeta(list) {
     return (list || []).map((c) => {
       const m = sessionMeta.get(c.id);
@@ -123,7 +126,9 @@ function createApp({
     const merged = peers.merge(local || buildLocal(sessions, now), machineName);
     const active = applyMeta(merged.active).sort(compareSessions);
     const recent = applyMeta(merged.recent);
-    return { ...merged, active, recent };
+    const out = { ...merged, active, recent };
+    push.observeSnapshot(out);
+    return out;
   }
   const collector = createCollector({ sources, buildLocal, build });
 
@@ -141,9 +146,17 @@ function createApp({
   const setProjectPin = createProjectPins({ config, saveConfig });
   const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });
+  const workspaceSync = createWorkspaceSync({ dataDir, config, log });
   const memory = createMemoryActions({
     dataDir, config, collector, quotas, ollama,
-    claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel, log,
+    claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel,
+    onDreamDone: (info) => push.notifyAll({
+      title: `🌙 Dreaming concluído: ${info.project}`,
+      body: (info.summary || `${info.sessionsProcessed} sessões consolidadas.`).slice(0, 140),
+      tag: `dream-${info.slug}`,
+      url: '/#workspace',
+    }).catch(() => {}),
+    log,
   });
   const filePreview = (opts) => readFilePreview({ ...opts, exec });
   const fileList = (opts) => listProjectFiles(opts);
@@ -152,7 +165,7 @@ function createApp({
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, memory, filePreview, fileList, projectGit,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, memory, push, filePreview, fileList, projectGit,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
@@ -170,6 +183,7 @@ function createApp({
     capabilities.start();
     collector.start();
     memory.startScheduler();
+    workspaceSync.startAutoSync();
     peers.start(() => collector.poke());
     quotas.refreshAll().then(() => collector.poke());
     // Com alguma sessão trabalhando, lê a cada 1 min (o gráfico da janela de 5h fica mais detalhado)

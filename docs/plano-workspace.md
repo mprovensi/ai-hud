@@ -281,28 +281,28 @@ data/workspace/  (ou caminho em config.json -> workspaceDir)
 
 ### Fase 0 — Quick Wins & Fundação no `ai-hud`
 *Retorno imediato no uso diário (inclusive no iPad mini 1) enquanto constrói os blocos de segurança reutilizados por tudo.*
-- [ ] `src/core/path-guard.js` e `src/core/redact.js` (100% puros + testes unitários).
-- [ ] **Projetos pinados + Allowlist remota (`strictRemoteCwd`)** no `#nova` e `POST /api/new`.
-- [ ] **Botão rápido `⏹ Parar turno`** direto no cabeçalho da conversa quando `working`.
-- [ ] **Preview seguro de arquivos modificados + `git diff`** ao clicar nos arquivos listados na aba `Detalhes` (com suporte federado entre as 3 máquinas).
-- [ ] **Handoff ("Resumir e continuar" + Cross-IA)** com alerta visual quando contexto ≥ 75%, salvando em `inbox/handoffs/` e abrindo nova sessão via `POST /api/new`.
+- [x] `src/core/path-guard.js` e `src/core/redact.js` (100% puros + testes unitários).
+- [x] **Projetos pinados + Allowlist remota (`strictRemoteCwd`)** no `#nova` e `POST /api/new`.
+- [x] **Botão rápido `⏹ Parar turno`** direto no cabeçalho da conversa quando `working`.
+- [x] **Preview seguro de arquivos modificados + `git diff`** ao clicar nos arquivos listados na aba `Detalhes` (com suporte federado entre as 3 máquinas).
+- [x] **Handoff ("Resumir e continuar" + Cross-IA)** com alerta visual quando contexto ≥ 75%, salvando em `inbox/handoffs/` e abrindo nova sessão via `POST /api/new`.
 
 ### Fase 1 — Motor File-First: Workspace + Memória Compartilhada & Dreaming (Backend + API)
 *Toda a inteligência de dados, validação, conflito `409`, memória cross-IA e agendamento noturno pronta e testada.*
-- [ ] `src/core/workspace-schema.js` e `src/core/memory.js`.
-- [ ] `src/collect/workspace/` + `src/actions/workspace/` (entidades, `*.card.json`, `baseHash` → `409`, backups em `.ai-workspace/backups/`, upload de mídia).
-- [ ] `src/collect/memory/` + `src/actions/memory/dream.js`:
+- [x] `src/core/workspace-schema.js` e `src/core/memory.js`.
+- [x] `src/collect/workspace/` + `src/actions/workspace/` (entidades, `*.card.json`, `baseHash` → `409`, backups em `.ai-workspace/backups/`, upload de mídia).
+- [x] `src/collect/memory/` + `src/actions/memory/index.js`:
   - Coleta incremental multi-IA / multi-máquina por `dream-state.json`.
   - Redação de segredos + consolidação com `git log` + poda ativa + teto de `MEMORY.md` + `pinned.md` imutável.
   - Seleção de motor **cota-aware** (Ollama Desktop → modelo leve VPS abaixo do teto de cota).
   - Agendador fora do horário (ex.: `03:00` na VPS) + botão manual `🌙 Dream` e visualização da memória já disponíveis no HUD clássico (`/`).
   - Gerador de pontes finas (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` + injeção no `POST /api/new` e Ollama).
-- [ ] Rotas `/api/workspace/*`, `/api/memory/*`, `/api/fs/*` + federação + suíte completa em `node --test` e `test/architecture.test.js`.
+- [x] Rotas `/api/workspace/*`, `/api/memory/*`, `/api/fs/*` + federação + suíte completa em `node --test` e `test/architecture.test.js`.
 
 ### Fase 2 — App **AI Workspace** em React 19 + TypeScript + Vite (`/workspace`)
 *Interface desktop/web de alta performance servida pelo próprio `ai-hud`.*
-- [ ] Scaffolding limpo em `workspace-app/` (React 19 + TypeScript + Vite) com build estático servido em `/workspace`.
-- [ ] **Layout desktop produtivo** (painéis redimensionáveis + atalhos de teclado + paleta de comandos `Ctrl+K`):
+- [x] Scaffolding limpo em `workspace-app/` (React 19 + TypeScript + Vite) com build estático servido em `/workspace`.
+- [x] **Layout desktop produtivo** (painéis redimensionáveis + atalhos de teclado + paleta de comandos `Ctrl+K`):
   - **Sidebar de Projetos/Entidades:** pins, busca instantânea, indicador de sessões ativas e badge de sessões pendentes de Dreaming.
   - **Área Central (Abas do Projeto):**
     1. **Cards editáveis** (`Board` estilo Kanban, `Research` e `Gallery`, drag-and-drop, Markdown, rascunho resiliente e modal de conflito `409`).
@@ -310,21 +310,21 @@ data/workspace/  (ou caminho em config.json -> workspaceDir)
     3. **Relatórios & Notas** (`report.html` em `iframe sandbox` + editor Markdown).
     4. **Arquivos & Git** (árvore leve, preview com syntax highlight, diff e últimos commits na máquina dona).
   - **Painel Lateral Vivo (AI HUD integrado):** sessões do projeto em todas as máquinas, cotas ao vivo das 4 IAs, conversa estruturada, `+ Nova sessão neste projeto` (com máquina/IA/contexto pré-carregados) e `Handoff Cross-IA`.
-- [ ] Pin, renomear, grupos de sessões (`data/session-meta.json`), barra de subagentes, upload de imagens (`inbox/attachments/`) e autocomplete de `/` comandos/skills.
+- [x] Pin, renomear, grupos de sessões (`data/session-meta.json`), barra de subagentes, upload de imagens (`inbox/attachments/`) e autocomplete de `/` comandos/skills.
 
 ### Fase 3 — App Nativo Windows com **Tauri 2 (WebView2)** + Experiência Multi-Janela
 *Evolução natural da mesma UI `workspace-app/` para experiência desktop nativa no Windows.*
-- [ ] Casca Rust em `workspace-desktop/` (`Tauri 2`, `WebView2`, `single-instance`, `window-state`, `tray-icon`).
-- [ ] Conecta-se ao `ai-hud` local (`127.0.0.1:8787`) ou remoto (VPS/Tailscale), iniciando o serviço local se necessário.
-- [ ] Suporte a **múltiplas janelas independentes** (ex.: janela *Workspace/Memória* em um monitor e *Sessões/Chat* em outro — mesmo padrão do `mr-mak-workspace`).
-- [ ] Interações nativas de desktop Windows: seletor nativo de pastas (`rfd`), envio seguro para lixeira (`trash`), drag-and-drop nativo de arquivos (`drag`) e atalhos globais opcionais.
-- [ ] *(Opcional nesta fase)* Micro-servidor MCP local do `ai-hud` expondo `memory_search` para consultas sob demanda na memória fria (`sessions/`, `decisions.md`).
+- [x] Casca Rust em `workspace-desktop/` (`Tauri 2`, `WebView2`, `single-instance`, `window-state`, `tray-icon`).
+- [x] Conecta-se ao `ai-hud` local (`127.0.0.1:8787`) ou remoto (VPS/Tailscale), iniciando o serviço local se necessário.
+- [x] Suporte a **múltiplas janelas independentes** (ex.: janela *Workspace/Memória* em um monitor e *Sessões/Chat* em outro — mesmo padrão do `mr-mak-workspace`).
+- [ ] Interações nativas extras de desktop Windows (`rfd`, `trash`, atalhos globais) + compilação `.exe` NSIS após instalar Rustup/MSVC.
+- [x] Micro-servidor MCP local do `ai-hud` (`integrations/mcp/memory-server.js`) expondo `memory_search`, `memory_read` e `workspace_list` para consultas sob demanda na memória fria.
 
 ### Fase 4 — Sync Multi-Máquina 24/7 & Experiência Mobile Aprimorada
 *Fechando o ciclo entre Notebook, PC Desktop, VPS Oracle e iPad/Android.*
-- [ ] Fluxo de sincronização Git para `data/workspace/` com a VPS Oracle como espelho 24/7 (indicador visual de sync/conflito no topo do `/workspace`).
-- [ ] Leitura leve (ES5) de cards, relatórios e `MEMORY.md` diretamente no HUD móvel (`/` — iPad mini 1 e celular).
-- [ ] Notificações **Web Push** nativas (`node:crypto` VAPID, zero deps) no Android PWA quando uma sessão termina, falha teste, pede permissão ou conclui um Dreaming noturno.
+- [x] Fluxo de sincronização Git para `data/workspace/` com a VPS Oracle como espelho 24/7 (`GET/POST /api/workspace/sync` + indicador visual de sync/conflito no topo do `/workspace`).
+- [x] Leitura leve (ES5) de cards, relatórios e `MEMORY.md` diretamente no HUD móvel (`/` — iPad mini 1 e celular, gaveta `#workspace`).
+- [x] Notificações **Web Push** nativas (`node:crypto` VAPID + RFC 8291 `aes128gcm`, zero deps) no Android PWA quando uma sessão termina, falha teste, pede permissão ou conclui um Dreaming noturno.
 
 ### Fase 5 — *Good-to-Have* (Segundo Momento, Sob Demanda)
 - [ ] **Voz local (Whisper + TTS) no PC Desktop (GPU):** serviço auxiliar opcional apenas no Desktop, permitindo ditado e leitura em voz alta inclusive no **iPad mini 1 (HTTP)** sem custo de API.

@@ -107,6 +107,15 @@ export const api = {
   getWorkspaceIndex: () =>
     apiFetch<WorkspaceIndex>('/api/workspace/index'),
 
+  getWorkspaceSync: () =>
+    apiFetch<import('./types').WorkspaceSyncStatus>('/api/workspace/sync'),
+
+  runWorkspaceSync: (body: { init?: boolean; remote?: string; message?: string } = {}) =>
+    apiFetch<{ ok: boolean; committed?: boolean; pulled?: boolean; pushed?: boolean; status: import('./types').WorkspaceSyncStatus }>('/api/workspace/sync', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   createEntity: (body: {
     title: string;
     description?: string;

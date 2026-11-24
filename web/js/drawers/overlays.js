@@ -152,7 +152,7 @@
     if (viewedSession && (!nextSession || decodeURIComponent(nextSession[1]) !== viewedSession.id)) acknowledgeViewed();
     var usage = /^#uso=(claude|codex|gemini)$/.exec(h);
     usageName = usage ? usage[1] : null;
-    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : h === '#nova' ? 'new' : h === '#configuracoes' ? 'settings' : usage ? 'usage' : null;
+    view = /^#s=/.test(h) ? 'detail' : h === '#recentes' ? 'recent' : h === '#estatisticas' ? 'stats' : h === '#ollama' ? 'ollama' : h === '#nova' ? 'new' : h === '#workspace' ? 'workspace' : h === '#configuracoes' ? 'settings' : usage ? 'usage' : null;
     $('overlay').className = $('backdrop').className = view ? 'show' : '';
     if (view) {
       $('overlay').scrollTop = 0;
@@ -169,6 +169,7 @@
     }
     if (view === 'recent') renderRecent();
     if (view === 'new') openNewSession();
+    if (view === 'workspace' && typeof renderWorkspaceDrawer === 'function') renderWorkspaceDrawer();
     if (view === 'settings' && typeof renderSettings === 'function') renderSettings();
     // A gaveta precisa estar visível para o gráfico medir a própria largura
     if (view === 'stats') setTimeout(renderStats, 30);
@@ -186,7 +187,13 @@
   });
   window.addEventListener('hashchange', syncHash);
   $('openNew').onclick = function () { location.hash = 'nova'; };
-  if ($('openWorkspace')) $('openWorkspace').onclick = function () { location.href = '/workspace' + (token ? '?t=' + encodeURIComponent(token) : ''); };
+  if ($('openWorkspace')) $('openWorkspace').onclick = function () {
+    if (typeof wsCanFullDesktop === 'function' && wsCanFullDesktop() && window.innerWidth >= 900) {
+      location.href = '/workspace' + (token ? '?t=' + encodeURIComponent(token) : '');
+    } else {
+      location.hash = 'workspace';
+    }
+  };
   $('openRecent').onclick = function () { location.hash = 'recentes'; };
   $('openStats').onclick = function () { location.hash = 'estatisticas'; };
   if ($('openSettings')) $('openSettings').onclick = function () { location.hash = 'configuracoes'; };

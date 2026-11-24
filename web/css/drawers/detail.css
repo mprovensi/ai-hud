@@ -246,6 +246,22 @@ select.nsel option { background: #1c1c1a; color: #ecece8; }
 .cfg-actions .btn { margin: 4px 8px 0 0; }
 .cfg-foot { text-align: center; font-size: .78em; margin-top: 14px; }
 
+/* AI Workspace leve (ES5, sem gap) */
+.ws-bar { margin: 0 0 10px; font-size: .84em; }
+.ws-bar .btn { margin: 0; padding: .4em .8em; }
+.ws-nav { margin: 0 0 10px; }
+.ws-nav .btn { margin: 0 10px 0 0; padding: .35em .75em; }
+.ws-item { padding: 10px 4px; border-bottom: 1px solid #262624; cursor: pointer; }
+.ws-item:last-child { border-bottom: 0; }
+.ws-sub { font-size: .8em; margin-top: 2px; }
+.ws-card-it { padding: 10px; margin-bottom: 8px; border-radius: 8px; background: #161614; border: 1px solid #2b2b28; }
+.ws-card-it:last-child { margin-bottom: 0; }
+.ws-card-txt { margin-top: 6px; font-size: .88em; line-height: 1.45; }
+.ws-mfiles { -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 0 10px; }
+.ws-mfiles .btn { margin: 0 6px 6px 0; padding: .3em .65em; font-size: .8em; }
+.ws-mfiles .btn.on { background: #26364c; border-color: #5fb8a4; color: #f2f5f4; }
+.ws-md { font-size: .9em; line-height: 1.5; word-wrap: break-word; }
+
 #rflash { position: fixed; left: 50%; bottom: 24px; -webkit-transform: translateX(-50%); transform: translateX(-50%); background: #2f4d3a; color: #9fe0b4;
   padding: 10px 18px; border-radius: 12px; z-index: 20; display: none; font-size: .9em; }
 #rflash.show { display: block; }

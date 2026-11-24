@@ -33,3 +33,42 @@ self.addEventListener('fetch', function (e) {
     return res;
   }).catch(function () { return caches.open(CACHE).then(function (c) { return c.match(key); }); }));
 });
+
+// Web Push nativo (Android PWA / Desktop via HTTPS ou localhost)
+self.addEventListener('push', function (e) {
+  var data = { title: 'AI HUD', body: 'Atualização de sessão', tag: 'ai-hud', url: '/' };
+  if (e.data) {
+    try {
+      var parsed = e.data.json();
+      if (parsed && parsed.title) data.title = parsed.title;
+      if (parsed && parsed.body) data.body = parsed.body;
+      if (parsed && parsed.tag) data.tag = parsed.tag;
+      if (parsed && parsed.url) data.url = parsed.url;
+    } catch (err) {
+      data.body = e.data.text();
+    }
+  }
+  e.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body,
+    tag: data.tag,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { url: data.url },
+    renotify: true,
+  }));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var target = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (c.url && c.url.indexOf(self.location.origin) === 0) {
+        if ('navigate' in c && target && target !== '/') c.navigate(target).catch(function () {});
+        return c.focus();
+      }
+    }
+    return self.clients.openWindow(target);
+  }));
+});

@@ -8,6 +8,7 @@ import {
   GitFork,
   LayoutDashboard,
   Plus,
+  RefreshCw,
   Search,
   Sparkles,
   Wifi,
@@ -20,7 +21,7 @@ import { FilesAndGit } from './components/FilesAndGit';
 import { LiveHudPane } from './components/LiveHudPane';
 import { MemoryPanel } from './components/MemoryPanel';
 import { NotesAndReports } from './components/NotesAndReports';
-import type { MachineCaps, Snapshot, WorkspaceEntity, WorkspaceIndex } from './types';
+import type { MachineCaps, Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
 
 type Selection =
   | { kind: 'entity'; id: string }
@@ -45,6 +46,8 @@ export function App() {
   const [search, setSearch] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState('');
+  const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
+  const [syncingNow, setSyncingNow] = useState(false);
 
   // Modal + Novo Projeto
   const [newModal, setNewModal] = useState(false);
@@ -74,9 +77,41 @@ export function App() {
     }
   }, [notify]);
 
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      setSyncSt(await api.getWorkspaceSync());
+    } catch {}
+  }, []);
+
+  const triggerSync = useCallback(async () => {
+    if (syncingNow) return;
+    let init = false;
+    let remote = '';
+    if (syncSt && !syncSt.isRepo) {
+      if (!window.confirm('Inicializar repositório Git em data/workspace/ para sincronizar entre máquinas?')) return;
+      init = true;
+      remote = window.prompt('URL do repositório Git remoto (opcional — pode configurar depois):', '') || '';
+    }
+    setSyncingNow(true);
+    try {
+      const r = await api.runWorkspaceSync({ init, remote: remote.trim() || undefined });
+      setSyncSt(r.status);
+      notify(r.pushed ? 'Workspace sincronizado com o remoto.' : r.committed ? 'Alterações salvas no Git local.' : 'Workspace já está atualizado.');
+      loadWorkspace();
+    } catch (e) {
+      notify((e as Error).message, true);
+      loadSyncStatus();
+    } finally {
+      setSyncingNow(false);
+    }
+  }, [syncingNow, syncSt, notify, loadWorkspace, loadSyncStatus]);
+
   useEffect(() => {
     loadWorkspace();
-  }, [loadWorkspace]);
+    loadSyncStatus();
+    const id = window.setInterval(loadSyncStatus, 60000);
+    return () => window.clearInterval(id);
+  }, [loadWorkspace, loadSyncStatus]);
 
   // Long-polling do snapshot ao vivo do AI HUD
   const versionRef = useRef<string | undefined>(undefined);
@@ -242,6 +277,31 @@ export function App() {
           {cPct && <span className="qchip"><span className="qdot" style={{ background: 'var(--claude)' }} />Claude <b>{cPct}</b></span>}
           {xPct && <span className="qchip"><span className="qdot" style={{ background: 'var(--codex)' }} />Codex <b>{xPct}</b></span>}
           {gPct && <span className="qchip"><span className="qdot" style={{ background: 'var(--gemini)' }} />Gemini <b>{gPct}</b></span>}
+          {syncSt && (
+            <button
+              className={`pill-link ${syncSt.conflicts.length ? 'danger' : ''}`}
+              onClick={triggerSync}
+              disabled={syncingNow}
+              title={syncSt.isRepo
+                ? `Git Sync (${syncSt.branch})${syncSt.remote ? ` · ${syncSt.remote}` : ' · somente local'}${syncSt.lastError ? ` · Erro: ${syncSt.lastError}` : ''}`
+                : 'Inicializar Git Sync do Workspace'}
+              style={{
+                borderColor: syncSt.conflicts.length ? 'var(--danger)' : (syncSt.dirty || syncSt.ahead || syncSt.behind) ? 'var(--warn)' : undefined,
+                color: syncSt.conflicts.length ? 'var(--danger)' : undefined,
+              }}
+            >
+              <RefreshCw size={12} className={syncingNow ? 'spin' : ''} />
+              {syncingNow
+                ? 'Sincronizando…'
+                : !syncSt.isRepo
+                  ? 'Git Sync'
+                  : syncSt.conflicts.length
+                    ? `Conflito (${syncSt.conflicts.length})`
+                    : (syncSt.dirty || syncSt.ahead || syncSt.behind)
+                      ? `Sync${syncSt.dirty ? ` ${syncSt.dirty}Δ` : ''}${syncSt.ahead ? ` ↑${syncSt.ahead}` : ''}${syncSt.behind ? ` ↓${syncSt.behind}` : ''}`
+                      : 'Sync OK'}
+            </button>
+          )}
           <span className={`status-pill ${online ? '' : 'off'}`}>
             {online ? <Wifi size={13} /> : <WifiOff size={13} />}
             {online ? 'ao vivo' : 'reconectando…'}

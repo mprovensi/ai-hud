@@ -76,11 +76,21 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `GET /api/workspace/entity/asset?id=&path=` | Serve `media/*` e `report.html` isolados (CSP restrita em HTML) |
 | `POST /api/workspace/entity/media` | Upload seguro de imagem (PNG/JPG/WEBP/GIF, até 10 MB) para `media/` da entidade |
 | `GET / PUT /api/workspace/doc` | Lê ou grava documento em `context/`, `knowledge/` ou `skills/` (com proteção `409`) |
+| `GET / POST /api/workspace/sync` | Status e sincronização Git segura de `data/workspace/` (`add` → `commit` → `pull --rebase` → `push`, abortando rebase sem perda em caso de conflito `409`) |
 | `GET /api/memory?project=&cwd=` | Sem filtro: lista todos os projetos e pendências de Dreaming; com projeto: lê `MEMORY.md`, `current-state.md`, `pinned.md`, `decisions.md`, `pitfalls.md`, `dream-log.md` e `episodic[]` |
 | `PUT /api/memory/file` | Edita arquivo de memória (ex.: `pinned.md`) com proteção `409` + backup |
 | `POST /api/memory/dream` | Dispara consolidação (Dreaming) manual cota-aware (`{ project, cwd?, engine?, dryRun?, force?, ignoreQuota? }`) |
 | `POST /api/memory/undo` | Restaura o backup imediatamente anterior ao último Dreaming do projeto |
 | `POST /api/memory/bridges` | Instala/atualiza pontes finas (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) preservando conteúdo existente |
+
+## Web Push nativo (VAPID, `/api/push/*`)
+
+| Rota | Efeito |
+|---|---|
+| `GET /api/push/public-key` | Retorna `{ enabled, publicKey, count }` para assinar Web Push no navegador/PWA |
+| `POST /api/push/subscribe` | Registra assinatura `{ endpoint, keys: { p256dh, auth }, label? }` em `data/push-subscriptions.json` |
+| `POST /api/push/unsubscribe` | Remove assinatura `{ endpoint }` |
+| `POST /api/push/test` | Envia uma notificação de teste para todas as assinaturas ativas |
 
 ## Hooks (mesmo PC)
 

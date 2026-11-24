@@ -20,6 +20,7 @@ const routes = [
   require('./handoff'),
   require('./workspace'),
   require('./memory'),
+  require('./push'),
   require('./hooks'),
 ];
 

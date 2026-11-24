@@ -174,3 +174,17 @@ export interface ConflictError extends Error {
   currentContent: unknown;
   currentHash: string;
 }
+
+export interface WorkspaceSyncStatus {
+  ok: boolean;
+  isRepo: boolean;
+  branch: string;
+  remote: string;
+  ahead: number;
+  behind: number;
+  dirty: number;
+  conflicts: string[];
+  syncing: boolean;
+  lastSyncAt: number;
+  lastError: string;
+}

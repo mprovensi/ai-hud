@@ -75,6 +75,7 @@ function createMemoryActions({
   agyExe = '',
   exec = execFile,
   runModel = null,
+  onDreamDone = null,
   now = () => Date.now(),
   log = console.log,
 }) {
@@ -320,20 +321,21 @@ function createMemoryActions({
         sessions: nextSessions,
       }, null, 2) + '\n');
 
-      return {
-        status: 200,
-        body: {
-          ok: true,
-          project: currentMem.project,
-          slug: resolved.slug,
-          mode: resolved.mode,
-          engine: picked.engine,
-          model: picked.model,
-          reason: picked.reason,
-          sessionsProcessed: delta.length,
-          summary: consolidated.summary,
-        },
+      const body = {
+        ok: true,
+        project: currentMem.project,
+        slug: resolved.slug,
+        mode: resolved.mode,
+        engine: picked.engine,
+        model: picked.model,
+        reason: picked.reason,
+        sessionsProcessed: delta.length,
+        summary: consolidated.summary,
       };
+      if (typeof onDreamDone === 'function') {
+        try { onDreamDone(body); } catch {}
+      }
+      return { status: 200, body };
     } catch (e) {
       return { status: e.status || 502, body: e.message || 'Falha durante o Dreaming.' };
     } finally {

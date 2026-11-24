@@ -5,12 +5,27 @@ const { readWorkspaceIndex, readEntityFile, readGlobalDoc, resolveEntityAsset } 
 
 const REPORT_CSP = "default-src 'self' data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
 
-module.exports = ({ dataDir, config, workspace, send, json, text }) => {
+module.exports = ({ dataDir, config, workspace, workspaceSync, send, json, text }) => {
   const wsRoot = () => resolveWorkspaceRoot(dataDir, config);
 
   return [
     { method: 'GET', path: '/api/workspace/index', handler: ({ res }) => {
       json(res, readWorkspaceIndex(wsRoot()));
+    } },
+
+    { method: 'GET', path: '/api/workspace/sync', handler: async ({ res }) => {
+      if (!workspaceSync) return text(res, 501, 'Sincronização indisponível.');
+      json(res, await workspaceSync.status());
+    } },
+
+    { method: 'POST', path: '/api/workspace/sync', json: true, maxBytes: 16 * 1024, handler: async ({ res, body }) => {
+      if (!workspaceSync) return text(res, 501, 'Sincronização indisponível.');
+      const r = await workspaceSync.sync({
+        init: !!body.init,
+        remote: body.remote || '',
+        message: body.message || '',
+      });
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 
     { method: 'POST', path: '/api/workspace/entity', json: true, maxBytes: 128 * 1024, handler: ({ res, body }) => {

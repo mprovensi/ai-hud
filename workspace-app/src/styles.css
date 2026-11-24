@@ -89,11 +89,15 @@ a { color: var(--accent); text-decoration: none; }
 .sb-row { display: flex; align-items: center; gap: 2px; margin-bottom: 2px; border-radius: 8px; }
 .sb-row .sb-item { margin-bottom: 0; flex: 1; min-width: 0; }
 .sb-more {
-  width: 24px; height: 26px; border-radius: 6px; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  color: var(--muted); opacity: .55;
+  color: var(--muted); opacity: 0; pointer-events: none; transition: opacity .12s, background .12s, color .12s;
 }
-.sb-row:hover .sb-more, .ws-group-head:hover .sb-more, .sb-more:hover, .sb-more.open { opacity: 1; background: var(--card); color: var(--text); }
+.sb-row:hover .sb-more,
+.ws-group-head:hover .sb-more,
+.sb-more:focus-visible,
+.sb-more.open { opacity: 1; pointer-events: auto; }
+.sb-more:hover, .sb-more.open { background: rgba(255, 255, 255, .1); color: var(--text); }
 .ctx-menu-bg { position: fixed; inset: 0; z-index: 70; }
 .ctx-menu {
   position: fixed; z-index: 71; min-width: 152px; padding: 4px;

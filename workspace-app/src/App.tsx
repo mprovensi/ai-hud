@@ -12,7 +12,7 @@ import {
   GitFork,
   Layers,
   LayoutDashboard,
-  MoreHorizontal,
+  MoreVertical,
   Pencil,
   Plus,
   RefreshCw,
@@ -509,14 +509,6 @@ export function App() {
                       <span className="ell">{sec.label}</span>
                       <span style={{ fontSize: 10.5, color: 'var(--muted)', marginLeft: 3 }}>({sec.items.length})</span>
                     </button>
-                    <button
-                      className="btn btn-sm btn-icon"
-                      style={{ padding: 2, border: 0, background: 'transparent' }}
-                      title={`Novo projeto em ${sec.label}`}
-                      onClick={() => openNewModal(sec.name)}
-                    >
-                      <Plus size={12} color="var(--muted)" />
-                    </button>
                     {sec.name && (
                       <button
                         className={`sb-more ${itemMenu?.kind === 'group' && itemMenu.name === sec.name ? 'open' : ''}`}
@@ -534,9 +526,17 @@ export function App() {
                           });
                         }}
                       >
-                        <MoreHorizontal size={13} />
+                        <MoreVertical size={14} />
                       </button>
                     )}
+                    <button
+                      className="btn btn-sm btn-icon"
+                      style={{ padding: 2, border: 0, background: 'transparent' }}
+                      title={`Novo projeto em ${sec.label}`}
+                      onClick={() => openNewModal(sec.name)}
+                    >
+                      <Plus size={13} color="var(--muted)" />
+                    </button>
                   </div>
 
                   {!isCol && (
@@ -575,7 +575,7 @@ export function App() {
                                   });
                                 }}
                               >
-                                <MoreHorizontal size={13} />
+                                <MoreVertical size={14} />
                               </button>
                             </div>
                           );

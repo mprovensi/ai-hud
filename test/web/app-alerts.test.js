@@ -62,3 +62,20 @@ test('permission transitions retain their notifications', () => {
   c.context.checkAlerts(permission);
   assert.equal(c.messages.length, 1);
 });
+
+test('high or nearly exhausted AI quotas do not trigger toast or sound alerts', () => {
+  const c = client();
+  const snap = {
+    now: 1000,
+    active: [],
+    quotas: {
+      claude: { windows: { five_hour: { used: 96, resetsAt: 50000, pace: { runsOutIn: 5 * 60e3 } } } },
+      codex: { windows: { five_hour: { used: 99, resetsAt: 60000, pace: { runsOutIn: 2 * 60e3 } } } },
+      gemini: { windows: { pro: { used: 95, resetsAt: 70000, pace: { runsOutIn: 10 * 60e3 } } } },
+    },
+  };
+  c.context.checkAlerts(snap);
+  c.context.checkAlerts({ ...snap, now: 2000 });
+  assert.equal(c.messages.length, 0);
+  assert.equal(c.beeps(), 0);
+});

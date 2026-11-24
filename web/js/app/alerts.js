@@ -1,5 +1,5 @@
-  // ---- Alertas: bipe + aviso quando uma sessão passa a esperar por você ou a cota de 5h está acabando ----
-  var prevStates = null, prevCompleted = null, pings = {}, quotaAlerted = {}, audio = null;
+  // ---- Alertas: bipe + aviso quando uma sessão passa a esperar por você ou pede permissão ----
+  var prevStates = null, prevCompleted = null, pings = {}, audio = null;
   var soundOn = store('hud.sound') !== '0';
 
   // O iOS só libera áudio depois de um toque do usuário: o primeiro toque cria o contexto
@@ -48,19 +48,6 @@
     }
     prevStates = states;
     prevCompleted = completed;
-    var names = [['claude', 'Claude'], ['codex', 'Codex'], ['gemini', 'Gemini']];
-    for (i = 0; i < names.length; i++) {
-      var q = s.quotas[names[i][0]], ws = q && q.windows;
-      var w = ws && (ws.five_hour || ws.pro || ws.daily || ws.flash);
-      var wlbl = ws && ws.five_hour ? '5h' : '24h';
-      if (!w || !w.pace) continue;
-      var key = names[i][0] + w.resetsAt;
-      var soon = w.used >= 90 || (w.pace.runsOutIn != null && w.pace.runsOutIn < 30 * 60e3);
-      if (soon && !quotaAlerted[key]) {
-        quotaAlerted[key] = true;
-        msgs.push('Cota de ' + wlbl + ' do ' + names[i][1] + (w.used >= 90 ? ' em ' + Math.round(w.used) + '%' : ' acaba em ' + dur(w.pace.runsOutIn)));
-      }
-    }
     if (msgs.length) { beep(); flash(msgs.join(' · ')); }
   }
 

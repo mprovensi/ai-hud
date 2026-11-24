@@ -22,7 +22,7 @@
     // Alertas sonoros
     html += '<div class="panel cfg-panel">' +
       '<h2>Alertas</h2>' +
-      '<p class="cfg-desc">Avisa com som quando uma sessão espera resposta ou uma cota está acabando.</p>' +
+      '<p class="cfg-desc">Avisa com som quando uma sessão espera resposta ou pede permissão.</p>' +
       '<div class="cfg-row">' +
         '<button type="button" class="btn cfg-toggle' + (soundOn ? ' on' : '') + '" id="cfgSound" aria-pressed="' + (soundOn ? 'true' : 'false') + '">' +
           icon(soundOn ? 'bell' : 'bellOff') + '<span>' + (soundOn ? 'Som ligado' : 'Som desligado') + '</span>' +

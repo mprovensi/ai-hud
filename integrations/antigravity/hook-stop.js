@@ -1,17 +1,18 @@
-// Hook "Stop" do Antigravity (IDE / Antigravity 2.0):
-//   - Sempre entrega imediatamente (0 ms) qualquer mensagem que já foi enfileirada pelo celular/iPad enquanto a IA trabalhava.
-//   - Como o hook Stop do Antigravity é síncrono (bloqueia novas mensagens digitadas na IDE enquanto aguarda),
-//     só mantém a escuta contínua (até 30 min) quando o "Modo remoto" estiver LIGADO no AI HUD.
-//   - Com Modo remoto DESLIGADO, libera a IDE na hora para você digitar normalmente no PC sem travar.
-//   - Se o Modo remoto for desligado durante a espera, libera a IDE em até 2 s.
-//   - Execuções headless do `agy` CLI (`antigravity-cli/`) saem imediatamente para não bloquear `--print`.
+// Hook "Stop" do Antigravity (IDE / Antigravity 2.0) — 100% automático, sem precisar de botão:
+//   - Entrega imediatamente (0 ms) qualquer mensagem já enfileirada pelo celular/iPad.
+//   - Fica escutando por até 30 min (`● ao vivo` no AI HUD) para respostas vindas do celular/iPad.
+//   - No Windows, um monitor leve (GetForegroundWindow + GetLastInputInfo) detecta em <= 300 ms
+//     quando você volta a clicar/digitar na janela do Antigravity no PC e libera o hook na hora!
+//   - Execuções headless do `agy` CLI (`antigravity-cli/`), cancelamentos e erros saem na hora.
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { spawn } = require('child_process');
 
 const WAIT_MS = 30 * 60e3;
-const POLL_MS = 2000;
+const POLL_MS = 1000;
 const PORT = Number(process.env.AI_HUD_PORT) || 8787;
+const WATCH_SCRIPT = path.join(__dirname, '..', '..', 'platform', 'windows', 'watch-ide-input.ps1');
 
 function readToken() {
   if (process.env.AI_HUD_TOKEN) return process.env.AI_HUD_TOKEN;
@@ -45,8 +46,6 @@ function call(port, token, method, route, body) {
   });
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 function isCliExecution(input) {
   const tp = String((input && input.transcriptPath) || '');
   const ap = String((input && input.artifactDirectoryPath) || '');
@@ -65,6 +64,30 @@ function typedLocally(file, from) {
   } catch { return false; }
 }
 
+function startIdeInputWatcher(onLocalInput) {
+  if (process.platform !== 'win32' || process.env.AI_HUD_NO_IDE_WATCH === '1') return null;
+  if (!fs.existsSync(WATCH_SCRIPT)) return null;
+  const grace = String(Number(process.env.AI_HUD_IDE_WATCH_GRACE_MS) || 2000);
+  try {
+    const child = spawn('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', WATCH_SCRIPT,
+      '-ProcessName', 'Antigravity', '-GraceMs', grace, '-PollMs', '250',
+    ], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    child.stdout.on('data', (chunk) => {
+      if (String(chunk || '').includes('LOCAL_INPUT')) onLocalInput();
+    });
+    child.on('error', () => {});
+    return child;
+  } catch {
+    return null;
+  }
+}
+
+function stopWatcher(child) {
+  if (!child) return;
+  try { child.kill(); } catch {}
+}
+
 function writeOut(obj) {
   process.stdout.write(JSON.stringify(obj || {}));
 }
@@ -79,20 +102,15 @@ async function main(input) {
   const token = readToken();
   if (!token) return writeOut({});
 
-  // 1. Verifica imediatamente se já existe mensagem enfileirada pelo celular/iPad (0 ms de bloqueio)
-  let ideListen = false;
+  // 1. Entrega imediata (0 ms) se já existe mensagem enfileirada pelo celular/iPad
   try {
     const first = await call(PORT, token, 'GET', `/hook/next?session=${encodeURIComponent(session)}`);
     if (first.status === 200 && first.json && first.json.text) {
       return writeOut({ decision: 'continue', reason: first.json.text });
     }
-    ideListen = first.headers['x-ai-hud-ide-listen'] === '1';
   } catch {
     return writeOut({});
   }
-
-  // 2. Com "Escuta da IDE" desligada (padrão no PC), libera a IDE imediatamente para não travar o chat local
-  if (!ideListen) return writeOut({});
 
   const transcript = input.transcriptPath || '';
   let from = 0;
@@ -103,24 +121,46 @@ async function main(input) {
   const until = Date.now() + waitMs;
 
   try {
-    const r = await call(PORT, token, 'POST', '/hook/listen', { session, tool: 'Gemini', until, requireIdeListen: true });
-    if (r.status !== 200 || (r.json && r.json.ideListen === false)) return writeOut({});
+    const r = await call(PORT, token, 'POST', '/hook/listen', { session, tool: 'Gemini', until });
+    if (r.status !== 200) return writeOut({});
   } catch { return writeOut({}); }
 
-  while (Date.now() < until) {
-    try {
-      const r = await call(PORT, token, 'GET', `/hook/next?session=${encodeURIComponent(session)}`);
-      if (r.status === 200 && r.json && r.json.text) {
-        return writeOut({ decision: 'continue', reason: r.json.text });
+  let localDetected = false;
+  let wake = null;
+  const triggerLocal = () => {
+    localDetected = true;
+    if (wake) { const fn = wake; wake = null; fn(); }
+  };
+  const watcher = startIdeInputWatcher(triggerLocal);
+  const onSig = () => { stopWatcher(watcher); process.exit(0); };
+  process.once('SIGTERM', onSig);
+  process.once('SIGINT', onSig);
+
+  const waitStep = (ms) => new Promise((resolve) => {
+    if (localDetected) return resolve();
+    const t = setTimeout(() => { wake = null; resolve(); }, ms);
+    wake = () => { clearTimeout(t); resolve(); };
+  });
+
+  try {
+    while (Date.now() < until && !localDetected) {
+      try {
+        const r = await call(PORT, token, 'GET', `/hook/next?session=${encodeURIComponent(session)}`);
+        if (r.status === 200 && r.json && r.json.text) {
+          stopWatcher(watcher);
+          return writeOut({ decision: 'continue', reason: r.json.text });
+        }
+      } catch {
+        return writeOut({});
       }
-      // Se o usuário desligou a Escuta da IDE, libera o chat local imediatamente
-      if (r.headers && r.headers['x-ai-hud-ide-listen'] === '0') break;
-    } catch { return writeOut({}); }
-    if (transcript && typedLocally(transcript, from)) break;
-    await sleep(pollMs);
+      if (localDetected || (transcript && typedLocally(transcript, from))) break;
+      await waitStep(pollMs);
+    }
+    try { await call(PORT, token, 'POST', '/hook/unlisten', { session }); } catch {}
+    return writeOut({});
+  } finally {
+    stopWatcher(watcher);
   }
-  try { await call(PORT, token, 'POST', '/hook/unlisten', { session }); } catch {}
-  return writeOut({});
 }
 
 if (require.main === module) {

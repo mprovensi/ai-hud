@@ -484,9 +484,7 @@
       : '<span class="badge closed">encerrada ' + when(d.end) + '</span>';
     html += sessHead(d);
     var places = { vscode: 'VS Code', terminal: 'terminal', 'claude-desktop': 'app Claude', 'codex-desktop': 'app Codex', antigravity: 'Antigravity', 'antigravity-cli': 'terminal', 'gemini-cli': 'terminal', 'ollama-app': 'app Ollama', 'ollama-run': 'terminal' };
-    var ideOn = !!(snap && snap.ideListen);
     html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
-      (d.tool === 'Gemini' && d.where === 'antigravity' ? '<button type="button" class="pcmini' + (ideOn ? ' on' : '') + '" id="toggleIdeListen" title="Manter a IDE Antigravity ouvindo respostas do celular/iPad">' + (ideOn ? '🎧 Ouvindo IDE' : '🎧 Ouvir IDE') + '</button>' : '') +
       (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ')">🖥 Abrir no PC</button>' : '') + '</div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
@@ -628,17 +626,6 @@
         flash(err ? 'Falhou: ' + err.message : r.message, !err && r.ok);
         if (!err && r.ok) { d.canStop = false; if (d.state === 'working') d.state = 'waiting'; renderDetail(d); }
       }, { id: d.id });
-    };
-    if ($('toggleIdeListen')) $('toggleIdeListen').onclick = function () {
-      var b = this, next = !(snap && snap.ideListen);
-      b.disabled = true;
-      request('POST', '/api/ide-listen', function (err, r) {
-        b.disabled = false;
-        if (err) return flash('Falhou: ' + err.message, false);
-        if (snap) snap.ideListen = !!(r && r.ideListen);
-        flash(next ? 'Escuta da IDE ligada (aguardando celular/iPad após o turno).' : 'Escuta da IDE desligada (chat local liberado).');
-        renderDetail(d);
-      }, { on: next });
     };
     if ($('focusPc')) $('focusPc').onclick = function () {
       var b = this;

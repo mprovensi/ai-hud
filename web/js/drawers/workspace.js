@@ -54,12 +54,23 @@
     if (!ents.length) {
       h += '<p class="muted">Nenhum projeto no AI Workspace ainda.</p>';
     } else {
+      var byGroup = {}, groupOrder = [], gName;
       for (i = 0; i < ents.length; i++) {
-        e = ents[i];
-        h += '<div class="row ws-item" data-ws-ent="' + esc(e.id) + '" role="button" tabindex="0">' +
-          '<div class="grow ell"><b>' + (e.pinned ? '★ ' : '') + esc(e.title || e.id) + '</b>' +
-          (e.description ? '<div class="muted ws-sub ell">' + esc(e.description) + '</div>' : '') +
-          '</div><span class="chev">›</span></div>';
+        gName = ents[i].group || 'Geral';
+        if (!byGroup[gName]) { byGroup[gName] = []; groupOrder.push(gName); }
+        byGroup[gName].push(ents[i]);
+      }
+      var showGroupHeaders = groupOrder.length > 1 || (groupOrder.length === 1 && groupOrder[0] !== 'Geral');
+      for (var gi = 0; gi < groupOrder.length; gi++) {
+        gName = groupOrder[gi];
+        if (showGroupHeaders) h += '<div class="muted ws-sub" style="margin:8px 0 4px;font-weight:700;text-transform:uppercase">📁 ' + esc(gName) + ' (' + byGroup[gName].length + ')</div>';
+        for (var ei = 0; ei < byGroup[gName].length; ei++) {
+          e = byGroup[gName][ei];
+          h += '<div class="row ws-item" data-ws-ent="' + esc(e.id) + '" role="button" tabindex="0">' +
+            '<div class="grow ell"><b>' + (e.pinned ? '★ ' : '') + esc(e.title || e.id) + '</b>' +
+            (e.description ? '<div class="muted ws-sub ell">' + esc(e.description) + '</div>' : '') +
+            '</div><span class="chev">›</span></div>';
+        }
       }
     }
     h += '</div>';

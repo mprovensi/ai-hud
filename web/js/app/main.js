@@ -1,5 +1,6 @@
   setSound(soundOn);
   $('openNew').innerHTML = icon('plus') + '<span class="lbl"> Nova</span>';
+  if ($('openWorkspace')) $('openWorkspace').innerHTML = icon('workspace') + '<span class="lbl"> Workspace</span>';
   $('openStats').innerHTML = icon('stats') + '<span class="lbl"> Estatísticas</span>';
   $('openRecent').innerHTML = icon('recent') + '<span class="lbl"> Recentes</span>';
   $('refresh').innerHTML = icon('refresh');

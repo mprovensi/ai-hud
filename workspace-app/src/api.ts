@@ -141,12 +141,44 @@ export const api = {
   createEntity: (body: {
     title: string;
     description?: string;
+    group?: string;
     category?: string;
     template?: string;
     projectBindings?: { machine: string; cwd: string }[];
     defaultAgent?: string;
   }) =>
     apiFetch<{ ok: boolean; entity: WorkspaceEntity }>('/api/workspace/entity', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateEntity: (body: {
+    id: string;
+    title?: string;
+    description?: string;
+    group?: string;
+    pinned?: boolean;
+    projectBindings?: { machine: string; cwd: string }[];
+  }) =>
+    apiFetch<{ ok: boolean; entity: WorkspaceEntity; groups: string[] }>('/api/workspace/entity', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  saveGroup: (body: { name: string; renameFrom?: string; remove?: boolean }) =>
+    apiFetch<{ ok: boolean; groups: string[] }>('/api/workspace/group', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  pinProject: (body: { machine?: string; cwd: string; pinned: boolean }) =>
+    apiFetch<{ ok: boolean; pinned: string[] }>('/api/projects/pin', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  decidePermission: (body: { id: string; decision: 'allow' | 'deny'; session: string }) =>
+    apiFetch<{ ok?: boolean }>('/api/permission', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

@@ -131,6 +131,32 @@ test('Fase 5 end-to-end: /api/voice/status e /api/fs/exec com contenção de pas
     // Pasta não autorizada -> 403
     const exNo = await reqJson(port, 'POST', '/api/fs/exec', token, { cwd: projNo, command: 'echo nope' });
     assert.equal(exNo.status, 403);
+
+    // Englobadores de projetos (Workspaces: TRT, Jogos)
+    const g1 = await reqJson(port, 'POST', '/api/workspace/group', token, { name: 'TRT' });
+    assert.equal(g1.status, 200);
+    assert.ok(g1.json.groups.includes('TRT'));
+
+    const ent = await reqJson(port, 'POST', '/api/workspace/entity', token, {
+      title: 'PJe Calc',
+      group: 'TRT',
+      category: 'project',
+    });
+    assert.equal(ent.status, 200);
+    assert.equal(ent.json.entity.group, 'TRT');
+
+    const moved = await reqJson(port, 'PUT', '/api/workspace/entity', token, {
+      id: ent.json.entity.id,
+      group: 'Jogos',
+    });
+    assert.equal(moved.status, 200);
+    assert.equal(moved.json.entity.group, 'Jogos');
+
+    const idx = await reqJson(port, 'GET', '/api/workspace/index', token);
+    assert.equal(idx.status, 200);
+    assert.ok(idx.json.groups.includes('TRT'));
+    assert.ok(idx.json.groups.includes('Jogos'));
+    assert.equal(idx.json.entities[0].group, 'Jogos');
   } finally {
     app.server.close();
   }

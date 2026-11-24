@@ -25,7 +25,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return valid;
   }
 
-  function createEntity({ title, description = '', category = 'dev', template = 'board', projectBindings = [], defaultAgent = 'claude' } = {}) {
+  function createEntity({ title, description = '', group = '', category = 'dev', template = 'board', projectBindings = [], defaultAgent = 'claude' } = {}) {
     const cleanTitle = String(title || '').trim();
     if (!cleanTitle) return { status: 400, body: 'Informe um título para o projeto/entidade.' };
 
@@ -36,6 +36,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     let n = 2;
     while (index.entities.some((e) => e.id === id)) { id = `${baseId}-${n++}`; }
 
+    const cleanGroup = String(group || '').trim().slice(0, 80);
     const day = new Date(now()).toISOString().slice(0, 10);
     const folder = `entities/${day}_${id}`;
     const cardPath = 'overview.card.json';
@@ -44,6 +45,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       id,
       title: cleanTitle.slice(0, 200),
       description: String(description || '').trim().slice(0, 1000),
+      ...(cleanGroup ? { group: cleanGroup } : {}),
       category,
       status: 'active',
       pinned: false,
@@ -58,7 +60,9 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       updated: day,
     };
 
-    const nextIndex = { ...index, entities: [entity, ...index.entities] };
+    const groups = Array.isArray(index.groups) ? [...index.groups] : [];
+    if (cleanGroup && !groups.includes(cleanGroup)) groups.push(cleanGroup);
+    const nextIndex = { ...index, ...(groups.length ? { groups } : {}), entities: [entity, ...index.entities] };
     try {
       validateWorkspaceIndex(nextIndex);
     } catch (e) {
@@ -215,7 +219,76 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return { status: 200, body: { ok: true, path: rel, size: buf.length } };
   }
 
-  return { createEntity, saveEntityFile, saveGlobalDoc, uploadEntityMedia };
+  function updateEntity({ id, title, description, group, pinned, projectBindings } = {}) {
+    const wsRoot = root();
+    const index = readWorkspaceJson(wsRoot);
+    const idx = index.entities.findIndex((e) => e.id === id);
+    if (idx < 0) return { status: 404, body: 'Entidade não encontrada.' };
+    const cur = { ...index.entities[idx] };
+    if (typeof title === 'string' && title.trim()) cur.title = title.trim().slice(0, 200);
+    if (typeof description === 'string') cur.description = description.trim().slice(0, 1000);
+    if (typeof pinned === 'boolean') cur.pinned = pinned;
+    if (Array.isArray(projectBindings)) cur.projectBindings = projectBindings;
+    const groups = Array.isArray(index.groups) ? [...index.groups] : [];
+    if (typeof group === 'string') {
+      const cleanGroup = group.trim().slice(0, 80);
+      if (cleanGroup) {
+        cur.group = cleanGroup;
+        if (!groups.includes(cleanGroup)) groups.push(cleanGroup);
+      } else {
+        delete cur.group;
+      }
+    }
+    cur.updated = new Date(now()).toISOString().slice(0, 10);
+    const entities = index.entities.slice();
+    entities[idx] = cur;
+    const nextIndex = { ...index, ...(groups.length ? { groups } : {}), entities };
+    try {
+      saveIndex(nextIndex);
+    } catch (e) {
+      return { status: e.status || 400, body: e.message };
+    }
+    return { status: 200, body: { ok: true, entity: cur, groups } };
+  }
+
+  function saveGroup({ name = '', renameFrom = '', remove = false } = {}) {
+    const wsRoot = root();
+    const index = readWorkspaceJson(wsRoot);
+    let groups = Array.isArray(index.groups) ? [...index.groups] : [];
+    for (const e of index.entities) if (e.group && !groups.includes(e.group)) groups.push(e.group);
+
+    const cleanName = String(name || '').trim().slice(0, 80);
+    const cleanFrom = String(renameFrom || '').trim().slice(0, 80);
+
+    let entities = index.entities;
+    if (remove && cleanName) {
+      groups = groups.filter((g) => g !== cleanName);
+      entities = entities.map((e) => {
+        if (e.group !== cleanName) return e;
+        const copy = { ...e };
+        delete copy.group;
+        return copy;
+      });
+    } else if (cleanFrom && cleanName) {
+      groups = groups.map((g) => (g === cleanFrom ? cleanName : g));
+      if (!groups.includes(cleanName)) groups.push(cleanName);
+      groups = [...new Set(groups)];
+      entities = entities.map((e) => (e.group === cleanFrom ? { ...e, group: cleanName } : e));
+    } else {
+      if (!cleanName) return { status: 400, body: 'Informe o nome do englobador (workspace).' };
+      if (!groups.includes(cleanName)) groups.push(cleanName);
+    }
+
+    const nextIndex = { format: index.format, version: index.version, ...(groups.length ? { groups } : {}), entities };
+    try {
+      saveIndex(nextIndex);
+    } catch (e) {
+      return { status: e.status || 400, body: e.message };
+    }
+    return { status: 200, body: { ok: true, groups } };
+  }
+
+  return { createEntity, updateEntity, saveGroup, saveEntityFile, saveGlobalDoc, uploadEntityMedia };
 }
 
 module.exports = { createWorkspaceActions };

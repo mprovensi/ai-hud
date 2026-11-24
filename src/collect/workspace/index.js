@@ -48,10 +48,20 @@ function readWorkspaceJson(workspaceRoot) {
 
 function readWorkspaceIndex(workspaceRoot) {
   const index = readWorkspaceJson(workspaceRoot);
+  const groupSet = new Set();
+  for (const g of (index.groups || [])) {
+    const clean = String(g || '').trim();
+    if (clean) groupSet.add(clean);
+  }
+  for (const e of (index.entities || [])) {
+    const clean = String(e.group || '').trim();
+    if (clean) groupSet.add(clean);
+  }
   return {
     root: workspaceRoot,
     format: index.format,
     version: index.version,
+    groups: [...groupSet].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     entities: index.entities,
     context: listDirFiles(path.join(workspaceRoot, 'context'), ['.md', '.txt']),
     knowledge: listDirFiles(path.join(workspaceRoot, 'knowledge'), ['.md', '.txt']),

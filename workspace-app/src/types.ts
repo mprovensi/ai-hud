@@ -39,6 +39,7 @@ export interface WorkspaceEntity {
   id: string;
   title: string;
   description?: string;
+  group?: string;
   category?: string;
   status?: string;
   pinned?: boolean;
@@ -60,6 +61,7 @@ export interface WorkspaceIndex {
   root: string;
   format: string;
   version: number;
+  groups?: string[];
   entities: WorkspaceEntity[];
   context: GlobalDocItem[];
   knowledge: GlobalDocItem[];
@@ -138,6 +140,9 @@ export interface SessionDetail extends SessionCard {
   models?: string[];
   files?: [string, number][];
   canStop?: boolean;
+  lastTool?: string;
+  subagents?: number;
+  permission?: { id: string; tool: string; summary?: string } | null;
   history?: { role: 'user' | 'assistant'; content: string; at?: number; tools?: string[] }[] | null;
   testRun?: { ok: boolean; command?: string; summary?: string; at?: number } | null;
 }

@@ -112,9 +112,15 @@ function validateCard(value, { draft = false } = {}) {
 }
 
 function validateWorkspaceIndex(value) {
-  assertKeys(value, ['format', 'version', 'entities'], 'workspace.json');
+  assertKeys(value, ['format', 'version', 'groups', 'entities'], 'workspace.json');
   if (value.format !== WORKSPACE_FORMAT || value.version !== WORKSPACE_VERSION) {
     throw fail(`Formato de workspace.json incompatível (esperado ${WORKSPACE_FORMAT} v${WORKSPACE_VERSION}).`);
+  }
+  if (value.groups !== undefined) {
+    if (!Array.isArray(value.groups) || value.groups.length > 100) {
+      throw fail('workspace.json precisa de um array "groups" válido.');
+    }
+    for (const g of value.groups) assertText(g, 'Nome do workspace/grupo', 80, true);
   }
   if (!Array.isArray(value.entities) || value.entities.length > 500) {
     throw fail('workspace.json precisa de um array "entities" válido.');
@@ -123,7 +129,7 @@ function validateWorkspaceIndex(value) {
   for (const e of value.entities) {
     assertKeys(
       e,
-      ['id', 'title', 'description', 'category', 'status', 'pinned', 'folder', 'projectBindings', 'defaultAgent', 'steps', 'created', 'updated'],
+      ['id', 'title', 'description', 'group', 'category', 'status', 'pinned', 'folder', 'projectBindings', 'defaultAgent', 'steps', 'created', 'updated'],
       'Entidade do workspace',
     );
     if (typeof e.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(e.id) || seen.has(e.id)) {
@@ -132,6 +138,7 @@ function validateWorkspaceIndex(value) {
     seen.add(e.id);
     assertText(e.title, 'Título da entidade', 200, true);
     assertText(e.description, 'Descrição da entidade', 1000);
+    assertText(e.group, 'Grupo/Workspace da entidade', 80);
     if (e.category && !ENTITY_CATEGORIES.includes(e.category)) throw fail(`Categoria inválida: "${e.category}".`);
     if (e.status && !ENTITY_STATUSES.includes(e.status)) throw fail(`Status inválido: "${e.status}".`);
     if (!isSafeRelativePath(e.folder)) throw fail(`Pasta inválida na entidade "${e.id}".`);

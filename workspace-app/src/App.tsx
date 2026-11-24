@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   Brain,
+  ChevronDown,
+  ChevronRight,
   FileText,
   FolderGit2,
   FolderKanban,
+  FolderPlus,
   GitFork,
+  Layers,
   LayoutDashboard,
   Plus,
   RefreshCw,
@@ -21,6 +25,7 @@ import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { FilesAndGit } from './components/FilesAndGit';
 import { LiveHudPane } from './components/LiveHudPane';
 import { MemoryPanel } from './components/MemoryPanel';
+import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
 import { TerminalPane } from './components/TerminalPane';
 import type { MachineCaps, Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
@@ -32,10 +37,24 @@ type Selection =
 
 type EntityTab = 'step' | 'memory' | 'files' | 'terminal';
 
-function quotaPct(q?: { windows?: Record<string, { used: number }> }): string | null {
+function quotaPair(q?: { windows?: Record<string, { used: number }> }): { primary: string; secondary: string | null } | null {
   if (!q?.windows) return null;
-  const w = q.windows.five_hour || q.windows.pro || q.windows.daily || Object.values(q.windows)[0];
-  return w && typeof w.used === 'number' ? `${Math.round(w.used)}%` : null;
+  const w = q.windows;
+  const p = w.five_hour || w.pro || Object.values(w)[0];
+  const s = w.seven_day || w.daily || (w.flash && w.flash !== p ? w.flash : null);
+  if (!p || typeof p.used !== 'number') return null;
+  return {
+    primary: `${Math.round(p.used)}%`,
+    secondary: s && typeof s.used === 'number' ? `${Math.round(s.used)}%` : null,
+  };
+}
+
+function readStoredWidth(key: string, fallback: number, min: number, max: number): number {
+  try {
+    const n = Number(localStorage.getItem(key));
+    if (Number.isFinite(n) && n >= min && n <= max) return n;
+  } catch {}
+  return fallback;
 }
 
 export function App() {
@@ -51,11 +70,50 @@ export function App() {
   const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
 
+  // Englobadores colapsáveis na sidebar
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  // Gaveta lateral esquerda em altura total para Nova Conversa (padrão Mr. Mak)
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newChatPrompt, setNewChatPrompt] = useState('');
+
+  // Resize das 3 colunas (esquerda | centro flex:1 | direita)
+  const [leftW, setLeftW] = useState(() => readStoredWidth('ai_ws_left_w', 260, 180, 480));
+  const [rightW, setRightW] = useState(() => readStoredWidth('ai_ws_right_w', 400, 300, 740));
+  const [draggingCol, setDraggingCol] = useState<'left' | 'right' | null>(null);
+
+  useEffect(() => {
+    if (!draggingCol) return;
+    const onMove = (e: MouseEvent) => {
+      if (draggingCol === 'left') {
+        const next = Math.max(180, Math.min(480, e.clientX));
+        setLeftW(next);
+        try { localStorage.setItem('ai_ws_left_w', String(next)); } catch {}
+      } else {
+        const next = Math.max(300, Math.min(740, window.innerWidth - e.clientX));
+        setRightW(next);
+        try { localStorage.setItem('ai_ws_right_w', String(next)); } catch {}
+      }
+    };
+    const onUp = () => setDraggingCol(null);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [draggingCol]);
+
   // Modal + Novo Projeto
   const [newModal, setNewModal] = useState(false);
   const [caps, setCaps] = useState<MachineCaps[]>([]);
   const [npTitle, setNpTitle] = useState('');
   const [npDesc, setNpDesc] = useState('');
+  const [npGroup, setNpGroup] = useState('');
   const [npTemplate, setNpTemplate] = useState('board');
   const [npMachine, setNpMachine] = useState('');
   const [npCwd, setNpCwd] = useState('');
@@ -160,7 +218,8 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  async function openNewModal() {
+  const openNewModal = useCallback(async (presetGroup = '') => {
+    setNpGroup(presetGroup);
     setNewModal(true);
     try {
       const c = await api.getCapabilities();
@@ -168,10 +227,22 @@ export function App() {
       const first = c.machines.find((m) => m.online) || c.machines[0];
       if (first) {
         setNpMachine(first.name);
-        setNpCwd(first.cwds[0] || '');
+        setNpCwd(first.pinned?.[0] || first.cwds?.[0] || '');
       }
     } catch {}
-  }
+  }, []);
+
+  const openNewGroup = useCallback(async () => {
+    const raw = window.prompt('Nome do englobador de projetos (ex.: TRT, Jogos, Pessoal):');
+    if (!raw || !raw.trim()) return;
+    try {
+      await api.saveGroup({ name: raw.trim() });
+      await loadWorkspace();
+      notify(`Workspace "${raw.trim()}" criado.`);
+    } catch (e) {
+      notify((e as Error).message, true);
+    }
+  }, [loadWorkspace, notify]);
 
   async function handleCreateEntity() {
     if (!npTitle.trim()) return notify('Informe o nome do projeto.', true);
@@ -180,17 +251,35 @@ export function App() {
       const r = await api.createEntity({
         title: npTitle.trim(),
         description: npDesc.trim(),
+        group: npGroup.trim(),
         template: npTemplate,
         projectBindings: bindings,
       });
       setNewModal(false);
       setNpTitle('');
       setNpDesc('');
+      setNpGroup('');
       await loadWorkspace();
       setSelection({ kind: 'entity', id: r.entity.id });
       setEntityTab('step');
       setStepIdx(0);
       notify(`Projeto "${r.entity.title}" criado.`);
+    } catch (e) {
+      notify((e as Error).message, true);
+    }
+  }
+
+  async function handleChangeEntityGroup(entity: WorkspaceEntity, nextGroup: string) {
+    let target = nextGroup;
+    if (nextGroup === '__new__') {
+      const raw = window.prompt('Nome do novo englobador (ex.: TRT, Jogos):');
+      if (!raw || !raw.trim()) return;
+      target = raw.trim();
+    }
+    try {
+      await api.updateEntity({ id: entity.id, group: target });
+      await loadWorkspace();
+      notify(target ? `Movido para "${target}".` : 'Removido do englobador.');
     } catch (e) {
       notify((e as Error).message, true);
     }
@@ -219,20 +308,54 @@ export function App() {
     if (!ws) return [];
     const q = search.trim().toLowerCase();
     const list = q
-      ? ws.entities.filter((e) => `${e.title} ${e.description || ''} ${e.category || ''}`.toLowerCase().includes(q))
+      ? ws.entities.filter((e) => `${e.title} ${e.description || ''} ${e.group || ''} ${e.category || ''}`.toLowerCase().includes(q))
       : ws.entities;
     return list.slice().sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
   }, [ws, search]);
 
+  const allGroups = useMemo(() => {
+    const set = new Set<string>(ws?.groups || []);
+    for (const e of ws?.entities || []) if (e.group) set.add(e.group);
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [ws]);
+
+  // Agrupa projetos filtrados por englobador (mantendo englobadores vazios quando sem busca)
+  const groupedSections = useMemo(() => {
+    const map = new Map<string, WorkspaceEntity[]>();
+    if (!search.trim()) {
+      for (const g of allGroups) map.set(g, []);
+    }
+    const ungrouped: WorkspaceEntity[] = [];
+    for (const e of filteredEntities) {
+      const g = (e.group || '').trim();
+      if (g) {
+        if (!map.has(g)) map.set(g, []);
+        map.get(g)!.push(e);
+      } else {
+        ungrouped.push(e);
+      }
+    }
+    const sections: { name: string; label: string; items: WorkspaceEntity[] }[] = [];
+    for (const [name, items] of map.entries()) {
+      sections.push({ name, label: name, items });
+    }
+    if (ungrouped.length || sections.length === 0) {
+      sections.push({ name: '', label: sections.length ? 'Geral (sem grupo)' : 'Projetos', items: ungrouped });
+    }
+    return sections;
+  }, [allGroups, filteredEntities, search]);
+
   const paletteActions: PaletteAction[] = useMemo(() => {
     const acts: PaletteAction[] = [
-      { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: openNewModal },
+      { id: 'act-chat', group: 'Ação', label: 'Nova conversa com IA (escolher pasta e IA)', run: () => { setNewChatPrompt(''); setNewChatOpen(true); } },
+      { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: () => openNewModal('') },
+      { id: 'act-grp', group: 'Ação', label: 'Criar englobador de projetos (ex.: TRT, Jogos)', run: openNewGroup },
       { id: 'act-hud', group: 'Navegação', label: 'Abrir AI HUD Clássico (/)', run: () => { window.location.href = withToken('/'); } },
     ];
     for (const e of ws?.entities || []) {
       acts.push({
         id: `ent-${e.id}`,
-        group: 'Projeto',
+        group: e.group || 'Projeto',
         label: e.title,
         hint: e.projectBindings?.[0]?.cwd,
         run: () => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); },
@@ -255,11 +378,11 @@ export function App() {
       }
     }
     return acts;
-  }, [ws]);
+  }, [ws, openNewModal, openNewGroup]);
 
-  const cPct = quotaPct(snap?.quotas?.claude);
-  const xPct = quotaPct(snap?.quotas?.codex);
-  const gPct = quotaPct(snap?.quotas?.gemini);
+  const cQ = quotaPair(snap?.quotas?.claude);
+  const xQ = quotaPair(snap?.quotas?.codex);
+  const gQ = quotaPair(snap?.quotas?.gemini);
 
   return (
     <div className="ws-shell">
@@ -271,14 +394,36 @@ export function App() {
         <a className="pill-link" href={withToken('/')}>
           <LayoutDashboard size={13} /> HUD Clássico
         </a>
+        <button className="btn btn-sm btn-primary" onClick={() => { setNewChatPrompt(''); setNewChatOpen(true); }} title="Abrir gaveta lateral para escolher pasta e IA">
+          <Plus size={13} /> Nova conversa
+        </button>
         <button className="cmd-trigger" onClick={() => setPaletteOpen(true)}>
           <Search size={13} /> Buscar ou ir para… <span className="kbd">Ctrl+K</span>
         </button>
 
+        {/* Item 5: Indicadores de uso 5h (negrito) • semanal (normal) */}
         <div className="quota-strip">
-          {cPct && <span className="qchip"><span className="qdot" style={{ background: 'var(--claude)' }} />Claude <b>{cPct}</b></span>}
-          {xPct && <span className="qchip"><span className="qdot" style={{ background: 'var(--codex)' }} />Codex <b>{xPct}</b></span>}
-          {gPct && <span className="qchip"><span className="qdot" style={{ background: 'var(--gemini)' }} />Gemini <b>{gPct}</b></span>}
+          {cQ && (
+            <span className="qchip" title="Claude: janela 5h (negrito) • semanal (normal)">
+              <span className="qdot" style={{ background: 'var(--claude)' }} />
+              Claude <b>{cQ.primary}</b>
+              {cQ.secondary && <><span className="q-sep">•</span><span className="q-sec">{cQ.secondary}</span></>}
+            </span>
+          )}
+          {xQ && (
+            <span className="qchip" title="Codex: janela 5h (negrito) • semanal (normal)">
+              <span className="qdot" style={{ background: 'var(--codex)' }} />
+              Codex <b>{xQ.primary}</b>
+              {xQ.secondary && <><span className="q-sep">•</span><span className="q-sec">{xQ.secondary}</span></>}
+            </span>
+          )}
+          {gQ && (
+            <span className="qchip" title="Gemini: janela 5h/pro (negrito) • diária/semanal (normal)">
+              <span className="qdot" style={{ background: 'var(--gemini)' }} />
+              Gemini <b>{gQ.primary}</b>
+              {gQ.secondary && <><span className="q-sep">•</span><span className="q-sec">{gQ.secondary}</span></>}
+            </span>
+          )}
           {syncSt && (
             <button
               className={`pill-link ${syncSt.conflicts.length ? 'danger' : ''}`}
@@ -312,8 +457,8 @@ export function App() {
       </header>
 
       <div className="ws-body">
-        {/* Left Sidebar */}
-        <nav className="sidebar">
+        {/* Left Sidebar (Resizable) */}
+        <nav className="sidebar" style={{ width: leftW }}>
           <div className="sb-head">
             <input
               className="sb-search"
@@ -321,34 +466,73 @@ export function App() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <button className="btn btn-primary btn-sm btn-icon" title="Novo projeto" onClick={openNewModal}>
+            <button className="btn btn-sm btn-icon" title="Novo englobador (ex.: TRT, Jogos)" onClick={openNewGroup}>
+              <FolderPlus size={14} />
+            </button>
+            <button className="btn btn-primary btn-sm btn-icon" title="Novo projeto" onClick={() => openNewModal('')}>
               <Plus size={15} />
             </button>
           </div>
 
           <div className="sb-scroll">
-            <div className="sb-sec">
-              <span>Projetos ({filteredEntities.length})</span>
-            </div>
-            {filteredEntities.map((e) => (
-              <button
-                key={e.id}
-                className={`sb-item ${selection?.kind === 'entity' && selection.id === e.id ? 'active' : ''}`}
-                onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
-              >
-                <FolderKanban size={14} color="var(--accent)" style={{ flexShrink: 0 }} />
-                <span className="ell">{e.title}</span>
-              </button>
-            ))}
-            {!filteredEntities.length && (
-              <div style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 8px' }}>
-                Nenhum projeto ainda. Clique em <b>+</b> para criar o primeiro!
-              </div>
-            )}
+            {/* Item 1: Projetos agrupados por Englobador (Workspace) */}
+            {groupedSections.map((sec) => {
+              const isCol = !!collapsedGroups[sec.name || '__ungrouped'];
+              return (
+                <div key={sec.name || '__ungrouped'} className="ws-group">
+                  <div className="ws-group-head">
+                    <button
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit' }}
+                      onClick={() => setCollapsedGroups((prev) => ({ ...prev, [sec.name || '__ungrouped']: !prev[sec.name || '__ungrouped'] }))}
+                    >
+                      {isCol ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                      <Layers size={12} color="var(--accent)" style={{ flexShrink: 0 }} />
+                      <span className="ell">{sec.label}</span>
+                      <span style={{ fontSize: 10.5, color: 'var(--muted)', marginLeft: 3 }}>({sec.items.length})</span>
+                    </button>
+                    <button
+                      className="btn btn-sm btn-icon"
+                      style={{ padding: 2, border: 0, background: 'transparent' }}
+                      title={`Novo projeto em ${sec.label}`}
+                      onClick={() => openNewModal(sec.name)}
+                    >
+                      <Plus size={12} color="var(--muted)" />
+                    </button>
+                  </div>
+
+                  {!isCol && (
+                    <div className="ws-group-body">
+                      {sec.items.length === 0 ? (
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)', padding: '3px 8px 6px' }}>
+                          Nenhum projeto aqui ainda.
+                        </div>
+                      ) : (
+                        sec.items.map((e) => {
+                          const active = selection?.kind === 'entity' && selection.id === e.id;
+                          return (
+                            <button
+                              key={e.id}
+                              className={`sb-item ${active ? 'active' : ''}`}
+                              onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
+                            >
+                              <FolderKanban size={14} color={active ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+                              <span className="ell">{e.title}</span>
+                              {e.projectBindings?.[0] && (
+                                <span className="meta">{e.projectBindings[0].machine}</span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {([
-              ['context', 'Contexto', BookOpen],
-              ['knowledge', 'Conhecimento', Brain],
+              ['context', 'Contexto Global', BookOpen],
+              ['knowledge', 'Conhecimento', FileText],
               ['skills', 'Skills', Sparkles],
             ] as const).map(([area, label, Icon]) => (
               <div key={area}>
@@ -385,6 +569,13 @@ export function App() {
           </div>
         </nav>
 
+        {/* Item 6: Left ↔ Center Resizer */}
+        <div
+          className={`col-resizer ${draggingCol === 'left' ? 'dragging' : ''}`}
+          onMouseDown={() => setDraggingCol('left')}
+          title="Arraste para redimensionar a lista de projetos"
+        />
+
         {/* Center Stage */}
         <main className="center">
           {selectedEntity ? (
@@ -395,6 +586,17 @@ export function App() {
                     <h1 className="stage-title ell">{selectedEntity.title}</h1>
                     {selectedEntity.description && <p className="stage-desc ell">{selectedEntity.description}</p>}
                   </div>
+                  <select
+                    className="sel"
+                    style={{ width: 'auto', minWidth: 140, maxWidth: 200, padding: '4px 8px', fontSize: 12 }}
+                    title="Englobador (Workspace) deste projeto"
+                    value={selectedEntity.group || ''}
+                    onChange={(e) => handleChangeEntityGroup(selectedEntity, e.target.value)}
+                  >
+                    <option value="">Sem englobador</option>
+                    {allGroups.map((g) => <option key={g} value={g}>📁 {g}</option>)}
+                    <option value="__new__">+ Novo englobador…</option>
+                  </select>
                   {activeBinding && (
                     <span className="badge mono">{activeBinding.machine}: {activeBinding.cwd}</span>
                   )}
@@ -493,9 +695,9 @@ export function App() {
               <div className="empty" style={{ marginTop: 60 }}>
                 <h2 style={{ margin: '0 0 8px', color: 'var(--text)' }}>Bem-vindo ao AI Workspace</h2>
                 <p style={{ maxWidth: 460, margin: '0 auto 18px' }}>
-                  Organize seus projetos em quadros editáveis (Board / Research / Gallery), consolide conhecimento entre Claude, Codex, Gemini e Ollama com Dreaming e acompanhe sessões ao vivo lado a lado.
+                  Organize seus projetos em englobadores (ex.: TRT, Jogos), quadros editáveis, memória compartilhada entre as 4 IAs e sessões ao vivo lado a lado.
                 </p>
-                <button className="btn btn-primary" onClick={openNewModal}>
+                <button className="btn btn-primary" onClick={() => openNewModal('')}>
                   <Plus size={15} /> Criar primeiro projeto
                 </button>
               </div>
@@ -503,17 +705,42 @@ export function App() {
           )}
         </main>
 
-        {/* Right Live AI HUD Panel */}
+        {/* Item 6: Center ↔ Right Resizer */}
+        <div
+          className={`col-resizer ${draggingCol === 'right' ? 'dragging' : ''}`}
+          onMouseDown={() => setDraggingCol('right')}
+          title="Arraste para redimensionar a lista de sessões"
+        />
+
+        {/* Right Live AI HUD Panel (Resizable) */}
         <LiveHudPane
           snapshot={snap}
+          projectId={selectedEntity?.id}
           projectTitle={selectedEntity?.title}
           binding={activeBinding}
           draftPrompt={draftPrompt}
           onDraftConsumed={() => setDraftPrompt('')}
+          onOpenNewSession={(initial) => {
+            setNewChatPrompt(initial || '');
+            setNewChatOpen(true);
+          }}
           onNotify={notify}
           onPollNow={() => pollNowRef.current()}
+          width={rightW}
         />
       </div>
+
+      {/* Item 2: Gaveta lateral esquerda em altura total para Nova Conversa (Pasta + IA) */}
+      <NewSessionDrawer
+        open={newChatOpen}
+        onClose={() => setNewChatOpen(false)}
+        defaultBinding={activeBinding}
+        entities={ws?.entities || []}
+        snapshot={snap}
+        initialPrompt={newChatPrompt}
+        onCreated={() => pollNowRef.current()}
+        onNotify={notify}
+      />
 
       {/* Modal: Novo Projeto */}
       {newModal && (
@@ -521,8 +748,21 @@ export function App() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Novo projeto no AI Workspace</h3>
             <div className="field">
+              <label>Englobador / Workspace (ex.: TRT, Jogos)</label>
+              <input
+                className="inp"
+                list="wsGroupOptions"
+                value={npGroup}
+                onChange={(e) => setNpGroup(e.target.value)}
+                placeholder="Ex.: TRT, Jogos (ou deixe em branco)"
+              />
+              <datalist id="wsGroupOptions">
+                {allGroups.map((g) => <option key={g} value={g} />)}
+              </datalist>
+            </div>
+            <div className="field">
               <label>Nome do projeto</label>
-              <input className="inp" autoFocus value={npTitle} onChange={(e) => setNpTitle(e.target.value)} placeholder="Ex.: AI HUD v2" />
+              <input className="inp" autoFocus value={npTitle} onChange={(e) => setNpTitle(e.target.value)} placeholder="Ex.: PJe Automação" />
             </div>
             <div className="field">
               <label>Descrição curta</label>

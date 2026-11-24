@@ -33,6 +33,16 @@ module.exports = ({ dataDir, config, workspace, workspaceSync, send, json, text 
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 
+    { method: 'PUT', path: '/api/workspace/entity', json: true, maxBytes: 128 * 1024, handler: ({ res, body }) => {
+      const r = workspace.updateEntity(body);
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    { method: 'POST', path: '/api/workspace/group', json: true, maxBytes: 16 * 1024, handler: ({ res, body }) => {
+      const r = workspace.saveGroup(body);
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
     { method: 'GET', path: '/api/workspace/entity/file', handler: ({ res, url }) => {
       const id = url.searchParams.get('id') || '';
       const rel = url.searchParams.get('path') || '';

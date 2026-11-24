@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isCwdAllowed, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
+const { isCwdAllowed, normalizePath, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
 const { recentCwds } = require('../../collect/capabilities');
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
 const { readWorkspaceJson } = require('../../collect/workspace');
@@ -191,7 +191,8 @@ module.exports = ({ filePreview, fileList, projectGit, terminal, ptyManager, pic
         if (!check.ok) return text(res, 403, check.reason);
       }
 
-      if (!fs.existsSync(baseCwd)) return text(res, 404, 'pasta do projeto não encontrada');
+      baseCwd = normalizePath(baseCwd);
+      if (!baseCwd || !fs.existsSync(baseCwd)) return text(res, 404, 'pasta do projeto não encontrada');
       let cleanPath = rawPath.split(/[?#]/)[0].trim();
       try { cleanPath = decodeURIComponent(cleanPath); } catch {}
       if (/^file:\/\//i.test(cleanPath)) {

@@ -352,9 +352,49 @@ button.qchip:hover { border-color: var(--border-hi); background: var(--card-hove
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 11px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px;
 }
-.card-item.clean-card { cursor: pointer; padding: 9px 10px; }
+.card-item.clean-card { cursor: pointer; padding: 9px 10px; border-left: 3px solid var(--border-hi); transition: border-color .15s, background .15s, opacity .15s; }
 .card-item.clean-card[draggable="true"] { cursor: grab; }
 .card-item.clean-card.drag-over-card { border-color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); }
+
+/* Diferenciação visual sutil por etapa do Board (Item 5) */
+.card-item.stage-idea { border-left-color: #7c8ba6; background: linear-gradient(90deg, rgba(124, 139, 166, .06), transparent 45%), var(--card); }
+.card-item.stage-spec { border-left-color: #b692f6; background: linear-gradient(90deg, rgba(182, 146, 246, .08), transparent 45%), var(--card); }
+.card-item.stage-in-progress { border-left-color: #6ea3f7; background: linear-gradient(90deg, rgba(110, 163, 247, .09), transparent 45%), var(--card); }
+.card-item.stage-review { border-left-color: #e5c063; background: linear-gradient(90deg, rgba(229, 192, 99, .09), transparent 45%), var(--card); }
+.card-item.stage-done { border-left-color: #6fd195; background: linear-gradient(90deg, rgba(111, 209, 149, .07), transparent 45%), var(--card); opacity: .82; }
+.card-item.stage-done:hover { opacity: 1; }
+.card-item.stage-done .card-title-clamp { color: #b9c3d4; }
+
+.col-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+.col-dot.idea { background: #7c8ba6; }
+.col-dot.spec { background: #b692f6; }
+.col-dot.in-progress { background: #6ea3f7; }
+.col-dot.review { background: #e5c063; }
+.col-dot.done { background: #6fd195; }
+
+/* Sidebar drag-and-drop + destaque de projetos com alteração recente (Itens 1 e 2) */
+.ws-group.sb-drag-over > .ws-group-head { background: rgba(95, 184, 164, .16); box-shadow: inset 0 2px 0 var(--accent); }
+.sb-row.sb-drag-over { box-shadow: inset 0 2px 0 var(--accent); background: rgba(95, 184, 164, .10); }
+.sb-row.sb-dragging, .ws-group.sb-dragging { opacity: .45; }
+.sb-item.sb-recent:not(.active) {
+  background: rgba(95, 184, 164, .07);
+  box-shadow: inset 2px 0 0 rgba(95, 184, 164, .7);
+  color: #e4ebf5;
+}
+.sb-item.sb-attention:not(.active) {
+  background: rgba(229, 192, 99, .09);
+  box-shadow: inset 2px 0 0 var(--warn);
+  color: #f4e6be;
+}
+.sb-item.sb-working:not(.active) {
+  background: rgba(111, 209, 149, .09);
+  box-shadow: inset 2px 0 0 var(--ok);
+  color: #e2f7ea;
+}
+.sb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sb-dot.working { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.sb-dot.attention { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.sb-dot.recent { background: var(--accent); }
 .card-title-clamp {
   margin: 0; font-size: 13px; font-weight: 600; line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

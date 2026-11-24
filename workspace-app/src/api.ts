@@ -186,6 +186,16 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  reorderWorkspace: (body: {
+    groups?: string[];
+    entityIds?: string[];
+    moveEntity?: { id: string; group?: string };
+  }) =>
+    apiFetch<{ ok: boolean; groups: string[]; entities: WorkspaceEntity[] }>('/api/workspace/reorder', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   pinProject: (body: { machine?: string; cwd: string; pinned: boolean }) =>
     apiFetch<{ ok: boolean; pinned: string[] }>('/api/projects/pin', {
       method: 'POST',

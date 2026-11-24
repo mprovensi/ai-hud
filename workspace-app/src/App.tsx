@@ -87,6 +87,10 @@ export function App() {
   const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
 
+  // Drag-and-drop para reordenar workspaces e projetos na sidebar (Item 1)
+  const [dragSb, setDragSb] = useState<{ kind: 'group'; name: string } | { kind: 'entity'; id: string } | null>(null);
+  const [dragOverSb, setDragOverSb] = useState<{ kind: 'group'; name: string } | { kind: 'entity'; id: string } | null>(null);
+
   // Englobadores colapsáveis na sidebar
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -389,17 +393,119 @@ export function App() {
   const filteredEntities = useMemo(() => {
     if (!ws) return [];
     const q = search.trim().toLowerCase();
-    const list = q
+    return q
       ? ws.entities.filter((e) => `${e.title} ${e.description || ''} ${e.group || ''} ${e.category || ''}`.toLowerCase().includes(q))
       : ws.entities;
-    return list.slice().sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
   }, [ws, search]);
 
   const allGroups = useMemo(() => {
-    const set = new Set<string>(ws?.groups || []);
-    for (const e of ws?.entities || []) if (e.group) set.add(e.group);
-    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const g of ws?.groups || []) {
+      const clean = g.trim();
+      if (clean && !seen.has(clean)) { seen.add(clean); out.push(clean); }
+    }
+    for (const e of ws?.entities || []) {
+      const clean = (e.group || '').trim();
+      if (clean && !seen.has(clean)) { seen.add(clean); out.push(clean); }
+    }
+    return out;
   }, [ws]);
+
+  async function reorderGroups(fromName: string, toName: string) {
+    if (!ws || !fromName || !toName || fromName === toName) return;
+    const cur = allGroups.slice();
+    const fromIdx = cur.indexOf(fromName);
+    const toIdx = cur.indexOf(toName);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = cur.splice(fromIdx, 1);
+    cur.splice(toIdx, 0, moved);
+    setWs({ ...ws, groups: cur });
+    try {
+      const r = await api.reorderWorkspace({ groups: cur });
+      setWs((prev) => (prev ? { ...prev, groups: r.groups, entities: r.entities } : prev));
+    } catch (e) {
+      notify((e as Error).message, true);
+      loadWorkspace();
+    }
+  }
+
+  async function reorderOrMoveEntity(dragId: string, targetGroup: string, beforeId?: string) {
+    if (!ws || !dragId || dragId === beforeId) return;
+    const cur = ws.entities.slice();
+    const fromIdx = cur.findIndex((e) => e.id === dragId);
+    if (fromIdx < 0) return;
+    const [moved] = cur.splice(fromIdx, 1);
+    const updated = { ...moved, ...(targetGroup ? { group: targetGroup } : {}) };
+    if (!targetGroup) delete updated.group;
+
+    if (beforeId) {
+      const toIdx = cur.findIndex((e) => e.id === beforeId);
+      if (toIdx >= 0) cur.splice(toIdx, 0, updated);
+      else cur.push(updated);
+    } else {
+      // Solto no cabeçalho do workspace: coloca no início da lista desse workspace
+      const firstInGroup = cur.findIndex((e) => (e.group || '') === targetGroup);
+      if (firstInGroup >= 0) cur.splice(firstInGroup, 0, updated);
+      else cur.unshift(updated);
+    }
+
+    const nextIds = cur.map((e) => e.id);
+    const prevWs = ws;
+    setWs({ ...ws, entities: cur });
+    try {
+      const r = await api.reorderWorkspace({
+        entityIds: nextIds,
+        moveEntity: { id: dragId, group: targetGroup },
+      });
+      setWs((prev) => (prev ? { ...prev, groups: r.groups, entities: r.entities } : prev));
+    } catch (e) {
+      setWs(prevWs);
+      notify((e as Error).message, true);
+    }
+  }
+
+  // Detecta atividade/mudança recente por projeto (sessão trabalhando, esperando/permissão, sessão nos últimos 30 min ou atualizado hoje)
+  const projectActivityMap = useMemo(() => {
+    const map = new Map<string, { kind: 'working' | 'attention' | 'recent'; tip: string }>();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const nowMs = snap?.now || Date.now();
+    const recentWindowMs = 30 * 60e3;
+    const allSess = [...(snap?.active || []), ...(snap?.recent || []).slice(0, 20)];
+
+    for (const e of ws?.entities || []) {
+      const binding = e.projectBindings?.[0];
+      const folder = binding?.cwd ? binding.cwd.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() : '';
+      const title = (e.title || '').toLowerCase();
+      let kind: 'working' | 'attention' | 'recent' | null = null;
+      let tip = '';
+
+      for (const s of allSess) {
+        const p = (s.project || '').toLowerCase();
+        const match = (folder && (p === folder || p.includes(folder))) || (p && title.includes(p));
+        if (!match) continue;
+        if (s.state === 'working') {
+          kind = 'working';
+          tip = `IA trabalhando (${s.tool})`;
+          break;
+        }
+        if (s.state === 'permission' || s.state === 'waiting') {
+          kind = 'attention';
+          tip = s.state === 'permission' ? `Aguardando permissão (${s.tool})` : `Nova resposta (${s.tool})`;
+        } else if (!kind && s.end && nowMs - s.end <= recentWindowMs) {
+          kind = 'recent';
+          tip = `Alterado recentemente (${s.tool})`;
+        }
+      }
+
+      if (!kind && e.updated === todayStr) {
+        kind = 'recent';
+        tip = 'Projeto alterado hoje';
+      }
+      if (kind) map.set(e.id, { kind, tip });
+    }
+    return map;
+  }, [ws?.entities, snap]);
 
   // Agrupa projetos filtrados por englobador (mantendo englobadores vazios quando sem busca)
   const groupedSections = useMemo(() => {
@@ -567,12 +673,52 @@ export function App() {
           </div>
 
           <div className="sb-scroll">
-            {/* Item 1: Projetos agrupados por Englobador (Workspace) */}
+            {/* Workspaces e projetos com drag-and-drop para reordenar e destaque de mudanças recentes */}
             {groupedSections.map((sec) => {
               const isCol = !!collapsedGroups[sec.name || '__ungrouped'];
+              const isGroupDragOver = dragOverSb?.kind === 'group' && dragOverSb.name === sec.name;
+              const isGroupDragging = dragSb?.kind === 'group' && dragSb.name === sec.name;
               return (
-                <div key={sec.name || '__ungrouped'} className="ws-group">
-                  <div className="ws-group-head">
+                <div
+                  key={sec.name || '__ungrouped'}
+                  className={`ws-group ${isGroupDragOver ? 'sb-drag-over' : ''} ${isGroupDragging ? 'sb-dragging' : ''}`}
+                  onDragOver={(ev) => {
+                    if (!dragSb) return;
+                    if (dragSb.kind === 'group' && (!sec.name || dragSb.name === sec.name)) return;
+                    ev.preventDefault();
+                    ev.dataTransfer.dropEffect = 'move';
+                    setDragOverSb({ kind: 'group', name: sec.name });
+                  }}
+                  onDragLeave={(ev) => {
+                    if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+                      setDragOverSb((cur) => (cur?.kind === 'group' && cur.name === sec.name ? null : cur));
+                    }
+                  }}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    const curDrag = dragSb;
+                    setDragSb(null);
+                    setDragOverSb(null);
+                    if (!curDrag) return;
+                    if (curDrag.kind === 'group' && sec.name) {
+                      reorderGroups(curDrag.name, sec.name);
+                    } else if (curDrag.kind === 'entity') {
+                      reorderOrMoveEntity(curDrag.id, sec.name);
+                    }
+                  }}
+                >
+                  <div
+                    className="ws-group-head"
+                    draggable={!!sec.name}
+                    onDragStart={(ev) => {
+                      if (!sec.name) return;
+                      setDragSb({ kind: 'group', name: sec.name });
+                      ev.dataTransfer.setData('text/plain', `group:${sec.name}`);
+                      ev.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragEnd={() => { setDragSb(null); setDragOverSb(null); }}
+                    title={sec.name ? 'Arraste para reordenar este workspace' : undefined}
+                  >
                     <button
                       style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit' }}
                       onClick={() => setCollapsedGroups((prev) => ({ ...prev, [sec.name || '__ungrouped']: !prev[sec.name || '__ungrouped'] }))}
@@ -621,14 +767,49 @@ export function App() {
                       ) : (
                         sec.items.map((e) => {
                           const active = selection?.kind === 'entity' && selection.id === e.id;
+                          const act = projectActivityMap.get(e.id);
+                          const isEntDragging = dragSb?.kind === 'entity' && dragSb.id === e.id;
+                          const isEntOver = dragOverSb?.kind === 'entity' && dragOverSb.id === e.id;
                           return (
-                            <div key={e.id} className="sb-row">
+                            <div
+                              key={e.id}
+                              className={`sb-row ${isEntDragging ? 'sb-dragging' : ''} ${isEntOver ? 'sb-drag-over' : ''}`}
+                              draggable
+                              onDragStart={(ev) => {
+                                ev.stopPropagation();
+                                setDragSb({ kind: 'entity', id: e.id });
+                                ev.dataTransfer.setData('text/plain', `entity:${e.id}`);
+                                ev.dataTransfer.effectAllowed = 'move';
+                              }}
+                              onDragOver={(ev) => {
+                                if (dragSb?.kind !== 'entity' || dragSb.id === e.id) return;
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                ev.dataTransfer.dropEffect = 'move';
+                                setDragOverSb({ kind: 'entity', id: e.id });
+                              }}
+                              onDragLeave={() => {
+                                setDragOverSb((cur) => (cur?.kind === 'entity' && cur.id === e.id ? null : cur));
+                              }}
+                              onDrop={(ev) => {
+                                if (dragSb?.kind !== 'entity') return;
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                const dragId = dragSb.id;
+                                setDragSb(null);
+                                setDragOverSb(null);
+                                if (dragId !== e.id) reorderOrMoveEntity(dragId, sec.name, e.id);
+                              }}
+                              onDragEnd={() => { setDragSb(null); setDragOverSb(null); }}
+                            >
                               <button
-                                className={`sb-item ${active ? 'active' : ''}`}
+                                className={`sb-item ${active ? 'active' : act ? `sb-${act.kind}` : ''}`}
+                                title={act ? `${e.title} · ${act.tip}` : `${e.title} (arraste para reordenar)`}
                                 onClick={() => { setSelection({ kind: 'entity', id: e.id }); setEntityTab('step'); setStepIdx(0); }}
                               >
-                                <FolderKanban size={14} color={active ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+                                <FolderKanban size={14} color={active ? 'var(--accent)' : act ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
                                 <span className="ell">{e.title}</span>
+                                {act && <span className={`sb-dot ${act.kind}`} title={act.tip} />}
                                 {e.projectBindings?.[0] && (
                                   <span className="meta">{e.projectBindings[0].machine}</span>
                                 )}

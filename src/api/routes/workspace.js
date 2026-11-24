@@ -103,6 +103,11 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 
+    { method: 'POST', path: '/api/workspace/reorder', json: true, maxBytes: 64 * 1024, handler: ({ res, body }) => {
+      const r = workspace.reorder(body);
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
     { method: 'GET', path: '/api/workspace/entity/file', handler: ({ res, url }) => {
       const id = url.searchParams.get('id') || '';
       const rel = url.searchParams.get('path') || '';

@@ -80,6 +80,7 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `PUT /api/workspace/entity` | Atualiza metadados de entidade/projeto (`title`, `description`, `group`, `pinned`, `projectBindings`) |
 | `POST /api/workspace/entity/delete` | Remove entidade/projeto do `workspace.json` movendo sua pasta interna para `.ai-workspace/backups/deleted/` (nunca apaga a pasta de código do usuário) |
 | `POST /api/workspace/group` | Cria, renomeia ou remove workspace (`{ name, renameFrom?, remove?, machine?, rootCwd? }`) |
+| `POST /api/workspace/reorder` | Reordena workspaces (`groups[]`) e projetos (`entityIds[]`) ou move projeto para outro workspace (`moveEntity: { id, group }`, respeitando `rootCwd`) |
 | `GET / PUT /api/workspace/entity/file` | Lê ou grava card (`.card.json`) / Markdown com verificação `baseHash` (`409 Conflict` em edição concorrente) + backup |
 | `GET /api/workspace/entity/asset?id=&path=` | Serve `media/*` e `report.html` isolados (CSP restrita em HTML) |
 | `POST /api/workspace/entity/media` | Upload seguro de imagem (PNG/JPG/WEBP/GIF, até 10 MB) para `media/` da entidade |

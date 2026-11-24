@@ -48,20 +48,24 @@ function readWorkspaceJson(workspaceRoot) {
 
 function readWorkspaceIndex(workspaceRoot) {
   const index = readWorkspaceJson(workspaceRoot);
-  const groupSet = new Set();
+  // Preserva a ordem salva pelo usuário em `index.groups`, acrescentando grupos descobertos em entidades ao final
+  const groups = [];
+  const seen = new Set();
   for (const g of (index.groups || [])) {
     const clean = String(g || '').trim();
-    if (clean) groupSet.add(clean);
+    if (clean && !seen.has(clean)) { seen.add(clean); groups.push(clean); }
   }
+  const extra = [];
   for (const e of (index.entities || [])) {
     const clean = String(e.group || '').trim();
-    if (clean) groupSet.add(clean);
+    if (clean && !seen.has(clean)) { seen.add(clean); extra.push(clean); }
   }
+  extra.sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return {
     root: workspaceRoot,
     format: index.format,
     version: index.version,
-    groups: [...groupSet].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    groups: [...groups, ...extra],
     groupMeta: index.groupMeta || {},
     entities: index.entities,
     context: listDirFiles(path.join(workspaceRoot, 'context'), ['.md', '.txt']),

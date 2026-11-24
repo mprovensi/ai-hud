@@ -381,7 +381,80 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return { status: 200, body: { ok: true, id: cleanId } };
   }
 
-  return { createEntity, updateEntity, deleteEntity, saveGroup, saveEntityFile, saveGlobalDoc, uploadEntityMedia };
+  function reorder({ groups, entityIds, moveEntity } = {}) {
+    const wsRoot = root();
+    const index = readWorkspaceJson(wsRoot);
+
+    // 1. Reordenar workspaces (groups)
+    let nextGroups = Array.isArray(index.groups) ? [...index.groups] : [];
+    for (const e of index.entities) if (e.group && !nextGroups.includes(e.group)) nextGroups.push(e.group);
+    if (Array.isArray(groups)) {
+      const validSet = new Set(nextGroups);
+      const ordered = [];
+      for (const g of groups) {
+        const clean = String(g || '').trim();
+        if (clean && validSet.has(clean) && !ordered.includes(clean)) ordered.push(clean);
+      }
+      for (const g of nextGroups) if (!ordered.includes(g)) ordered.push(g);
+      nextGroups = ordered;
+    }
+
+    // 2. Reordenar projetos (entities) e opcionalmente mover um projeto para outro workspace
+    let nextEntities = index.entities.slice();
+    if (moveEntity && moveEntity.id) {
+      const targetIdx = nextEntities.findIndex((e) => e.id === moveEntity.id);
+      if (targetIdx >= 0) {
+        const cur = { ...nextEntities[targetIdx] };
+        if (typeof moveEntity.group === 'string') {
+          const destGroup = moveEntity.group.trim().slice(0, 80);
+          const gMeta = destGroup && index.groupMeta ? index.groupMeta[destGroup] : null;
+          if (gMeta && gMeta.rootCwd && Array.isArray(cur.projectBindings) && cur.projectBindings.length) {
+            for (const b of cur.projectBindings) {
+              const bCwd = String(b.cwd || '').trim();
+              if (bCwd && (!isWithinRoot(gMeta.rootCwd, bCwd) || path.resolve(bCwd).toLowerCase() === path.resolve(gMeta.rootCwd).toLowerCase())) {
+                return { status: 400, body: `O projeto "${cur.title}" está fora da pasta raiz do workspace "${destGroup}".` };
+              }
+            }
+          }
+          if (destGroup) {
+            cur.group = destGroup;
+            if (!nextGroups.includes(destGroup)) nextGroups.push(destGroup);
+          } else {
+            delete cur.group;
+          }
+        }
+        nextEntities[targetIdx] = cur;
+      }
+    }
+
+    if (Array.isArray(entityIds)) {
+      const byId = new Map(nextEntities.map((e) => [e.id, e]));
+      const ordered = [];
+      for (const id of entityIds) {
+        const item = byId.get(id);
+        if (item) {
+          ordered.push(item);
+          byId.delete(id);
+        }
+      }
+      for (const rest of byId.values()) ordered.push(rest);
+      nextEntities = ordered;
+    }
+
+    const nextIndex = {
+      ...index,
+      ...(nextGroups.length ? { groups: nextGroups } : {}),
+      entities: nextEntities,
+    };
+    try {
+      saveIndex(nextIndex);
+    } catch (e) {
+      return { status: e.status || 400, body: e.message };
+    }
+    return { status: 200, body: { ok: true, groups: nextGroups, entities: nextEntities } };
+  }
+
+  return { createEntity, updateEntity, deleteEntity, saveGroup, reorder, saveEntityFile, saveGlobalDoc, uploadEntityMedia };
 }
 
 module.exports = { createWorkspaceActions };

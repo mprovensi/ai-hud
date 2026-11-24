@@ -290,6 +290,41 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
 
     const imgBad = await reqJson(port, 'GET', `/api/fs/image?cwd=${encodeURIComponent(projDir)}&path=${encodeURIComponent('../../secret.png')}`, tok);
     assert.equal(imgBad.status, 403);
+
+    // 9. Caminho estendido do Windows (\\?\) no cwd (ex.: Codex no Windows) deve normalizar sem EISDIR
+    if (process.platform === 'win32') {
+      const winExtendedCwd = '\\\\?\\' + projDir;
+      const imgWinRes = await new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${port}/api/fs/image?cwd=${encodeURIComponent(winExtendedCwd)}&path=${encodeURIComponent(imgPath)}&t=${tok}`, (res) => {
+          const chunks = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, buf: Buffer.concat(chunks) }));
+        }).on('error', reject);
+      });
+      assert.equal(imgWinRes.status, 200);
+      assert.equal(imgWinRes.headers['content-type'], 'image/png');
+      assert.equal(imgWinRes.buf.length, png1x1.length);
+    }
+
+    // 10. Reordenar workspaces e projetos na sidebar via POST /api/workspace/reorder
+    await reqJson(port, 'POST', '/api/workspace/group', tok, { name: 'Alpha' });
+    await reqJson(port, 'POST', '/api/workspace/group', tok, { name: 'Beta' });
+    const ent2 = await reqJson(port, 'POST', '/api/workspace/entity', tok, { title: 'Segundo Projeto', group: 'Alpha' });
+    assert.equal(ent2.status, 200);
+
+    const reorderedGroups = await reqJson(port, 'POST', '/api/workspace/reorder', tok, {
+      groups: ['Beta', 'Alpha', 'WorkspaceB'],
+      entityIds: [ent2.json.entity.id, recreated.json.entity.id],
+      moveEntity: { id: ent2.json.entity.id, group: 'Beta' },
+    });
+    assert.equal(reorderedGroups.status, 200);
+
+    const wsIdx = await reqJson(port, 'GET', '/api/workspace/index', tok);
+    assert.equal(wsIdx.status, 200);
+    assert.ok(wsIdx.json.groups.indexOf('Beta') < wsIdx.json.groups.indexOf('Alpha'));
+    assert.equal(wsIdx.json.entities[0].id, ent2.json.entity.id);
+    assert.equal(wsIdx.json.entities[0].group, 'Beta');
+    assert.equal(wsIdx.json.entities[1].id, recreated.json.entity.id);
   } finally {
     app.server.close();
   }

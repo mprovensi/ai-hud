@@ -719,10 +719,13 @@ export function CardEditor({
     const canDrag = card?.template === 'board' && !offlineFallback;
     const isBoard = card?.template === 'board';
 
+    const st = (item.status || 'idea') as CardStatus;
+    const isDone = st === 'done';
+
     return (
       <div
         key={item.id}
-        className={`card-item clean-card ${dragItemId === item.id ? 'dragging' : ''} ${dragOverCardId === item.id ? 'drag-over-card' : ''}`}
+        className={`card-item clean-card stage-${st} ${dragItemId === item.id ? 'dragging' : ''} ${dragOverCardId === item.id ? 'drag-over-card' : ''}`}
         draggable={canDrag}
         onDragStart={(e) => {
           if (!canDrag) return;
@@ -822,37 +825,39 @@ export function CardEditor({
           </div>
         )}
 
-        <div className="card-actions" style={{ marginTop: 7 }} onClick={(e) => e.stopPropagation()}>
-          <button
-            className="btn btn-sm"
-            style={{ padding: '3px 7px', fontSize: 11 }}
-            title="Executar tarefa com IA (avança para a próxima fase ao concluir)"
-            onClick={() => triggerExecute(item)}
-          >
-            <Play size={11} /> Executar
-          </button>
-          {hasProjectCwd && !docClean && (item.status === 'idea' || !item.status) && (
+        {!isDone && (
+          <div className="card-actions" style={{ marginTop: 7 }} onClick={(e) => e.stopPropagation()}>
             <button
               className="btn btn-sm"
               style={{ padding: '3px 7px', fontSize: 11 }}
-              title="Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)"
-              onClick={() => handleCreateSpecForItem(item)}
+              title="Executar tarefa com IA (avança para a próxima fase ao concluir)"
+              onClick={() => triggerExecute(item)}
             >
-              <FilePlus2 size={11} /> Spec
+              <Play size={11} /> Executar
             </button>
-          )}
-          {hasProjectCwd && docClean && (item.status === 'spec' || item.status === 'idea') && (
-            <button
-              className="btn btn-sm"
-              style={{ padding: '3px 7px', fontSize: 11 }}
-              title="Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)"
-              onClick={() => requestItemReview(item)}
-              disabled={reviewRunning}
-            >
-              🐟 Revisar
-            </button>
-          )}
-        </div>
+            {hasProjectCwd && !docClean && st === 'idea' && (
+              <button
+                className="btn btn-sm"
+                style={{ padding: '3px 7px', fontSize: 11 }}
+                title="Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)"
+                onClick={() => handleCreateSpecForItem(item)}
+              >
+                <FilePlus2 size={11} /> Spec
+              </button>
+            )}
+            {hasProjectCwd && docClean && (st === 'spec' || st === 'idea') && (
+              <button
+                className="btn btn-sm"
+                style={{ padding: '3px 7px', fontSize: 11 }}
+                title="Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)"
+                onClick={() => requestItemReview(item)}
+                disabled={reviewRunning}
+              >
+                🐟 Revisar
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -912,7 +917,7 @@ export function CardEditor({
                 {detailModal.isNew ? 'Novo item no Quadro' : 'Detalhes do card'}
               </h3>
               <div style={{ display: 'flex', gap: 6 }}>
-                {!detailModal.isNew && (
+                {!detailModal.isNew && (detailModal.draft.status || 'idea') !== 'done' && (
                   <button
                     className="btn btn-sm btn-primary"
                     onClick={() => {
@@ -1533,7 +1538,10 @@ export function CardEditor({
                   }}
                 >
                   <div className="board-col-head">
-                    <span>{col.label} ({items.length})</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span className={`col-dot ${col.id}`} />
+                      {col.label} ({items.length})
+                    </span>
                     <button className="btn btn-sm btn-icon" onClick={() => openNewItemModal(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>
                       <Plus size={12} />
                     </button>

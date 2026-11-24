@@ -32,7 +32,10 @@
     }
     html += '<div class="chips' + (chipsOpen ? ' open' : '') + '" id="quickChips">';
     for (i = 0; i < QUICK.length; i++) html += '<button type="button" class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
-    return html + '</div><div class="row rform"><textarea id="replyText" rows="2" placeholder="Escreva ou fale uma resposta…"></textarea>' +
+    return html + '</div><div class="slash-pop" id="slashPop" style="display:none"></div>' +
+      '<div class="row rform"><textarea id="replyText" rows="2" placeholder="Escreva, digite / ou fale uma resposta…"></textarea>' +
+      '<input type="file" id="replyAttachInput" accept="image/*" style="display:none">' +
+      '<button type="button" class="attach" id="attachReply" aria-label="Anexar imagem" title="Anexar imagem">📎</button>' +
       (Speech ? '<button class="mic' + (rec ? ' on' : '') + '" id="micReply" aria-label="Falar a resposta" title="Falar a resposta">🎤</button>' : '') +
       '<button class="send" id="sendReply">Enviar</button></div></div>';
   }
@@ -128,6 +131,65 @@
     };
     if ($('cancelReply')) $('cancelReply').onclick = function () { sendReply(d, ''); };
     if ($('micReply')) $('micReply').onclick = toggleMic;
+    // Anexo de imagem pelo celular/iPad -> POST /api/upload -> insere caminho no prompt
+    if ($('attachReply') && $('replyAttachInput')) {
+      $('attachReply').onclick = function () { $('replyAttachInput').click(); };
+      $('replyAttachInput').onchange = function () {
+        var f = this.files && this.files[0];
+        if (!f || typeof FileReader === 'undefined') return;
+        var btn = $('attachReply');
+        if (btn) btn.disabled = true;
+        var rd = new FileReader();
+        rd.onload = function () {
+          request('POST', '/api/upload', function (err, r) {
+            if (btn) btn.disabled = false;
+            if (err || !r || !r.path) return flash('Anexo falhou: ' + (err ? err.message : 'erro'), false);
+            var box = $('replyText');
+            if (box) {
+              var cur = box.value ? box.value.replace(/\s+$/, '') + '\n' : '';
+              box.value = cur + '[Imagem anexada: ' + r.path + '] ';
+              box.focus();
+            }
+            flash('Imagem anexada (' + r.name + ').');
+          }, { id: d.id, fileName: f.name || 'imagem.png', base64Data: String(rd.result || '') });
+        };
+        rd.readAsDataURL(f);
+      };
+    }
+    // Autocomplete de `/` comandos e skills
+    var slashList = null;
+    function renderSlash(val) {
+      var pop = $('slashPop');
+      if (!pop) return;
+      var m = /^\/([a-z0-9_-]*)$/i.exec(String(val || '').replace(/^\s+/, ''));
+      if (!m || !slashList || !slashList.length) { pop.style.display = 'none'; pop.innerHTML = ''; return; }
+      var q = m[1].toLowerCase(), out = '', n = 0, si;
+      for (si = 0; si < slashList.length && n < 6; si++) {
+        if (q && slashList[si].cmd.toLowerCase().indexOf('/' + q) !== 0 && slashList[si].name.toLowerCase().indexOf(q) < 0) continue;
+        out += '<button type="button" class="slash-it" data-sc="' + esc(slashList[si].cmd) + '"><b>' + esc(slashList[si].cmd) + '</b>' +
+          (slashList[si].description ? ' <small>' + esc(slashList[si].description) + '</small>' : '') + '</button>';
+        n++;
+      }
+      if (!n) { pop.style.display = 'none'; pop.innerHTML = ''; return; }
+      pop.innerHTML = out;
+      pop.style.display = 'block';
+      var sbs = pop.getElementsByTagName('button');
+      for (si = 0; si < sbs.length; si++) {
+        sbs[si].onclick = function () {
+          $('replyText').value = this.getAttribute('data-sc') + ' ';
+          pop.style.display = 'none';
+          $('replyText').focus();
+        };
+      }
+    }
+    $('replyText').oninput = function () {
+      var v = this.value;
+      if (v.charAt(0) !== '/') { renderSlash(''); return; }
+      if (slashList) { renderSlash(v); return; }
+      request('GET', '/api/skills?cwd=' + encodeURIComponent(d.cwd || ''), function (err, r) {
+        if (!err && r && r.skills) { slashList = r.skills; renderSlash($('replyText') ? $('replyText').value : ''); }
+      });
+    };
   }
 
   function flash(msg, ok) {
@@ -151,6 +213,6 @@
       for (qi in qState.sel) for (k2 in qState.sel[qi]) if (qState.sel[qi][k2]) return true;
     }
     var ae = document.activeElement;
-    if (ae && ae.className && ae.className.indexOf('qother') >= 0) return true;
+    if (ae && (ae.id === 'sessAliasIn' || ae.id === 'sessGroupIn' || (ae.className && ae.className.indexOf('qother') >= 0))) return true;
     return false;
   }

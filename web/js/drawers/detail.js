@@ -10,8 +10,10 @@
     var idx = toolIndex(x.tool);
     var origins = { 'gemini-cli': 'Gemini CLI', antigravity: 'Antigravity', 'antigravity-cli': 'Antigravity CLI' };
     var origin = x.tool === 'Gemini' && origins[x.where] ? ' · ' + origins[x.where] : '';
-    return head(toolIcon(idx) + esc(x.project) + ' <small class="muted">' + esc(x.tool) + origin + machineTag(x) + '</small>',
-      x.title ? esc(x.title) : '');
+    var sub = x.alias || x.title || '';
+    if (x.group) sub = '[' + x.group + ']' + (sub ? ' · ' + sub : '');
+    return head(toolIcon(idx) + (x.pinned ? '★ ' : '') + esc(x.project) + ' <small class="muted">' + esc(x.tool) + origin + machineTag(x) + '</small>',
+      sub ? esc(sub) : '');
   }
 
   // Nome do PC da sessão: só aparece quando o hub junta mais de um PC
@@ -516,6 +518,12 @@
     }
     html += renderConversation(d);
     html += questionCard(d);
+    if (d.subagents > 0 || d.canStop) {
+      var parts = [];
+      if (d.subagents > 0) parts.push('🤖 ' + d.subagents + (d.subagents === 1 ? ' subagente' : ' subagentes') + (d.subTokens ? ' · ' + k(d.subTokens) + ' tokens' : ''));
+      if (d.canStop) parts.push('⚙ processo em execução no HUD');
+      html += '<div class="substrip">' + esc(parts.join(' · ')) + '</div>';
+    }
     // ollama run no terminal e sessões legadas sem UUID: sem resposta direta pelo HUD
     var canReply = d.tool !== 'Antigravity' && d.where !== 'ollama-run' && (d.tool !== 'Gemini' || /(?:^|:)[0-9a-f-]{36}$/.test(String(d.id || '')));
     if (canReply) html += replyBox(d);
@@ -566,6 +574,14 @@
         '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
     }
     html += '</div>';
+    // Organizar sessão: fixar no topo, apelido e grupo (salvo no Hub em data/session-meta.json)
+    html += '<div class="panel smeta-box"><h2>Organizar sessão</h2>' +
+      '<div class="row smeta-row">' +
+      '<button type="button" class="pinbtn' + (d.pinned ? ' on' : '') + '" id="sessPinBtn" title="' + (d.pinned ? 'Desfixar sessão' : 'Fixar sessão no topo') + '">' + (d.pinned ? '★' : '☆') + '</button>' +
+      '<input type="text" class="nsel grow" id="sessAliasIn" placeholder="Apelido da sessão (opcional)…" value="' + esc(d.alias || '') + '">' +
+      '</div><div class="row smeta-row">' +
+      '<input type="text" class="nsel grow" id="sessGroupIn" placeholder="Grupo (ex.: AI HUD, Infra)…" value="' + esc(d.group || '') + '">' +
+      '<button type="button" class="pcmini" id="sessMetaSave">Salvar</button></div></div>';
     html += renderMemoryBox();
     if (!memUi.open) {
       html += '<button type="button" class="pcaction" id="openMem">🧠 Memória compartilhada <small>(ver / 🌙 Dream)</small></button>';
@@ -748,6 +764,33 @@
         renderDetail(d);
       });
     }
+    if ($('sessPinBtn')) $('sessPinBtn').onclick = function () {
+      var b = this, next = !d.pinned;
+      b.disabled = true;
+      request('POST', '/api/session-meta', function (err) {
+        b.disabled = false;
+        if (err) return flash('Falhou: ' + err.message, false);
+        d.pinned = next;
+        flash(next ? 'Sessão fixada no topo.' : 'Sessão desfixada.');
+        poll();
+        renderDetail(d);
+      }, { id: d.id, pinned: next });
+    };
+    if ($('sessMetaSave')) $('sessMetaSave').onclick = function () {
+      var b = this;
+      var alias = $('sessAliasIn') ? $('sessAliasIn').value.replace(/^\s+|\s+$/g, '') : '';
+      var group = $('sessGroupIn') ? $('sessGroupIn').value.replace(/^\s+|\s+$/g, '') : '';
+      b.disabled = true;
+      request('POST', '/api/session-meta', function (err) {
+        b.disabled = false;
+        if (err) return flash('Falhou: ' + err.message, false);
+        d.alias = alias;
+        d.group = group;
+        flash('Organização da sessão salva.');
+        poll();
+        renderDetail(d);
+      }, { id: d.id, alias: alias, group: group });
+    };
     if ($('openMem')) $('openMem').onclick = loadProjectMemory;
     if ($('memClose')) $('memClose').onclick = function () { memUi.open = false; renderDetail(d); };
     if ($('memDream')) $('memDream').onclick = function () {

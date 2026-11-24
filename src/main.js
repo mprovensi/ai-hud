@@ -21,9 +21,12 @@ const { createReplies } = require('./actions/reply');
 const { createSessionLauncher } = require('./actions/spawn');
 const { createHandoff } = require('./actions/handoff');
 const { createProjectPins } = require('./actions/projects');
+const { createSessionMeta } = require('./actions/session-meta');
+const { createUpload } = require('./actions/upload');
 const { createWorkspaceActions } = require('./actions/workspace');
 const { createMemoryActions } = require('./actions/memory');
 const { createRunning } = require('./actions/running');
+const { compareSessions } = require('./core/session');
 const { createPermissions } = require('./actions/permissions');
 const { createFocus } = require('./actions/focus');
 const { createClose } = require('./actions/close');
@@ -107,9 +110,20 @@ function createApp({
     return buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode, ideListen,
       ollamaState: () => (showOllama ? ollama.state : null) });
   }
-  // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation)
+  // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation) + metadados (pin/alias/grupo)
+  const sessionMeta = createSessionMeta(dataDir);
+  function applyMeta(list) {
+    return (list || []).map((c) => {
+      const m = sessionMeta.get(c.id);
+      if (!m) return c;
+      return { ...c, pinned: !!m.pinned, alias: m.alias || '', group: m.group || '' };
+    });
+  }
   function build(sessions, now, local) {
-    return peers.merge(local || buildLocal(sessions, now), machineName);
+    const merged = peers.merge(local || buildLocal(sessions, now), machineName);
+    const active = applyMeta(merged.active).sort(compareSessions);
+    const recent = applyMeta(merged.recent);
+    return { ...merged, active, recent };
   }
   const collector = createCollector({ sources, buildLocal, build });
 
@@ -125,6 +139,7 @@ function createApp({
     ollamaUrl: () => ollama.url, running });
   const handoff = createHandoff({ dataDir, launch });
   const setProjectPin = createProjectPins({ config, saveConfig });
+  const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });
   const memory = createMemoryActions({
     dataDir, config, collector, quotas, ollama,
@@ -137,7 +152,7 @@ function createApp({
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, workspace, memory, filePreview, fileList, projectGit,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, memory, filePreview, fileList, projectGit,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });

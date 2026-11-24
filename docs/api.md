@@ -32,7 +32,7 @@ Sem `desde`, responde na hora. Uma versão de outro processo do servidor também
 
 Cartão: `tool, id, project, title, start, end, state (working|waiting|idle|closed|permission), lastTool,
 completedAt, tokens, prompts, lastPrompt, lastReply, lastReplyAt, context, contextWindow, key, listening,
-queued, permission, machine`. Ids de sessões de outro PC: `m<n>:<id>`.
+queued, permission, machine, pinned?, alias?, group?`. Ids de sessões de outro PC: `m<n>:<id>`.
 
 ## GET /api/session?id=
 
@@ -53,12 +53,15 @@ tools, subagents, subTokens, where, turns, history (Ollama), ollamaGeneration`.
 | `/api/new` | `{ machine?, tool, model?, cwd?, prompt }` | `{ ok, id, tool, machine }` (403 se `strictRemoteCwd` bloquear pasta remota) |
 | `/api/projects/pin` | `{ machine?, cwd, pinned }` | `{ ok, pinned[] }` (fixa/desfixa pasta favorita) |
 | `/api/handoff` | `{ id, targetTool?, targetModel?, note? }` | `{ ok, id, tool, machine, handoffFile, fromId, fromTool }` |
+| `/api/session-meta` | `{ id, pinned?, alias?, group? }` | `{ ok, id, meta: { pinned, alias, group } }` (fixa, renomeia ou agrupa sessão no Hub) |
+| `/api/upload` | `{ id?, fileName, base64Data }` | `{ ok, path, relPath, name, size }` (anexa PNG/JPG/WEBP/GIF ≤ 10 MB em `inbox/attachments/`; repassa ao peer se `id` for `m<n>:...`) |
 
 ## Outras consultas (GET)
 
 | Rota | Resposta |
 |---|---|
 | `GET /api/capabilities` | `{ machines: [{ name, online, platform, home, pinned[], strictRemoteCwd, cwds[], tools }] }` |
+| `GET /api/skills?cwd=` | `{ skills: [{ cmd, name, description, source }] }` (comandos `/` do projeto, AI Workspace, IAs locais e builtins) |
 | `GET /api/fs/preview?id=&path=&mode=diff\|content` | `{ ok, path, mode, content, truncated, binary, redacted, fallback? }` (restrito ao `cwd` da sessão ou autorizado) |
 | `GET /api/fs/list?cwd=&path=&machine=` | `{ ok, dir, entries: [{ name, path, type, size }], truncated }` (pastas autorizadas) |
 | `GET /api/fs/git?cwd=&machine=` | `{ ok, isRepo, branch, modified[], commits[] }` (pastas autorizadas) |

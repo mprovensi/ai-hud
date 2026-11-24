@@ -144,6 +144,22 @@
 /* Ditado: ouvindo = vermelho suave pulsando */
 .mic { margin-left: 8px; width: 2.6em; text-align: center; border-radius: 10px; background: #262624; border: 1px solid #3a3a36;
   -webkit-align-self: stretch; align-self: stretch; font-size: 1em; }
+.attach { margin-left: 8px; width: 2.5em; text-align: center; border-radius: 10px; background: #262624; border: 1px solid #3a3a36;
+  -webkit-align-self: stretch; align-self: stretch; font-size: 1em; }
+.attach:disabled { opacity: .5; }
+.substrip { font-size: .76em; color: #aeb6c7; background: #1a1c22; border: 1px solid #2e3240; border-radius: 9px;
+  padding: 5px 10px; margin-bottom: 8px; }
+.slash-pop { margin-bottom: 7px; border: 1px solid #3a4152; border-radius: 9px; background: #16181e; overflow: hidden; }
+.slash-it { display: block; width: 100%; text-align: left; padding: 7px 10px; border-bottom: 1px solid #252833;
+  font-size: .84em; color: #e2e6f0; }
+.slash-it:last-child { border-bottom: 0; }
+.slash-it:active { background: #252c3f; }
+.slash-it small { color: #8f96a6; margin-left: 6px; }
+.smeta-box { margin-bottom: 10px; }
+.smeta-row { -webkit-align-items: stretch; align-items: stretch; margin-bottom: 7px; }
+.smeta-row:last-child { margin-bottom: 0; }
+.smeta-row .nsel { margin-bottom: 0; min-width: 0; }
+.smeta-row .pinbtn { margin-left: 0; margin-right: 8px; }
 .mic.on { background: #4d2f2f; border-color: #c98a85; -webkit-animation: pulse 1.6s infinite; animation: pulse 1.6s infinite; }
 
 /* Botão + Nova no topo e gaveta de nova sessão (#nova) */

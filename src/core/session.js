@@ -59,7 +59,8 @@ function compareSessions(a, b) {
   const priority = (ORDER[a.state] ?? 1) - (ORDER[b.state] ?? 1);
   const recent = (b.end || 0) - (a.end || 0);
   const aId = String(a.id || ''), bId = String(b.id || '');
-  return priority || recent || (aId < bId ? -1 : aId > bId ? 1 : 0);
+  const pinned = Number(!!b.pinned) - Number(!!a.pinned);
+  return priority || pinned || recent || (aId < bId ? -1 : aId > bId ? 1 : 0);
 }
 
 // Último nome de uma pasta (Windows ou Unix)

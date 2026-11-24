@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "default",
+  "description": "Permissões básicas de janelas e estado para o AI Workspace desktop",
+  "windows": ["workspace", "sessions"],
+  "permissions": [
+    "core:default",
+    "window-state:default"
+  ]
+}

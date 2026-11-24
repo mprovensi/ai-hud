@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, GitFork, Plus, Send, Square } from 'lucide-react';
+import { ArrowLeft, GitFork, Paperclip, Plus, Send, Square, Star } from 'lucide-react';
 import { api } from '../api';
 import type { MachineCaps, SessionCard, SessionDetail, Snapshot } from '../types';
 
@@ -35,6 +35,7 @@ export function LiveHudPane({ snapshot, projectTitle, binding, draftPrompt, onDr
   const [handoffOpen, setHandoffOpen] = useState(false);
   const [handoffTool, setHandoffTool] = useState('Codex');
   const [handoffNote, setHandoffNote] = useState('');
+  const [skills, setSkills] = useState<{ cmd: string; name: string; description: string; source: string }[]>([]);
 
   useEffect(() => {
     if (draftPrompt) {
@@ -228,6 +229,21 @@ export function LiveHudPane({ snapshot, projectTitle, binding, draftPrompt, onDr
                   <Square size={11} /> Parar
                 </button>
               )}
+              <button
+                className="btn btn-sm"
+                title={detail.pinned ? 'Desfixar sessão' : 'Fixar sessão no topo'}
+                onClick={async () => {
+                  try {
+                    const next = !detail.pinned;
+                    await api.setSessionMeta({ id: detail.id, pinned: next });
+                    setDetail({ ...detail, pinned: next });
+                    onPollNow();
+                    onNotify(next ? 'Sessão fixada.' : 'Sessão desfixada.');
+                  } catch (e) { onNotify((e as Error).message, true); }
+                }}
+              >
+                <Star size={12} fill={detail.pinned ? '#e5c063' : 'none'} color={detail.pinned ? '#e5c063' : 'currentColor'} />
+              </button>
               <button className="btn btn-sm" onClick={() => setHandoffOpen(!handoffOpen)}>
                 <GitFork size={12} /> Handoff
               </button>
@@ -264,15 +280,61 @@ export function LiveHudPane({ snapshot, projectTitle, binding, draftPrompt, onDr
               ))}
             </div>
 
+            {replyText.startsWith('/') && skills.length > 0 && (
+              <div style={{ border: '1px solid var(--border-hi)', borderRadius: 8, background: '#111318', overflow: 'hidden' }}>
+                {skills
+                  .filter((sk) => sk.cmd.toLowerCase().startsWith(replyText.trim().toLowerCase()))
+                  .slice(0, 6)
+                  .map((sk) => (
+                    <button
+                      key={sk.cmd}
+                      className="sb-item"
+                      style={{ margin: 0, borderRadius: 0 }}
+                      onClick={() => setReplyText(`${sk.cmd} `)}
+                    >
+                      <strong className="mono">{sk.cmd}</strong>
+                      <span className="ell" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{sk.description}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <textarea
                 className="ta"
                 rows={2}
                 value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setReplyText(v);
+                  if (v.startsWith('/') && !skills.length) {
+                    api.getSkills(detail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
+                  }
+                }}
                 onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') sendReply(); }}
-                placeholder="Responder (Ctrl+Enter)…"
+                placeholder="Responder, digite / para skills (Ctrl+Enter)…"
               />
+              <label className="btn btn-icon" title="Anexar imagem" style={{ alignSelf: 'stretch' }}>
+                <Paperclip size={14} />
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const rd = new FileReader();
+                    rd.onload = async () => {
+                      try {
+                        const up = await api.uploadAttachment({ id: detail.id, fileName: f.name, base64Data: String(rd.result || '') });
+                        setReplyText((prev) => `${prev ? prev.trimEnd() + '\n' : ''}[Imagem anexada: ${up.path}] `);
+                        onNotify(`Imagem anexada (${up.name}).`);
+                      } catch (err) { onNotify((err as Error).message, true); }
+                    };
+                    rd.readAsDataURL(f);
+                  }}
+                />
+              </label>
               <button className="btn btn-primary" disabled={sending || !replyText.trim()} onClick={sendReply} title="Enviar">
                 <Send size={14} />
               </button>
@@ -285,11 +347,11 @@ export function LiveHudPane({ snapshot, projectTitle, binding, draftPrompt, onDr
               return (
                 <button key={s.id} className="sess-card" onClick={() => setSelectedId(s.id)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <strong className="ell" style={{ flex: 1, fontSize: 13 }}>{s.project || 'Sessão'}</strong>
+                    <strong className="ell" style={{ flex: 1, fontSize: 13 }}>{s.pinned ? '★ ' : ''}{s.project || 'Sessão'}</strong>
                     <span className={`badge ${s.state}`}>{s.state}</span>
                   </div>
                   <div className="ell" style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-                    {s.title || s.lastPrompt || '(sem título)'}
+                    {s.group ? `[${s.group}] ` : ''}{s.alias || s.title || s.lastPrompt || '(sem título)'}
                   </div>
                   <div style={{ display: 'flex', gap: 6, fontSize: 11, color: 'var(--muted)' }}>
                     <span>{s.tool}</span>

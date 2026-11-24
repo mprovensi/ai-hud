@@ -87,6 +87,23 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  setSessionMeta: (body: { id: string; pinned?: boolean; alias?: string; group?: string }) =>
+    apiFetch<{ ok: boolean; id: string; meta: { pinned?: boolean; alias?: string; group?: string } }>('/api/session-meta', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  uploadAttachment: (body: { id?: string; fileName: string; base64Data: string }) =>
+    apiFetch<{ ok: boolean; path: string; relPath: string; name: string; size: number }>('/api/upload', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getSkills: (cwd = '') =>
+    apiFetch<{ skills: { cmd: string; name: string; description: string; source: string }[] }>(
+      `/api/skills${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''}`,
+    ),
+
   getWorkspaceIndex: () =>
     apiFetch<WorkspaceIndex>('/api/workspace/index'),
 

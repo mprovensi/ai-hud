@@ -114,6 +114,9 @@ export interface SessionCard {
   queued?: string | null;
   machine?: string;
   where?: string;
+  pinned?: boolean;
+  alias?: string;
+  group?: string;
 }
 
 export interface Snapshot {

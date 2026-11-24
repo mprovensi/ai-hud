@@ -77,7 +77,8 @@ export function MemoryPanel({ project, cwd, onNotify }: Props) {
       if (r.skipped) {
         onNotify(r.reason || 'Nenhuma sessão nova para consolidar.');
       } else {
-        onNotify(`Dreaming concluído (${r.engine}): ${r.summary || 'OK'}`);
+        const tok = r.usage ? ` · ${r.usage.totalTokens >= 1000 ? `${(r.usage.totalTokens / 1000).toFixed(1)}k` : r.usage.totalTokens} tok${r.usage.estimated ? ' est.' : ''}` : '';
+        onNotify(`Dreaming concluído (${r.engine}${tok}): ${r.summary || 'OK'}`);
       }
       await load();
     } catch (e) {
@@ -121,8 +122,9 @@ export function MemoryPanel({ project, cwd, onNotify }: Props) {
         </span>
         <span className="badge">Modo: {mem.mode}</span>
         {mem.lastDreamAt > 0 && (
-          <span className="badge">
+          <span className="badge" title={mem.lastUsage ? `Entrada: ${mem.lastUsage.inputTokens} | Saída: ${mem.lastUsage.outputTokens}${mem.lastUsage.cacheReadTokens ? ` | Cache: ${mem.lastUsage.cacheReadTokens}` : ''} (${mem.lastUsage.estimated ? 'estimado' : 'real'})` : undefined}>
             Último Dream: {new Date(mem.lastDreamAt).toLocaleString('pt-BR')} {mem.lastEngine ? `(${mem.lastEngine})` : ''}
+            {mem.lastUsage ? ` · ${mem.lastUsage.totalTokens >= 1000 ? `${(mem.lastUsage.totalTokens / 1000).toFixed(1)}k` : mem.lastUsage.totalTokens} tok${mem.lastUsage.estimated ? ' est.' : ''}` : ''}
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>

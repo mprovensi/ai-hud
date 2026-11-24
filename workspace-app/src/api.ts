@@ -244,7 +244,16 @@ export const api = {
     }),
 
   runDream: (body: { project: string; cwd?: string; force?: boolean; ignoreQuota?: boolean }) =>
-    apiFetch<{ ok: boolean; skipped?: boolean; reason?: string; summary?: string; engine?: string; sessionsProcessed?: number }>(
+    apiFetch<{
+      ok: boolean;
+      skipped?: boolean;
+      reason?: string;
+      summary?: string;
+      engine?: string;
+      sessionsProcessed?: number;
+      durationMs?: number;
+      usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; totalTokens: number; estimated?: boolean; costUsd?: number | null };
+    }>(
       '/api/memory/dream',
       { method: 'POST', body: JSON.stringify(body) },
     ),

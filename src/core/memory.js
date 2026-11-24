@@ -179,6 +179,93 @@ function parseDreamResponse(raw) {
   };
 }
 
+function numOrZero(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+}
+
+// Extrai contagem real de tokens retornada por Ollama, Claude (--output-format json), Codex (--json) ou Gemini (stream-json).
+// Quando a CLI não expõe telemetria de uso, estima por caracteres (~4 chars/token) e marca estimated: true.
+function extractDreamUsage(raw, { prompt = '', outputText = '' } = {}) {
+  const promptChars = String(prompt || '').length;
+  const outputChars = String(outputText || '').length;
+  const text = String(raw || '').trim();
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let costUsd = null;
+  let found = false;
+
+  const inspectObj = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    // Ollama /api/chat
+    if (typeof obj.prompt_eval_count === 'number' || typeof obj.eval_count === 'number') {
+      inputTokens = numOrZero(obj.prompt_eval_count);
+      outputTokens = numOrZero(obj.eval_count);
+      found = true;
+    }
+    // Claude Code (--output-format json) ou Codex (turn.completed -> usage) ou stream-json genérico
+    const u = obj.usage || obj.usageMetadata || (obj.response && obj.response.usageMetadata) || (obj.message && obj.message.usage);
+    if (u && typeof u === 'object') {
+      const inp = numOrZero(u.input_tokens ?? u.promptTokenCount ?? u.prompt_tokens);
+      const out = numOrZero(u.output_tokens ?? u.candidatesTokenCount ?? u.completion_tokens);
+      const cache = numOrZero(u.cache_read_input_tokens ?? u.cached_input_tokens ?? u.cachedContentTokenCount ?? u.cache_creation_input_tokens);
+      if (inp > 0 || out > 0 || cache > 0) {
+        inputTokens = inp;
+        outputTokens = out;
+        cacheReadTokens = cache;
+        found = true;
+      }
+    }
+    if (typeof obj.total_cost_usd === 'number' && Number.isFinite(obj.total_cost_usd)) {
+      costUsd = Math.round(obj.total_cost_usd * 1e6) / 1e6;
+    }
+  };
+
+  if (text) {
+    const whole = tryJson(text);
+    if (whole) inspectObj(whole);
+    else {
+      for (const line of text.split(/\r?\n/)) {
+        const t = line.trim();
+        if (!t.startsWith('{')) continue;
+        inspectObj(tryJson(t));
+      }
+    }
+  }
+
+  const estimated = !found;
+  if (estimated) {
+    inputTokens = promptChars ? Math.ceil(promptChars / 4) : 0;
+    outputTokens = outputChars ? Math.ceil(outputChars / 4) : 0;
+  }
+  const totalTokens = inputTokens + outputTokens;
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    totalTokens,
+    costUsd,
+    estimated,
+    promptChars,
+    outputChars,
+  };
+}
+
+function fmtTok(n) {
+  const v = numOrZero(n);
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
+  return String(Math.round(v));
+}
+
+function formatDreamUsageCompact(u) {
+  if (!u || typeof u !== 'object') return '0 tok';
+  const cachePart = u.cacheReadTokens > 0 ? ` / cache ${fmtTok(u.cacheReadTokens)}` : '';
+  const tag = u.estimated ? 'est.' : 'real';
+  const costPart = typeof u.costUsd === 'number' && u.costUsd > 0 ? `, $${u.costUsd.toFixed(4)}` : '';
+  return `${fmtTok(u.totalTokens)} tok (in ${fmtTok(u.inputTokens)} / out ${fmtTok(u.outputTokens)}${cachePart}, ${tag}${costPart})`;
+}
+
 function maxQuotaUsedPct(tool, quotas) {
   if (!quotas || typeof quotas !== 'object') return null;
   const key = tool === 'Claude Code' ? 'claude' : tool === 'Codex' ? 'codex' : tool === 'Gemini' ? 'gemini' : null;
@@ -251,6 +338,8 @@ module.exports = {
   buildSessionDigest,
   buildDreamPrompt,
   parseDreamResponse,
+  extractDreamUsage,
+  formatDreamUsageCompact,
   maxQuotaUsedPct,
   selectDreamEngine,
   buildBridgeSnippet,

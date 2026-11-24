@@ -13,6 +13,8 @@ const {
   selectDeltaSessions,
   buildSessionDigest,
   parseDreamResponse,
+  extractDreamUsage,
+  formatDreamUsageCompact,
   selectDreamEngine,
   buildBridgeSnippet,
 } = require('../../src/core/memory');
@@ -141,4 +143,41 @@ test('selectDreamEngine respeita prioridade (Ollama custo 0) e teto de cota', ()
   assert.match(r3.reason, /85%/);
 
   assert.match(buildBridgeSnippet('.ai-memory'), /ai-hud-memory-bridge:start/);
+});
+
+test('extractDreamUsage lê tokens reais de Claude, Ollama, Codex e Gemini e estima quando ausente', () => {
+  const claude = extractDreamUsage(JSON.stringify({
+    result: '{"memoryMd":"# ok"}',
+    usage: { input_tokens: 3200, output_tokens: 800, cache_read_input_tokens: 1500 },
+    total_cost_usd: 0.0042,
+  }));
+  assert.equal(claude.estimated, false);
+  assert.equal(claude.inputTokens, 3200);
+  assert.equal(claude.outputTokens, 800);
+  assert.equal(claude.cacheReadTokens, 1500);
+  assert.equal(claude.totalTokens, 4000);
+  assert.equal(claude.costUsd, 0.0042);
+  assert.match(formatDreamUsageCompact(claude), /4\.0k tok.*real/);
+
+  const ollama = extractDreamUsage(JSON.stringify({ prompt_eval_count: 2100, eval_count: 550 }));
+  assert.equal(ollama.estimated, false);
+  assert.equal(ollama.totalTokens, 2650);
+
+  const codex = extractDreamUsage(
+    '{"type":"item.completed","item":{"text":"{\\"memoryMd\\":\\"# x\\"}"}}\n'
+    + '{"type":"turn.completed","usage":{"input_tokens":4100,"cached_input_tokens":1200,"output_tokens":900}}\n',
+  );
+  assert.equal(codex.estimated, false);
+  assert.equal(codex.totalTokens, 5000);
+  assert.equal(codex.cacheReadTokens, 1200);
+
+  const gemini = extractDreamUsage('{"usageMetadata":{"promptTokenCount":1800,"candidatesTokenCount":600}}\n');
+  assert.equal(gemini.estimated, false);
+  assert.equal(gemini.totalTokens, 2400);
+
+  const est = extractDreamUsage('{"memoryMd":"# x"}', { prompt: 'a'.repeat(4000), outputText: 'b'.repeat(800) });
+  assert.equal(est.estimated, true);
+  assert.equal(est.inputTokens, 1000);
+  assert.equal(est.outputTokens, 200);
+  assert.match(formatDreamUsageCompact(est), /est\./);
 });

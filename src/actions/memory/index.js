@@ -13,11 +13,14 @@ const {
   buildSessionDigest,
   buildDreamPrompt,
   parseDreamResponse,
+  extractDreamUsage,
+  formatDreamUsageCompact,
   selectDreamEngine,
   buildBridgeSnippet,
 } = require('../../core/memory');
 const { redactSecrets } = require('../../core/redact');
 const { resolveWorkspaceRoot, hashContent, writeAtomic, writeAtomicWithBackup } = require('../../infra/workspace-paths');
+const { readWorkspaceJson } = require('../../collect/workspace');
 const { resolveProjectMemoryDir, readDreamState, readProjectMemory, listAllProjectMemories, collectMemorySessions } = require('../../collect/memory');
 const { readProjectGit } = require('../../collect/file-preview');
 const { hasExe } = require('../../collect/capabilities');
@@ -111,7 +114,7 @@ function createMemoryActions({
         messages: [{ role: 'user', content: prompt }],
       });
       const parsed = JSON.parse(raw);
-      return (parsed && parsed.message && parsed.message.content) || raw;
+      return { raw, text: (parsed && parsed.message && parsed.message.content) || raw };
     }
     if (engine === 'Gemini') {
       const args = [`--print=${prompt}`, '--output-format', 'stream-json'];
@@ -125,7 +128,7 @@ function createMemoryActions({
       return runCliCapture(codexExe, args, runCwd, exec);
     }
     if (engine === 'Claude Code') {
-      const args = ['-p', prompt];
+      const args = ['-p', prompt, '--output-format', 'json'];
       if (model) args.push('--model', model);
       return runCliCapture(claudeExe, args, runCwd, exec);
     }
@@ -198,7 +201,15 @@ function createMemoryActions({
     return { status: 200, body: { ok: true, updated, memoryDir: resolved.dir } };
   }
 
-  async function dream({ project = '', cwd = '', mode = '', engine = '', model = '', dryRun = false, force = false, ignoreQuota = false } = {}) {
+  function appendUsageLog(entry) {
+    try {
+      const wsRoot = root();
+      fs.mkdirSync(wsRoot, { recursive: true });
+      fs.appendFileSync(path.join(wsRoot, 'dream-usage.jsonl'), JSON.stringify(entry) + '\n', 'utf8');
+    } catch {}
+  }
+
+  async function dream({ project = '', cwd = '', mode = '', engine = '', model = '', dryRun = false, force = false, ignoreQuota = false, trigger = 'manual' } = {}) {
     const resolved = resolveProjectMemoryDir({ workspaceRoot: root(), project, cwd, mode });
     if (inFlight.has(resolved.slug)) {
       return { status: 409, body: 'Já existe um Dreaming em andamento para este projeto.' };
@@ -243,7 +254,7 @@ function createMemoryActions({
       }
 
       const digest = buildSessionDigest(delta);
-      const ts = now();
+      const startedAt = now();
       const prompt = buildDreamPrompt({
         project: currentMem.project,
         existing: {
@@ -255,11 +266,19 @@ function createMemoryActions({
         },
         digest,
         gitLog,
-        now: ts,
+        now: startedAt,
       });
 
-      const rawOutput = await executeModel({ engine: picked.engine, model: picked.model, prompt, cwd });
-      const consolidated = parseDreamResponse(rawOutput);
+      const modelResult = await executeModel({ engine: picked.engine, model: picked.model, prompt, cwd });
+      const rawOutput = typeof modelResult === 'object' && modelResult !== null ? String(modelResult.raw || modelResult.text || '') : String(modelResult || '');
+      const textOutput = typeof modelResult === 'object' && modelResult !== null ? String(modelResult.text || modelResult.raw || '') : String(modelResult || '');
+      const consolidated = parseDreamResponse(textOutput);
+      const ts = now();
+      const durationMs = Math.max(0, ts - startedAt);
+      const usage = extractDreamUsage(rawOutput, { prompt, outputText: textOutput });
+      const usageCompact = formatDreamUsageCompact(usage);
+      const durSec = (durationMs / 1000).toFixed(1);
+      const engineLabel = `${picked.engine}${picked.model ? '/' + picked.model : ''}`;
 
       if (dryRun) {
         return {
@@ -271,6 +290,8 @@ function createMemoryActions({
             engine: picked.engine,
             model: picked.model,
             sessionsProcessed: delta.length,
+            durationMs,
+            usage,
             proposed: consolidated,
           },
         };
@@ -301,7 +322,7 @@ function createMemoryActions({
         writeAtomic(epPath, `${prevEp}${consolidated.sessionNoteMd}\n`);
       }
 
-      const logLine = `- **${new Date(ts).toISOString()}** · \`${picked.engine}${picked.model ? '/' + picked.model : ''}\` · ${delta.length} sessões · ${consolidated.summary}`;
+      const logLine = `- **${new Date(ts).toISOString()}** · \`${engineLabel}\` · ${delta.length} sessões · ${usageCompact} · ${durSec}s · ${consolidated.summary}`;
       const prevLog = currentMem.files['dream-log.md'].trimEnd();
       const nextLog = (prevLog ? `${prevLog}\n` : '# Histórico de Dreaming\n\n') + logLine + '\n';
       writeAtomic(path.join(resolved.dir, 'dream-log.md'), nextLog);
@@ -316,10 +337,26 @@ function createMemoryActions({
       }
       writeAtomic(path.join(resolved.dir, 'dream-state.json'), JSON.stringify({
         lastDreamAt: ts,
-        lastEngine: `${picked.engine}${picked.model ? '/' + picked.model : ''}`,
+        lastEngine: engineLabel,
         lastSummary: consolidated.summary,
+        lastUsage: usage,
         sessions: nextSessions,
       }, null, 2) + '\n');
+
+      appendUsageLog({
+        at: new Date(ts).toISOString(),
+        trigger,
+        project: currentMem.project,
+        slug: resolved.slug,
+        engine: picked.engine,
+        model: picked.model || '',
+        sessionsProcessed: delta.length,
+        durationMs,
+        ...usage,
+        summary: consolidated.summary,
+      });
+
+      log(`[dream${trigger === 'auto' ? '-auto' : ''}] ${currentMem.project} · ${engineLabel} · ${delta.length} sessões · ${usageCompact} · ${durSec}s · ${consolidated.summary}`);
 
       const body = {
         ok: true,
@@ -330,6 +367,8 @@ function createMemoryActions({
         model: picked.model,
         reason: picked.reason,
         sessionsProcessed: delta.length,
+        durationMs,
+        usage,
         summary: consolidated.summary,
       };
       if (typeof onDreamDone === 'function') {
@@ -365,14 +404,68 @@ function createMemoryActions({
     return { status: 200, body: { ok: true, backup: dirs[0], restored } };
   }
 
-  // Agendador leve fora do horário de trabalho (config.dream.schedule = { enabled: true, hour: 3 })
+  // Executa 1 ciclo do agendador: por padrão (workspaceOnly !== false) consolida apenas projetos cadastrados no AI Workspace.
+  async function runScheduledCycle() {
+    const sched = (config && config.dream && config.dream.schedule) || {};
+    const workspaceOnly = sched.workspaceOnly !== false;
+    const wsRoot = root();
+    const sessions = collectMemorySessions(collector);
+    const ws = readWorkspaceJson(wsRoot);
+    const entities = Array.isArray(ws && ws.entities) ? ws.entities : [];
+
+    let targets;
+    if (workspaceOnly) {
+      targets = entities.map((e) => {
+        const firstBinding = Array.isArray(e.projectBindings) && e.projectBindings[0];
+        const cwd = firstBinding ? firstBinding.cwd : '';
+        const mem = readProjectMemory({ workspaceRoot: wsRoot, project: e.title || e.id, cwd, sessions });
+        return { project: e.title || e.id, cwd, pendingCount: mem.pendingCount };
+      }).filter((p) => p.pendingCount > 0);
+    } else {
+      targets = listAllProjectMemories({ workspaceRoot: wsRoot, sessions, workspaceEntities: entities })
+        .filter((p) => p.pendingCount > 0);
+    }
+
+    if (!targets.length) {
+      log(`[dream-auto] ciclo sem pendências (${workspaceOnly ? `${entities.length} projetos no workspace` : 'todos os projetos'}).`);
+      return { processed: 0, totalTokens: 0, results: [] };
+    }
+
+    const results = [];
+    let totalIn = 0;
+    let totalOut = 0;
+    let totalCache = 0;
+    for (const p of targets) {
+      const r = await dream({ project: p.project, cwd: p.cwd, ignoreQuota: false, trigger: 'auto' });
+      results.push({ project: p.project, status: r.status, body: r.body });
+      if (r.status === 200 && r.body && r.body.usage) {
+        totalIn += r.body.usage.inputTokens || 0;
+        totalOut += r.body.usage.outputTokens || 0;
+        totalCache += r.body.usage.cacheReadTokens || 0;
+      } else if (r.status !== 200 || (r.body && r.body.skipped)) {
+        log(`[dream-auto] ${p.project}: ${(r.body && r.body.reason) || r.body}`);
+      }
+    }
+    const batchUsage = formatDreamUsageCompact({
+      inputTokens: totalIn,
+      outputTokens: totalOut,
+      cacheReadTokens: totalCache,
+      totalTokens: totalIn + totalOut,
+      estimated: results.some((x) => x.body && x.body.usage && x.body.usage.estimated),
+    });
+    log(`[dream-auto] resumo do ciclo: ${results.length} projeto(s) · total ${batchUsage}`);
+    return { processed: results.length, totalTokens: totalIn + totalOut, results };
+  }
+
+  // Agendador leve fora do horário de trabalho (config.dream.schedule = { enabled: true, hour: 3, workspaceOnly: true })
   let lastAutoDay = '';
   function startScheduler() {
     const sched0 = config && config.dream && config.dream.schedule;
     if (sched0 && sched0.enabled) {
       const h = Number.isInteger(sched0.hour) ? sched0.hour : 3;
       const pct = typeof config.dream.maxQuotaPct === 'number' ? config.dream.maxQuotaPct : 60;
-      log(`[dream-auto] agendado diariamente às ${String(h).padStart(2, '0')}:00 (teto cota ${pct}%)`);
+      const scope = sched0.workspaceOnly === false ? 'todos os projetos' : 'somente projetos do AI Workspace';
+      log(`[dream-auto] agendado diariamente às ${String(h).padStart(2, '0')}:00 (${scope}, teto cota ${pct}%)`);
     }
     const t = setInterval(async () => {
       const sched = config && config.dream && config.dream.schedule;
@@ -383,12 +476,7 @@ function createMemoryActions({
       if (d.getHours() !== targetHour || lastAutoDay === dayKey) return;
       lastAutoDay = dayKey;
       try {
-        const sessions = collectMemorySessions(collector);
-        const all = listAllProjectMemories({ workspaceRoot: root(), sessions }).filter((p) => p.pendingCount > 0);
-        for (const p of all) {
-          const r = await dream({ project: p.project, cwd: p.cwd, ignoreQuota: false });
-          log(`[dream-auto] ${p.project}: ${r.status === 200 && r.body.summary ? r.body.summary : (r.body.reason || r.body)}`);
-        }
+        await runScheduledCycle();
       } catch (e) {
         log(`[dream-auto] erro: ${e.message}`);
       }
@@ -397,7 +485,7 @@ function createMemoryActions({
     return t;
   }
 
-  return { saveMemoryFile, installBridges, dream, undoDream, startScheduler };
+  return { saveMemoryFile, installBridges, dream, undoDream, runScheduledCycle, startScheduler };
 }
 
 module.exports = { createMemoryActions };

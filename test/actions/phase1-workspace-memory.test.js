@@ -167,12 +167,20 @@ test('Fase 1 end-to-end: Workspace file-first (409 + backup + media + docs) e Me
     assert.equal(dreamed.status, 200);
     assert.equal(dreamed.json.ok, true);
     assert.equal(dreamed.json.sessionsProcessed, 1);
+    assert.ok(dreamed.json.usage && dreamed.json.usage.totalTokens > 0);
     assert.equal(dreamCalls, 1);
+
+    const memSummary = await reqJson(port, 'GET', '/api/memory', tok);
+    assert.equal(memSummary.status, 200);
+    assert.ok(memSummary.json.usage && memSummary.json.usage.runs >= 1);
+    assert.ok(memSummary.json.usage.totalTokens > 0);
 
     const memAfter = await reqJson(port, 'GET', `/api/memory?project=meu-proj&cwd=${encodeURIComponent(projDir)}`, tok);
     assert.equal(memAfter.json.pendingCount, 0);
     assert.match(memAfter.json.files['MEMORY.md'], /Cache em memória/);
     assert.match(memAfter.json.files['decisions.md'], /Map em memória/);
+    assert.match(memAfter.json.files['dream-log.md'], /tok/);
+    assert.ok(memAfter.json.lastUsage && memAfter.json.lastUsage.totalTokens > 0);
     assert.equal(memAfter.json.files['pinned.md'], '- NUNCA remover testes.\n'); // imutável!
     assert.equal(memAfter.json.episodic.length, 1);
 
@@ -217,4 +225,60 @@ test('Fase 1 end-to-end: Workspace file-first (409 + backup + media + docs) e Me
   } finally {
     app.server.close();
   }
+});
+
+test('runScheduledCycle com workspaceOnly consolida apenas projetos cadastrados no AI Workspace e loga tokens', async () => {
+  const { createMemoryActions } = require('../../src/actions/memory');
+  const { createWorkspaceActions } = require('../../src/actions/workspace');
+  const dataDir = tmpDir('hud-dream-sched-');
+  const logs = [];
+  const config = {
+    dream: {
+      schedule: { enabled: true, hour: 3, workspaceOnly: true },
+      engines: ['Claude Code'],
+      maxQuotaPct: 60,
+    },
+  };
+  const ws = createWorkspaceActions({ dataDir, config });
+  ws.createEntity({ title: 'Projeto Oficial', projectBindings: [{ machine: 'MateusNote', cwd: '/proj/oficial' }] });
+
+  const collector = {
+    current: () => ({
+      sessions: [
+        { id: 's-of', tool: 'Claude Code', project: 'Projeto Oficial', cwd: '/proj/oficial', end: '2026-11-24T01:00:00Z', prompts: 2, lastPrompt: 'feat', lastReply: 'done' },
+        { id: 's-avulsa', tool: 'Claude Code', project: 'ubuntu', cwd: '/home/ubuntu', end: '2026-11-24T01:00:00Z', prompts: 2, lastPrompt: 'ls', lastReply: 'ok' },
+      ],
+      snapshot: { active: [], recent: [] },
+    }),
+  };
+  const dreamedProjects = [];
+  const mem = createMemoryActions({
+    dataDir,
+    config,
+    collector,
+    claudeExe: process.execPath,
+    runModel: async ({ prompt }) => {
+      dreamedProjects.push(prompt.includes('Projeto Oficial') ? 'Projeto Oficial' : 'outro');
+      return JSON.stringify({
+        result: JSON.stringify({
+          memoryMd: '# Oficial\nTudo em ordem.',
+          currentStateMd: '# Estado\nOK',
+          decisionsAppend: '',
+          pitfallsAppend: '',
+          sessionNoteMd: 'Resumo.',
+          summary: '+1 resumo',
+        }),
+        usage: { input_tokens: 1500, output_tokens: 400 },
+      });
+    },
+    log: (m) => logs.push(m),
+  });
+
+  const cycle = await mem.runScheduledCycle();
+  assert.equal(cycle.processed, 1);
+  assert.equal(cycle.totalTokens, 1900);
+  assert.deepEqual(dreamedProjects, ['Projeto Oficial']);
+  assert.ok(logs.some((l) => /\[dream-auto\].*Projeto Oficial.*1\.9k tok/.test(l)));
+  assert.ok(logs.some((l) => /\[dream-auto\] resumo do ciclo: 1 projeto\(s\).*1\.9k tok/.test(l)));
+  assert.ok(fs.existsSync(path.join(dataDir, 'workspace', 'dream-usage.jsonl')));
 });

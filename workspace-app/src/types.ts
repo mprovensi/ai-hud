@@ -75,6 +75,15 @@ export interface WorkspaceIndex {
   handoffs: GlobalDocItem[];
 }
 
+export interface DreamUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  totalTokens: number;
+  costUsd?: number | null;
+  estimated?: boolean;
+}
+
 export interface MemoryData {
   project: string;
   slug: string;
@@ -88,6 +97,7 @@ export interface MemoryData {
   lastDreamAt: number;
   lastEngine: string;
   lastSummary: string;
+  lastUsage?: DreamUsage | null;
   pendingCount: number;
   pendingIds: string[];
 }

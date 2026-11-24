@@ -67,6 +67,7 @@ function readProjectMemory({ workspaceRoot, project = '', cwd = '', mode = '', s
     lastDreamAt: dreamState.lastDreamAt || 0,
     lastEngine: dreamState.lastEngine || '',
     lastSummary: dreamState.lastSummary || '',
+    lastUsage: dreamState.lastUsage || null,
     pendingCount: delta.length,
     pendingIds: delta.map((s) => s.id),
   };
@@ -153,10 +154,45 @@ function collectMemorySessions(collector) {
   return out;
 }
 
+function readDreamUsageLog(workspaceRoot, { limit = 50 } = {}) {
+  const file = path.join(workspaceRoot, 'dream-usage.jsonl');
+  const raw = readTextSafe(file);
+  const rows = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let totalTokens = 0;
+  let costUsd = 0;
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const e = JSON.parse(t);
+      if (!e || typeof e !== 'object') continue;
+      inputTokens += Number(e.inputTokens) || 0;
+      outputTokens += Number(e.outputTokens) || 0;
+      cacheReadTokens += Number(e.cacheReadTokens) || 0;
+      totalTokens += Number(e.totalTokens) || 0;
+      if (typeof e.costUsd === 'number') costUsd += e.costUsd;
+      rows.push(e);
+    } catch {}
+  }
+  return {
+    runs: rows.length,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    totalTokens,
+    costUsd: Math.round(costUsd * 1e6) / 1e6,
+    recent: rows.slice(-Math.max(1, limit)).reverse(),
+  };
+}
+
 module.exports = {
   resolveProjectMemoryDir,
   readDreamState,
   readProjectMemory,
   listAllProjectMemories,
   collectMemorySessions,
+  readDreamUsageLog,
 };

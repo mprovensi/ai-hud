@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   BookOpen,
   Brain,
   ChevronDown,
@@ -29,6 +30,7 @@ import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjec
 import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
 import { TerminalPane } from './components/TerminalPane';
+import { WorkspaceHome } from './components/WorkspaceHome';
 import type { Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
 
 type Selection =
@@ -68,6 +70,7 @@ export function App() {
   const [search, setSearch] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState('');
+  const [focusSessionId, setFocusSessionId] = useState('');
   const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
 
@@ -130,7 +133,6 @@ export function App() {
     try {
       const idx = await api.getWorkspaceIndex();
       setWs(idx);
-      setSelection((prev) => prev || (idx.entities[0] ? { kind: 'entity', id: idx.entities[0].id } : null));
     } catch (e) {
       notify((e as Error).message, true);
     }
@@ -301,6 +303,7 @@ export function App() {
 
   const paletteActions: PaletteAction[] = useMemo(() => {
     const acts: PaletteAction[] = [
+      { id: 'act-home', group: 'Navegação', label: 'Voltar para Início (Dashboard do Workspace)', run: () => setSelection(null) },
       { id: 'act-chat', group: 'Ação', label: 'Nova conversa com IA (escolher pasta e IA)', run: () => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); } },
       { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: () => openNewModal('') },
       { id: 'act-grp', group: 'Ação', label: 'Criar englobador de projetos (ex.: TRT, Jogos)', run: openNewGroup },
@@ -341,10 +344,10 @@ export function App() {
   return (
     <div className="ws-shell">
       <header className="topbar">
-        <div className="brand">
+        <button className="brand" onClick={() => setSelection(null)} title="Voltar para a tela inicial do AI Workspace">
           <span className="brand-dot" />
           AI Workspace
-        </div>
+        </button>
         <a className="pill-link" href={withToken('/')}>
           <LayoutDashboard size={13} /> HUD Clássico
         </a>
@@ -533,6 +536,9 @@ export function App() {
             <>
               <div className="stage-head">
                 <div className="stage-title-row">
+                  <button className="btn btn-sm" onClick={() => setSelection(null)} title="Voltar para a tela inicial">
+                    <ArrowLeft size={13} /> Início
+                  </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h1 className="stage-title ell">{selectedEntity.title}</h1>
                     {selectedEntity.description && <p className="stage-desc ell">{selectedEntity.description}</p>}
@@ -638,6 +644,9 @@ export function App() {
             <>
               <div className="stage-head">
                 <div className="stage-title-row">
+                  <button className="btn btn-sm" onClick={() => setSelection(null)} title="Voltar para a tela inicial">
+                    <ArrowLeft size={13} /> Início
+                  </button>
                   <div>
                     <h1 className="stage-title">{selection.name}</h1>
                     <p className="stage-desc">Base global · {selection.area}/</p>
@@ -650,15 +659,21 @@ export function App() {
             </>
           ) : (
             <div className="stage-content">
-              <div className="empty" style={{ marginTop: 60 }}>
-                <h2 style={{ margin: '0 0 8px', color: 'var(--text)' }}>Bem-vindo ao AI Workspace</h2>
-                <p style={{ maxWidth: 460, margin: '0 auto 18px' }}>
-                  Organize seus projetos em englobadores (ex.: TRT, Jogos), quadros editáveis, memória compartilhada entre as 4 IAs e sessões ao vivo lado a lado.
-                </p>
-                <button className="btn btn-primary" onClick={() => openNewModal('')}>
-                  <Plus size={15} /> Criar primeiro projeto
-                </button>
-              </div>
+              <WorkspaceHome
+                ws={ws}
+                snap={snap}
+                groups={allGroups}
+                onOpenEntity={(id, tab = 'step') => {
+                  setSelection({ kind: 'entity', id });
+                  setEntityTab(tab);
+                  setStepIdx(0);
+                }}
+                onOpenDoc={(area, name) => setSelection({ kind: 'doc', area, name })}
+                onOpenSession={(sid) => setFocusSessionId(sid)}
+                onNewProject={(g = '') => openNewModal(g)}
+                onNewGroup={openNewGroup}
+                onNewConversation={() => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); }}
+              />
             </div>
           )}
         </main>
@@ -676,6 +691,8 @@ export function App() {
           projectId={selectedEntity?.id}
           projectTitle={selectedEntity?.title}
           binding={activeBinding}
+          focusSessionId={focusSessionId}
+          onFocusSessionConsumed={() => setFocusSessionId('')}
           draftPrompt={draftPrompt}
           onDraftConsumed={() => setDraftPrompt('')}
           onOpenNewSession={(initial) => {

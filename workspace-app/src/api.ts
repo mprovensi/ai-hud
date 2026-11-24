@@ -220,6 +220,9 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  listMemorySummary: () =>
+    apiFetch<{ projects: { project: string; slug: string; pendingCount: number; lastDreamAt?: number }[] }>('/api/memory'),
+
   getMemory: (project: string, cwd?: string) =>
     apiFetch<MemoryData>(
       `/api/memory?project=${encodeURIComponent(project)}${cwd ? `&cwd=${encodeURIComponent(cwd)}` : ''}`,

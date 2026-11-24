@@ -25,6 +25,8 @@ interface Props {
   projectId?: string;
   projectTitle?: string;
   binding?: { machine: string; cwd: string } | null;
+  focusSessionId?: string;
+  onFocusSessionConsumed?: () => void;
   draftPrompt?: string;
   onDraftConsumed: () => void;
   onOpenNewSession: (initialPrompt?: string) => void;
@@ -47,6 +49,8 @@ export function LiveHudPane({
   projectId,
   projectTitle,
   binding,
+  focusSessionId,
+  onFocusSessionConsumed,
   draftPrompt,
   onDraftConsumed,
   onOpenNewSession,
@@ -77,7 +81,8 @@ export function LiveHudPane({
   const prevMsgCountRef = useRef(0);
   const prevProjectIdRef = useRef<string | undefined>(projectId);
 
-  // Item 4: Ao clicar em um projeto na barra esquerda, já alterna a lista de sessões para as do projeto
+  // Item 4: Ao clicar em um projeto na barra esquerda, já alterna a lista de sessões para as do projeto;
+  // ao voltar para a tela inicial (sem projeto), volta para "Todas".
   useEffect(() => {
     if (projectId === prevProjectIdRef.current) return;
     prevProjectIdRef.current = projectId;
@@ -85,8 +90,17 @@ export function LiveHudPane({
       setSelectedId('');
       setDetail(null);
       setFilter(binding || projectTitle ? 'project' : 'all');
+    } else {
+      setFilter('all');
     }
   }, [projectId, binding, projectTitle]);
+
+  useEffect(() => {
+    if (!focusSessionId) return;
+    setSelectedId(focusSessionId);
+    setViewMode('conversation');
+    if (onFocusSessionConsumed) onFocusSessionConsumed();
+  }, [focusSessionId, onFocusSessionConsumed]);
 
   // Recebe prompt enviado a partir de um card
   useEffect(() => {

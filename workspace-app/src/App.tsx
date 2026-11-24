@@ -536,8 +536,8 @@ export function App() {
             <>
               <div className="stage-head">
                 <div className="stage-title-row">
-                  <button className="btn btn-sm" onClick={() => setSelection(null)} title="Voltar para a tela inicial">
-                    <ArrowLeft size={13} /> Início
+                  <button className="btn btn-sm btn-icon" onClick={() => setSelection(null)} aria-label="Voltar" title="Voltar">
+                    <ArrowLeft size={14} />
                   </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h1 className="stage-title ell">{selectedEntity.title}</h1>
@@ -644,8 +644,8 @@ export function App() {
             <>
               <div className="stage-head">
                 <div className="stage-title-row">
-                  <button className="btn btn-sm" onClick={() => setSelection(null)} title="Voltar para a tela inicial">
-                    <ArrowLeft size={13} /> Início
+                  <button className="btn btn-sm btn-icon" onClick={() => setSelection(null)} aria-label="Voltar" title="Voltar">
+                    <ArrowLeft size={14} />
                   </button>
                   <div>
                     <h1 className="stage-title">{selection.name}</h1>
@@ -662,17 +662,14 @@ export function App() {
               <WorkspaceHome
                 ws={ws}
                 snap={snap}
-                groups={allGroups}
+                groupsCount={allGroups.length}
                 onOpenEntity={(id, tab = 'step') => {
                   setSelection({ kind: 'entity', id });
                   setEntityTab(tab);
                   setStepIdx(0);
                 }}
-                onOpenDoc={(area, name) => setSelection({ kind: 'doc', area, name })}
                 onOpenSession={(sid) => setFocusSessionId(sid)}
                 onNewProject={(g = '') => openNewModal(g)}
-                onNewGroup={openNewGroup}
-                onNewConversation={() => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); }}
               />
             </div>
           )}

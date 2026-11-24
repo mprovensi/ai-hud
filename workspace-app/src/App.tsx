@@ -40,6 +40,7 @@ import { ProjectRunControl } from './components/ProjectRunControl';
 import { QuotaDrawer, type QuotaProvider } from './components/QuotaDrawer';
 import { TerminalPane } from './components/TerminalPane';
 import { WorkspaceHome } from './components/WorkspaceHome';
+import { Badge, Button, ModalFrame, StatusDot } from './ui';
 import type { Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
 
 type Selection =
@@ -865,12 +866,12 @@ export function App() {
                                 <ProjectIcon
                                   cwd={e.projectBindings?.[0]?.cwd}
                                   machine={e.projectBindings?.[0]?.machine}
-                                  size={15}
+                                  size={13}
                                   active={active}
                                 />
                                 <span className="ell">{e.title}</span>
-                                {e.hidden && <span className="badge" style={{ fontSize: 9.5, padding: '1px 5px' }}>oculto</span>}
-                                {act && <span className={`sb-dot ${act.kind}`} title={act.tip} />}
+                                {e.hidden && <Badge compact>oculto</Badge>}
+                                {act && <StatusDot kind={act.kind} title={act.tip} />}
                                 {e.projectBindings?.[0] && (
                                   <span className="meta">{e.projectBindings[0].machine}</span>
                                 )}
@@ -1290,45 +1291,50 @@ export function App() {
 
       <CommandPalette open={paletteOpen} actions={paletteActions} onClose={() => setPaletteOpen(false)} />
 
-      {/* Modal de confirmação de exclusão (Projeto ou Englobador) */}
-      {confirmDelete && (
-        <div className="modal-bg" onClick={() => !deleting && setConfirmDelete(null)}>
-          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f6b3b3' }}>
-              <Trash2 size={17} />
-              {confirmDelete.kind === 'entity' ? 'Apagar projeto?' : 'Apagar workspace?'}
-            </h3>
-            {confirmDelete.kind === 'entity' ? (
-              <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5, color: '#d5dbe7' }}>
-                Tem certeza que deseja remover o projeto <b>{confirmDelete.title}</b> do AI Workspace?
-                <br />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Os cards e notas serão movidos para backup interno (<code>.ai-workspace/backups/deleted/</code>).
-                  {confirmDelete.cwd ? <> A pasta de código (<code className="mono">{confirmDelete.cwd}</code>) <b>não</b> será apagada.</> : null}
-                </span>
-              </p>
-            ) : (
-              <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5, color: '#d5dbe7' }}>
-                Tem certeza que deseja apagar o workspace <b>{confirmDelete.name}</b>?
-                <br />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {confirmDelete.count > 0
-                    ? `Os ${confirmDelete.count} projeto(s) dentro dele não serão apagados — passarão para "Geral (sem workspace)".`
-                    : 'Este workspace está vazio e será removido da lista.'}
-                </span>
-              </p>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button className="btn" disabled={deleting} onClick={() => setConfirmDelete(null)}>
-                Cancelar
-              </button>
-              <button className="btn btn-danger" disabled={deleting} onClick={executeConfirmDelete}>
-                <Trash2 size={13} /> {deleting ? 'Apagando…' : 'Confirmar exclusão'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal de confirmação de exclusão (Projeto ou Workspace) */}
+      <ModalFrame
+        open={!!confirmDelete}
+        onClose={() => !deleting && setConfirmDelete(null)}
+        closeDisabled={deleting}
+        closeOnBackdrop
+        maxWidth={440}
+        title={
+          <span className="ds-row ds-text-danger">
+            <Trash2 size={17} />
+            {confirmDelete?.kind === 'entity' ? 'Apagar projeto?' : 'Apagar workspace?'}
+          </span>
+        }
+        footer={
+          <>
+            <div className="ds-flex-1" />
+            <Button disabled={deleting} onClick={() => setConfirmDelete(null)}>Cancelar</Button>
+            <Button variant="danger" disabled={deleting} onClick={executeConfirmDelete}>
+              <Trash2 size={13} /> {deleting ? 'Apagando…' : 'Confirmar exclusão'}
+            </Button>
+          </>
+        }
+      >
+        {confirmDelete?.kind === 'entity' ? (
+          <p className="ds-m0" style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--ds-text-soft)' }}>
+            Tem certeza que deseja remover o projeto <b>{confirmDelete.title}</b> do AI Workspace?
+            <br />
+            <span className="ds-text-muted" style={{ fontSize: 12 }}>
+              Os cards e notas serão movidos para backup interno (<code>.ai-workspace/backups/deleted/</code>).
+              {confirmDelete.cwd ? <> A pasta de código (<code className="mono">{confirmDelete.cwd}</code>) <b>não</b> será apagada.</> : null}
+            </span>
+          </p>
+        ) : confirmDelete ? (
+          <p className="ds-m0" style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--ds-text-soft)' }}>
+            Tem certeza que deseja apagar o workspace <b>{confirmDelete.name}</b>?
+            <br />
+            <span className="ds-text-muted" style={{ fontSize: 12 }}>
+              {confirmDelete.count > 0
+                ? `Os ${confirmDelete.count} projeto(s) dentro dele não serão apagados — passarão para "Geral (sem workspace)".`
+                : 'Este workspace está vazio e será removido da lista.'}
+            </span>
+          </p>
+        ) : null}
+      </ModalFrame>
 
       {toast && <div className={`toast ${toast.err ? 'err' : ''}`}>{toast.msg}</div>}
     </div>

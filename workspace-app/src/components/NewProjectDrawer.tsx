@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderKanban, FolderLock, FolderOpen, FolderPlus, Layers, Plus, Save, X } from 'lucide-react';
 import { api } from '../api';
 import { FolderPicker, orderMachines, shortFolderName } from './FolderPicker';
+import { Button, DrawerFrame } from '../ui';
 import type { FsEntry, MachineCaps, WorkspaceEntity, WorkspaceGroupMeta } from '../types';
 
 export type ProjectDrawerMode = 'project' | 'group';
@@ -315,57 +316,82 @@ export function NewProjectDrawer({
     ? joinSubPath(restrictedRoot, subRel ? `${subRel}/${newSubName.trim() || slugifySubfolder(title)}` : (newSubName.trim() || slugifySubfolder(title)))
     : '';
 
+  const drawerTitle = isEditingEntity
+    ? 'Editar projeto'
+    : isEditingGroup
+      ? 'Editar workspace'
+      : mode === 'project'
+        ? 'Novo projeto'
+        : 'Novo workspace';
+
+  const drawerSubtitle = mode === 'project'
+    ? 'Configure o workspace, a pasta do código e os detalhes do projeto'
+    : 'Agrupe projetos relacionados e, opcionalmente, defina uma pasta raiz';
+
+  const modeSubHeader = !isEditingEntity && !isEditingGroup ? (
+    <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
+      <div className="seg" style={{ width: '100%' }}>
+        <button
+          type="button"
+          className={mode === 'project' ? 'on' : ''}
+          style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
+          onClick={() => setMode('project')}
+        >
+          <FolderKanban size={13} /> Novo Projeto
+        </button>
+        <button
+          type="button"
+          className={mode === 'group' ? 'on' : ''}
+          style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
+          onClick={() => setMode('group')}
+        >
+          <Layers size={13} /> Novo Workspace
+        </button>
+      </div>
+    </div>
+  ) : undefined;
+
+  const drawerFooter = mode === 'project' ? (
+    <>
+      <Button onClick={onClose}>Cancelar</Button>
+      <Button
+        variant="primary"
+        style={{ flex: 1 }}
+        disabled={submitting || !title.trim()}
+        onClick={submitProject}
+      >
+        {isEditingEntity ? <Save size={14} /> : <Plus size={14} />}
+        {submitting ? 'Salvando…' : isEditingEntity ? 'Salvar alterações' : 'Criar projeto'}
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button onClick={onClose}>Cancelar</Button>
+      <Button
+        variant="primary"
+        style={{ flex: 1 }}
+        disabled={submitting || !newGroupName.trim()}
+        onClick={submitGroup}
+      >
+        {isEditingGroup ? <Save size={14} /> : <Layers size={14} />}
+        {submitting ? 'Salvando…' : isEditingGroup ? 'Salvar workspace' : 'Criar workspace'}
+      </Button>
+    </>
+  );
+
   return (
-    <div className="side-drawer-bg" onClick={onClose}>
-      <aside className="side-drawer" onClick={(e) => e.stopPropagation()} aria-label="Projeto ou workspace">
-        <div className="side-drawer-head">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: 16 }}>
-              {isEditingEntity
-                ? 'Editar projeto'
-                : isEditingGroup
-                  ? 'Editar workspace'
-                  : mode === 'project'
-                    ? 'Novo projeto'
-                    : 'Novo workspace'}
-            </h3>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {mode === 'project'
-                ? 'Configure o workspace, a pasta do código e os detalhes do projeto'
-                : 'Agrupe projetos relacionados e, opcionalmente, defina uma pasta raiz'}
-            </div>
-          </div>
-          <button className="btn btn-sm btn-icon" onClick={onClose} title="Fechar (Esc)">
-            <X size={16} />
-          </button>
-        </div>
-
-        {!isEditingEntity && !isEditingGroup && (
-          <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
-            <div className="seg" style={{ width: '100%' }}>
-              <button
-                type="button"
-                className={mode === 'project' ? 'on' : ''}
-                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
-                onClick={() => setMode('project')}
-              >
-                <FolderKanban size={13} /> Novo Projeto
-              </button>
-              <button
-                type="button"
-                className={mode === 'group' ? 'on' : ''}
-                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 10px' }}
-                onClick={() => setMode('group')}
-              >
-                <Layers size={13} /> Novo Workspace
-              </button>
-            </div>
-          </div>
-        )}
-
-        {mode === 'project' ? (
-          <>
-            <div className="side-drawer-body">
+    <DrawerFrame
+      open={open}
+      side="left"
+      ariaLabel="Projeto ou workspace"
+      title={drawerTitle}
+      subtitle={drawerSubtitle}
+      subHeader={modeSubHeader}
+      footer={drawerFooter}
+      onClose={onClose}
+    >
+      {mode === 'project' ? (
+        <>
               {/* 1. Workspace primeiro (combobox customizado com lista na largura exata do campo) */}
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>1. Workspace (ex.: TRT, Jogos)</label>
@@ -599,73 +625,43 @@ export function NewProjectDrawer({
                   </select>
                 </div>
               )}
-            </div>
+        </>
+      ) : (
+        <>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>1. Nome do workspace</label>
+            <input
+              className="inp"
+              autoFocus
+              value={newGroupName}
+              onChange={(e) => { setGroupNameTouched(true); setNewGroupName(e.target.value); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitGroup(); }}
+              placeholder="Ex.: TRT, Jogos, Infraestrutura…"
+            />
+          </div>
 
-            <div className="side-drawer-foot">
-              <button className="btn" onClick={onClose}>Cancelar</button>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                disabled={submitting || !title.trim()}
-                onClick={submitProject}
-              >
-                {isEditingEntity ? <Save size={14} /> : <Plus size={14} />}
-                {submitting ? 'Salvando…' : isEditingEntity ? 'Salvar alterações' : 'Criar projeto'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="side-drawer-body">
-              <div className="field" style={{ marginBottom: 0 }}>
-                <label>1. Nome do workspace</label>
-                <input
-                  className="inp"
-                  autoFocus
-                  value={newGroupName}
-                  onChange={(e) => { setGroupNameTouched(true); setNewGroupName(e.target.value); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') submitGroup(); }}
-                  placeholder="Ex.: TRT, Jogos, Infraestrutura…"
-                />
-              </div>
+          <FolderPicker
+            caps={caps}
+            loadingCaps={loadingCaps}
+            machine={wsMachine}
+            cwd={wsRootCwd}
+            entities={entities}
+            labelMachine="2. Máquina da pasta raiz (opcional)"
+            labelFolder="Pasta raiz do workspace (opcional)"
+            allowEmpty
+            onChangeMachine={(m) => setWsMachine(m)}
+            onChangeCwd={handleSelectWsRoot}
+            onCapsUpdated={setCaps}
+            onNotify={onNotify}
+          />
 
-              <FolderPicker
-                caps={caps}
-                loadingCaps={loadingCaps}
-                machine={wsMachine}
-                cwd={wsRootCwd}
-                entities={entities}
-                labelMachine="2. Máquina da pasta raiz (opcional)"
-                labelFolder="Pasta raiz do workspace (opcional)"
-                allowEmpty
-                onChangeMachine={(m) => setWsMachine(m)}
-                onChangeCwd={handleSelectWsRoot}
-                onCapsUpdated={setCaps}
-                onNotify={onNotify}
-              />
-
-              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-                {wsRootCwd.trim()
-                  ? <>🔒 Com pasta raiz definida, projetos criados neste workspace só poderão selecionar <b>subpastas</b> de <code className="mono">{wsRootCwd.trim()}</code>.</>
-                  : 'Se você selecionar uma pasta raiz acima, apenas subpastas dela poderão ser escolhidas como projetos deste workspace.'}
-              </div>
-            </div>
-
-            <div className="side-drawer-foot">
-              <button className="btn" onClick={onClose}>Cancelar</button>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                disabled={submitting || !newGroupName.trim()}
-                onClick={submitGroup}
-              >
-                {isEditingGroup ? <Save size={14} /> : <Layers size={14} />}
-                {submitting ? 'Salvando…' : isEditingGroup ? 'Salvar workspace' : 'Criar workspace'}
-              </button>
-            </div>
-          </>
-        )}
-      </aside>
-    </div>
+          <div style={{ fontSize: 12, color: 'var(--ds-muted)', lineHeight: 1.5 }}>
+            {wsRootCwd.trim()
+              ? <>🔒 Com pasta raiz definida, projetos criados neste workspace só poderão selecionar <b>subpastas</b> de <code className="mono">{wsRootCwd.trim()}</code>.</>
+              : 'Se você selecionar uma pasta raiz acima, apenas subpastas dela poderão ser escolhidas como projetos deste workspace.'}
+          </div>
+        </>
+      )}
+    </DrawerFrame>
   );
 }

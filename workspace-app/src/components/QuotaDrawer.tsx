@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { api } from '../api';
+import { Badge, Button, DrawerFrame, KpiBox, MetricBar, ToolIcon } from '../ui';
 import type { BurnSeries, Snapshot } from '../types';
 
 export type QuotaProvider = 'claude' | 'codex' | 'gemini';
@@ -15,9 +16,9 @@ interface Props {
 }
 
 const PROVIDERS: { key: QuotaProvider; label: string; toolName: string; color: string }[] = [
-  { key: 'claude', label: 'Claude', toolName: 'Claude Code', color: 'var(--claude)' },
-  { key: 'codex', label: 'Codex', toolName: 'Codex', color: 'var(--codex)' },
-  { key: 'gemini', label: 'Gemini', toolName: 'Gemini', color: 'var(--gemini)' },
+  { key: 'claude', label: 'Claude', toolName: 'Claude Code', color: 'var(--ds-claude)' },
+  { key: 'codex', label: 'Codex', toolName: 'Codex', color: 'var(--ds-codex)' },
+  { key: 'gemini', label: 'Gemini', toolName: 'Gemini', color: 'var(--ds-gemini)' },
 ];
 
 const WINDOW_LABELS: Record<string, string> = {
@@ -31,9 +32,9 @@ const WINDOW_LABELS: Record<string, string> = {
 };
 
 function levelColor(pct: number): string {
-  if (pct >= 80) return 'var(--danger)';
-  if (pct >= 55) return 'var(--warn)';
-  return 'var(--ok)';
+  if (pct >= 80) return 'var(--ds-danger)';
+  if (pct >= 55) return 'var(--ds-warn)';
+  return 'var(--ds-ok)';
 }
 
 function fmtTokens(n: number): string {
@@ -88,10 +89,10 @@ function BurnMiniChart({ burn, color }: { burn: BurnSeries; color: string }) {
   const projY = typeof burn.projected === 'number' ? toY(Math.min(100, burn.projected)) : null;
 
   return (
-    <div className="card-item" style={{ marginBottom: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+    <div className="card-item ds-m0">
+      <div className="ds-row-between" style={{ marginBottom: 8, fontSize: 12 }}>
         <strong>Ritmo da janela</strong>
-        <span style={{ color: 'var(--muted)' }}>
+        <span className="ds-text-muted">
           {typeof burn.runsOutIn === 'number' && burn.runsOutIn > 0
             ? `esgota em ~${fmtDuration(burn.runsOutIn)}`
             : typeof burn.projected === 'number'
@@ -99,10 +100,10 @@ function BurnMiniChart({ burn, color }: { burn: BurnSeries; color: string }) {
               : ''}
         </span>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 96, display: 'block', background: '#0e1015', borderRadius: 6 }}>
-        <line x1="0" y1={h * 0.2} x2={w} y2={h * 0.2} stroke="#262a35" strokeDasharray="3 3" />
-        <line x1="0" y1={h * 0.5} x2={w} y2={h * 0.5} stroke="#262a35" strokeDasharray="3 3" />
-        <line x1="0" y1={h * 0.8} x2={w} y2={h * 0.8} stroke="#262a35" strokeDasharray="3 3" />
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 96, display: 'block', background: 'var(--ds-bg)', borderRadius: 6 }}>
+        <line x1="0" y1={h * 0.2} x2={w} y2={h * 0.2} stroke="var(--ds-border)" strokeDasharray="3 3" />
+        <line x1="0" y1={h * 0.5} x2={w} y2={h * 0.5} stroke="var(--ds-border)" strokeDasharray="3 3" />
+        <line x1="0" y1={h * 0.8} x2={w} y2={h * 0.8} stroke="var(--ds-border)" strokeDasharray="3 3" />
         <path d={d} fill="none" stroke={color} strokeWidth="2.2" />
         {projY !== null && (
           <line
@@ -162,23 +163,20 @@ export function QuotaDrawer({ provider, snapshot, onChangeProvider, onClose, onP
   }
 
   return (
-    <div className="side-drawer-bg right" onClick={onClose}>
-      <aside className="side-drawer right" onClick={(e) => e.stopPropagation()} aria-label={`Detalhes de cota ${meta.label}`}>
-        <div className="side-drawer-head">
-          <span className="qdot" style={{ background: meta.color, width: 10, height: 10 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Uso do plano · {meta.label}</h3>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {quota?.plan ? `Plano ${quota.plan}` : meta.toolName}
-              {quota?.at ? ` · lido às ${new Date(quota.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
-            </div>
-          </div>
-          <button className="btn btn-sm btn-icon" onClick={onClose} title="Fechar (Esc)">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Troca rápida entre as 3 IAs */}
+    <DrawerFrame
+      open={!!provider}
+      side="right"
+      ariaLabel={`Detalhes de cota ${meta.label}`}
+      onClose={onClose}
+      leading={<ToolIcon tool={meta.toolName} size={18} />}
+      title={`Uso do plano · ${meta.label}`}
+      subtitle={
+        <>
+          {quota?.plan ? `Plano ${quota.plan}` : meta.toolName}
+          {quota?.at ? ` · lido às ${new Date(quota.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+        </>
+      }
+      subHeader={
         <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
           <div className="seg" style={{ width: '100%' }}>
             {PROVIDERS.map((p) => (
@@ -188,122 +186,105 @@ export function QuotaDrawer({ provider, snapshot, onChangeProvider, onClose, onP
                 style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '6px 8px' }}
                 onClick={() => onChangeProvider(p.key)}
               >
-                <span className="qdot" style={{ background: p.color }} /> {p.label}
+                <ToolIcon tool={p.toolName} size={12} /> {p.label}
               </button>
             ))}
           </div>
         </div>
-
-        <div className="side-drawer-body">
-          {quota?.error && (
-            <div className="conflict-box" style={{ marginBottom: 0 }}>
-              <h4>Erro ao ler cota</h4>
-              <div style={{ fontSize: 12.5 }}>{quota.error}</div>
-            </div>
-          )}
-
-          {/* Janelas de cota */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {windows.length === 0 ? (
-              <div className="card-item" style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Nenhuma leitura de cota disponível para {meta.label} no momento.
-              </div>
-            ) : (
-              windows.map(([key, w]) => {
-                const pct = Math.max(0, Math.min(100, Math.round(w.used || 0)));
-                const col = levelColor(pct);
-                const resetTxt = fmtReset(w.resetsAt, now);
-                return (
-                  <div key={key} className="card-item" style={{ marginBottom: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                      <strong style={{ fontSize: 13 }}>{WINDOW_LABELS[key] || key}</strong>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: col }}>{pct}%</span>
-                    </div>
-                    <div style={{ height: 10, borderRadius: 999, background: '#0e1015', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: col, borderRadius: 999, transition: 'width .25s' }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11.5, color: 'var(--muted)' }}>
-                      <span>{resetTxt || '—'}</span>
-                      {typeof w.pace === 'number' && <span>ritmo esperado: {Math.round(w.pace)}%</span>}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Gráfico de ritmo/projeção se disponível */}
-          {burn && <BurnMiniChart burn={burn} color={meta.color} />}
-
-          {/* Valor equivalente em API (USD / BRL) */}
-          {costs && (
-            <div className="card-item" style={{ marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <strong style={{ fontSize: 13 }}>Valor equivalente (API)</strong>
-                <span className="badge" style={{ fontSize: 10 }} title={`Cotação usada (${costs.fxSource || 'estimada'})`}>
-                  US$ 1 = R$ {fxRate.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
-                {[
-                  { label: 'Hoje', b: costToday },
-                  { label: '7 dias', b: costWeek },
-                  { label: '30 dias', b: costMonth },
-                ].map(({ label, b }) => (
-                  <div key={label} style={{ padding: '7px 8px', borderRadius: 8, background: '#111318', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>{label}</div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2, color: 'var(--accent)' }}>
-                      {fmtUsd(b?.usd || 0)}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#cfd6e3', marginTop: 1 }}>
-                      {fmtBrl(b?.usd || 0, fxRate)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {(costToday && (costToday.input + costToday.output + costToday.cacheRead + costToday.cacheWrite > 0)) && (
-                <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 7 }}>
-                  Hoje: {fmtTokens(costToday.input)} in · {fmtTokens(costToday.output)} out
-                  {costToday.cacheRead > 0 ? ` · ${fmtTokens(costToday.cacheRead)} cache` : ''}
-                </div>
-              )}
-              <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 6, lineHeight: 1.4 }}>
-                Estimativa baseada nos tokens reais e tabela pública de API por modelo. Em assinaturas fixas (Pro/Max/Plus), indica o valor equivalente consumido dentro do plano.
-              </div>
-            </div>
-          )}
-
-          {/* Resumo do dia */}
-          <div className="card-item" style={{ marginBottom: 0 }}>
-            <strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>Atividade hoje</strong>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div style={{ padding: 8, borderRadius: 8, background: '#111318', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Sessões hoje</div>
-                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{sessToday}</div>
-              </div>
-              <div style={{ padding: 8, borderRadius: 8, background: '#111318', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Ativas agora</div>
-                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{activeCount}</div>
-              </div>
-              <div style={{ padding: 8, borderRadius: 8, background: '#111318', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Tokens novos</div>
-                <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{fmtTokens(todayStats?.fresh || 0)}</div>
-              </div>
-              <div style={{ padding: 8, borderRadius: 8, background: '#111318', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Leitura de cache</div>
-                <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{fmtTokens(todayStats?.cacheRead || 0)}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="side-drawer-foot">
-          <button className="btn" onClick={onClose}>Fechar</button>
-          <button className="btn btn-primary" style={{ flex: 1 }} disabled={refreshing} onClick={doRefresh}>
+      }
+      footer={
+        <>
+          <Button onClick={onClose}>Fechar</Button>
+          <Button variant="primary" className="ds-flex-1" disabled={refreshing} onClick={doRefresh}>
             <RefreshCw size={13} /> {refreshing ? 'Atualizando…' : 'Atualizar cotas agora'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      {quota?.error && (
+        <div className="conflict-box ds-m0">
+          <h4>Erro ao ler cota</h4>
+          <div style={{ fontSize: 12.5 }}>{quota.error}</div>
         </div>
-      </aside>
-    </div>
+      )}
+
+      {/* Janelas de cota */}
+      <div className="ds-stack">
+        {windows.length === 0 ? (
+          <div className="card-item ds-text-muted" style={{ fontSize: 13 }}>
+            Nenhuma leitura de cota disponível para {meta.label} no momento.
+          </div>
+        ) : (
+          windows.map(([key, w]) => {
+            const pct = Math.max(0, Math.min(100, Math.round(w.used || 0)));
+            const col = levelColor(pct);
+            const resetTxt = fmtReset(w.resetsAt, now);
+            return (
+              <div key={key} className="card-item ds-m0">
+                <div className="ds-row-between" style={{ marginBottom: 6 }}>
+                  <strong style={{ fontSize: 13 }}>{WINDOW_LABELS[key] || key}</strong>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: col }}>{pct}%</span>
+                </div>
+                <MetricBar pct={pct} color={col} />
+                <div className="ds-row-between ds-text-muted" style={{ marginTop: 6, fontSize: 11.5 }}>
+                  <span>{resetTxt || '—'}</span>
+                  {typeof w.pace === 'number' && <span>ritmo esperado: {Math.round(w.pace)}%</span>}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Gráfico de ritmo/projeção */}
+      {burn && <BurnMiniChart burn={burn} color={meta.color} />}
+
+      {/* Valor equivalente em API (USD / BRL) */}
+      {costs && (
+        <div className="card-item ds-m0">
+          <div className="ds-row-between" style={{ marginBottom: 8 }}>
+            <strong style={{ fontSize: 13 }}>Valor equivalente (API)</strong>
+            <Badge compact title={`Cotação usada (${costs.fxSource || 'estimada'})`}>
+              US$ 1 = R$ {fxRate.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Badge>
+          </div>
+          <div className="ds-grid-3">
+            {[
+              { label: 'Hoje', b: costToday },
+              { label: '7 dias', b: costWeek },
+              { label: '30 dias', b: costMonth },
+            ].map(({ label, b }) => (
+              <KpiBox
+                key={label}
+                label={label}
+                value={fmtUsd(b?.usd || 0)}
+                sub={fmtBrl(b?.usd || 0, fxRate)}
+                accent
+              />
+            ))}
+          </div>
+          {costToday && (costToday.input + costToday.output + costToday.cacheRead + costToday.cacheWrite > 0) && (
+            <div className="ds-text-muted" style={{ fontSize: 10.5, marginTop: 7 }}>
+              Hoje: {fmtTokens(costToday.input)} in · {fmtTokens(costToday.output)} out
+              {costToday.cacheRead > 0 ? ` · ${fmtTokens(costToday.cacheRead)} cache` : ''}
+            </div>
+          )}
+          <div className="ds-text-muted" style={{ fontSize: 10.5, marginTop: 6, lineHeight: 1.4 }}>
+            Estimativa baseada nos tokens reais e tabela pública de API por modelo. Em assinaturas fixas (Pro/Max/Plus), indica o valor equivalente consumido dentro do plano.
+          </div>
+        </div>
+      )}
+
+      {/* Resumo do dia */}
+      <div className="card-item ds-m0">
+        <strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>Atividade hoje</strong>
+        <div className="ds-grid-2">
+          <KpiBox label="Sessões hoje" value={sessToday} />
+          <KpiBox label="Ativas agora" value={activeCount} />
+          <KpiBox label="Tokens novos" value={fmtTokens(todayStats?.fresh || 0)} />
+          <KpiBox label="Leitura de cache" value={fmtTokens(todayStats?.cacheRead || 0)} />
+        </div>
+      </div>
+    </DrawerFrame>
   );
 }

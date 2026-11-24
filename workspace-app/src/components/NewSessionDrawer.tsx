@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FolderLock, Send, X } from 'lucide-react';
+import { FolderLock, Send } from 'lucide-react';
 import { api } from '../api';
 import { FolderPicker, orderMachines } from './FolderPicker';
+import { Badge, Button, DrawerFrame, ToolIcon } from '../ui';
 import type { MachineCaps, Snapshot, WorkspaceEntity } from '../types';
 
 interface Props {
@@ -17,10 +18,10 @@ interface Props {
 }
 
 const AI_META: { id: string; label: string; color: string; quotaKey?: 'claude' | 'codex' | 'gemini' }[] = [
-  { id: 'Claude Code', label: 'Claude Code', color: 'var(--claude)', quotaKey: 'claude' },
-  { id: 'Codex', label: 'Codex', color: 'var(--codex)', quotaKey: 'codex' },
-  { id: 'Gemini', label: 'Gemini (agy)', color: 'var(--gemini)', quotaKey: 'gemini' },
-  { id: 'Ollama', label: 'Ollama Local', color: '#9ed6b5' },
+  { id: 'Claude Code', label: 'Claude Code', color: 'var(--ds-claude)', quotaKey: 'claude' },
+  { id: 'Codex', label: 'Codex', color: 'var(--ds-codex)', quotaKey: 'codex' },
+  { id: 'Gemini', label: 'Gemini (agy)', color: 'var(--ds-gemini)', quotaKey: 'gemini' },
+  { id: 'Ollama', label: 'Ollama Local', color: 'var(--ds-ollama)' },
 ];
 
 export function NewSessionDrawer({
@@ -112,123 +113,115 @@ export function NewSessionDrawer({
   if (!open) return null;
 
   return (
-    <div className="side-drawer-bg right" onClick={onClose}>
-      <aside className="side-drawer right" onClick={(e) => e.stopPropagation()} aria-label="Nova conversa com IA">
-        <div className="side-drawer-head">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: 16 }}>
-              {lockedProject ? `Nova conversa · ${lockedProject.title}` : 'Nova conversa com IA'}
-            </h3>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {lockedProject
-                ? 'Projeto fixado — escolha o agente e envie a mensagem inicial'
-                : 'Escolha a máquina, a pasta do projeto e o agente'}
-            </div>
-          </div>
-          <button className="btn btn-sm btn-icon" onClick={onClose} title="Fechar (Esc)">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="side-drawer-body">
-          {lockedProject ? (
-            <div
-              className="card-item"
-              style={{ marginBottom: 0, borderColor: 'rgba(95, 184, 164, .4)', background: 'rgba(95, 184, 164, .08)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                <FolderLock size={14} color="var(--accent)" />
-                <strong style={{ fontSize: 13.5 }}>{lockedProject.title}</strong>
-                {lockedProject.machine && <span className="badge" style={{ marginLeft: 'auto' }}>{lockedProject.machine}</span>}
-              </div>
-              <div className="mono ell" style={{ fontSize: 11.5, color: 'var(--muted)' }} title={lockedProject.cwd}>
-                {lockedProject.cwd || '(sem pasta vinculada)'}
-              </div>
-            </div>
-          ) : (
-            <FolderPicker
-              caps={caps}
-              loadingCaps={loadingCaps}
-              machine={machine}
-              cwd={cwd}
-              entities={entities}
-              labelMachine="1. Máquina"
-              labelFolder="2. Pasta do projeto (CWD)"
-              onChangeMachine={(m, nextCwd) => { setMachine(m); setCwd(nextCwd); }}
-              onChangeCwd={setCwd}
-              onCapsUpdated={setCaps}
-              onNotify={onNotify}
-            />
-          )}
-
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label>{lockedProject ? '1. Inteligência Artificial' : '3. Inteligência Artificial'}</label>
-            <div className="ai-grid">
-              {AI_META.map((ai) => {
-                const avail = !currentMachine || !!currentMachine.tools?.[ai.id];
-                const q = ai.quotaKey ? snapshot?.quotas?.[ai.quotaKey] : undefined;
-                const w5 = q?.windows?.five_hour || q?.windows?.pro;
-                const w7 = q?.windows?.seven_day || q?.windows?.daily;
-                return (
-                  <button
-                    key={ai.id}
-                    className={`ai-tile ${tool === ai.id ? 'active' : ''}`}
-                    disabled={!avail}
-                    onClick={() => setTool(ai.id)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span className="qdot" style={{ background: ai.color }} />
-                      <strong style={{ fontSize: 13 }}>{ai.label}</strong>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-                      {!avail
-                        ? 'Indisponível nesta máquina'
-                        : w5 && typeof w5.used === 'number'
-                          ? <><b>{Math.round(w5.used)}%</b>{w7 && typeof w7.used === 'number' ? ` • ${Math.round(w7.used)}%` : ''}</>
-                          : 'Pronta para uso'}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {models.length > 0 && (
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label>{lockedProject ? '2. Modelo' : '4. Modelo'}</label>
-              <select className="sel" value={model} onChange={(e) => setModel(e.target.value)}>
-                {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-            </div>
-          )}
-
-          <div className="field" style={{ marginBottom: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <label>{lockedProject ? (models.length ? '3. Mensagem inicial' : '2. Mensagem inicial') : '5. Mensagem inicial'}</label>
-            <textarea
-              className="ta"
-              rows={5}
-              style={{ flex: 1, minHeight: 100 }}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') launch(); }}
-              placeholder="Descreva o objetivo da conversa (Ctrl+Enter para iniciar)…"
-              autoFocus
-            />
-          </div>
-        </div>
-
-        <div className="side-drawer-foot">
-          <button className="btn" onClick={onClose}>Cancelar</button>
-          <button
-            className="btn btn-primary"
+    <DrawerFrame
+      open={open}
+      side="right"
+      ariaLabel="Nova conversa com IA"
+      title={lockedProject ? `Nova conversa · ${lockedProject.title}` : 'Nova conversa com IA'}
+      subtitle={
+        lockedProject
+          ? 'Projeto fixado — escolha o agente e envie a mensagem inicial'
+          : 'Escolha a máquina, a pasta do projeto e o agente'
+      }
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button
+            variant="primary"
             style={{ flex: 1 }}
             disabled={submitting || !prompt.trim()}
             onClick={launch}
           >
             <Send size={14} /> {submitting ? 'Iniciando sessão…' : `Iniciar com ${tool}`}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      {lockedProject ? (
+        <div
+          className="card-item"
+          style={{ marginBottom: 0, borderColor: 'rgba(95, 184, 164, .4)', background: 'var(--ds-accent-soft)' }}
+        >
+          <div className="ds-row" style={{ gap: 7, marginBottom: 4 }}>
+            <FolderLock size={14} color="var(--ds-accent)" />
+            <strong style={{ fontSize: 13.5 }}>{lockedProject.title}</strong>
+            {lockedProject.machine && <Badge style={{ marginLeft: 'auto' }}>{lockedProject.machine}</Badge>}
+          </div>
+          <div className="mono ell" style={{ fontSize: 11.5, color: 'var(--ds-muted)' }} title={lockedProject.cwd}>
+            {lockedProject.cwd || '(sem pasta vinculada)'}
+          </div>
         </div>
-      </aside>
-    </div>
+      ) : (
+        <FolderPicker
+          caps={caps}
+          loadingCaps={loadingCaps}
+          machine={machine}
+          cwd={cwd}
+          entities={entities}
+          labelMachine="1. Máquina"
+          labelFolder="2. Pasta do projeto (CWD)"
+          onChangeMachine={(m, nextCwd) => { setMachine(m); setCwd(nextCwd); }}
+          onChangeCwd={setCwd}
+          onCapsUpdated={setCaps}
+          onNotify={onNotify}
+        />
+      )}
+
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label>{lockedProject ? '1. Inteligência Artificial' : '3. Inteligência Artificial'}</label>
+        <div className="ai-grid">
+          {AI_META.map((ai) => {
+            const avail = !currentMachine || !!currentMachine.tools?.[ai.id];
+            const q = ai.quotaKey ? snapshot?.quotas?.[ai.quotaKey] : undefined;
+            const w5 = q?.windows?.five_hour || q?.windows?.pro;
+            const w7 = q?.windows?.seven_day || q?.windows?.daily;
+            return (
+              <button
+                key={ai.id}
+                className={`ai-tile ${tool === ai.id ? 'active' : ''}`}
+                disabled={!avail}
+                onClick={() => setTool(ai.id)}
+              >
+                <div className="ds-row" style={{ gap: 7 }}>
+                  <ToolIcon tool={ai.id} size={13} />
+                  <strong style={{ fontSize: 13 }}>{ai.label}</strong>
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--ds-muted)' }}>
+                  {!avail
+                    ? 'Indisponível nesta máquina'
+                    : w5 && typeof w5.used === 'number'
+                      ? <><b>{Math.round(w5.used)}%</b>{w7 && typeof w7.used === 'number' ? ` • ${Math.round(w7.used)}%` : ''}</>
+                      : 'Pronta para uso'}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {models.length > 0 && (
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>{lockedProject ? '2. Modelo' : '4. Modelo'}</label>
+          <select className="sel" value={model} onChange={(e) => setModel(e.target.value)}>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </div>
+      )}
+
+      <div className="field" style={{ marginBottom: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <label>{lockedProject ? (models.length ? '3. Mensagem inicial' : '2. Mensagem inicial') : '5. Mensagem inicial'}</label>
+        <textarea
+          className="ta"
+          rows={5}
+          style={{ flex: 1, minHeight: 100 }}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') launch(); }}
+          placeholder="Descreva o objetivo da conversa (Ctrl+Enter para iniciar)…"
+          autoFocus
+        />
+      </div>
+    </DrawerFrame>
   );
 }

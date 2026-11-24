@@ -6,6 +6,8 @@
   /* Superfícies */
   --ds-bg: #0e0f12;
   --ds-inset: #101216;
+  --ds-surface-muted: #111318;
+  --ds-surface-bar: #13151a;
   --ds-panel: #15171c;
   --ds-card: #1b1e25;
   --ds-card-hover: #21252f;
@@ -32,8 +34,11 @@
 
   /* Semântica */
   --ds-ok: #8ad6a3;
+  --ds-ok-soft: #b4f0c8;
   --ds-warn: #e5c063;
   --ds-danger: #e87070;
+  --ds-danger-soft: #f6b3b3;
+  --ds-err-text: #f49b9b;
 
   /* Etapas do Board (EGM Lite) */
   --ds-stage-idea: #7c8ba6;

@@ -10,9 +10,9 @@ import {
   Square,
   Terminal,
   Trash2,
-  X,
 } from 'lucide-react';
 import { api } from '../api';
+import { Badge, Button, EmptyState, Field, ModalFrame, StatusDot } from '../ui';
 import type { ProjectRunConfig, ProjectRunStatus, RunProcessSpec, RunProfile } from '../types';
 
 interface Props {
@@ -228,34 +228,36 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                 ))}
               </select>
             )}
-            <button
-              className="btn btn-sm run-play-btn"
+            <Button
+              size="sm"
+              variant="play"
               disabled={busy}
               onClick={() => handleStart()}
               title={activeProfile ? `Executar: ${activeProfile.name} (${activeProfile.processes.map((x) => x.cmd).join(' + ')})` : 'Configurar comando para rodar este projeto'}
             >
               <Play size={12} fill="currentColor" />
               {activeProfile ? 'Play' : 'Configurar Play'}
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <button
-              className="btn btn-sm btn-danger"
+            <Button
+              size="sm"
+              variant="danger"
               disabled={busy}
               onClick={() => handleStop()}
               title={`Parar ${status?.profileName || 'execução'}`}
             >
               <Square size={11} fill="currentColor" /> Stop
-            </button>
-            <button
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="sm"
               onClick={() => setLogsOpen(true)}
               title="Ver logs e URLs em tempo real"
             >
-              <span className="sb-dot working" />
+              <StatusDot kind="working" />
               Logs ({runningCount}/{status?.processes.length || 0})
-            </button>
+            </Button>
             {allUrls[0] && (
               <a
                 href={allUrls[0]}
@@ -272,164 +274,171 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
         )}
 
         {!isRunning && status && status.processes.length > 0 && (
-          <button
-            className="btn btn-sm btn-icon"
+          <Button
+            size="sm"
+            iconOnly
             onClick={() => setLogsOpen(true)}
             title="Ver logs da última execução"
           >
             <Terminal size={13} />
-          </button>
+          </Button>
         )}
 
-        <button
-          className="btn btn-sm btn-icon"
+        <Button
+          size="sm"
+          iconOnly
           onClick={openConfigModal}
           title="Configurar perfis de Play (jogos, front+back, executáveis)"
           aria-label="Configurar Play"
         >
           <Settings2 size={13} />
-        </button>
+        </Button>
       </div>
 
       {/* Modal de Logs ao vivo */}
-      {logsOpen && (
-        <div className="modal-bg" onClick={() => setLogsOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820, height: '78vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className={`sb-dot ${isRunning ? 'working' : 'recent'}`} />
-                <h3 style={{ margin: 0, fontSize: 15 }}>
-                  Execução · {status?.profileName || activeProfile?.name || 'Projeto'}
-                </h3>
-                {machine && <span className="badge">{machine}</span>}
-              </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                {allUrls.map((u) => (
-                  <a key={u} href={u} target="_blank" rel="noreferrer" className="btn btn-sm" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
-                    <ExternalLink size={12} /> {u.replace(/^https?:\/\//i, '')}
-                  </a>
-                ))}
-                <button
-                  className="btn btn-sm"
-                  disabled={busy}
-                  onClick={() => handleStart(status?.profileId || activeProfile?.id)}
-                  title="Reiniciar perfil"
-                >
-                  <RotateCw size={12} /> Reiniciar
-                </button>
-                {isRunning && (
-                  <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => handleStop()}>
-                    <Square size={11} fill="currentColor" /> Parar tudo
-                  </button>
-                )}
-                <button className="btn btn-sm btn-icon" onClick={() => setLogsOpen(false)} title="Fechar">
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-
-            {status && status.processes.length > 1 && (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-                {status.processes.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`btn btn-sm ${activeLogProc?.id === p.id ? 'btn-primary' : ''}`}
-                    onClick={() => setActiveProcId(p.id)}
-                  >
-                    <span
-                      className="col-dot"
-                      style={{
-                        background: p.status === 'running' ? 'var(--ok)' : p.exitCode && p.exitCode !== 0 ? 'var(--danger)' : 'var(--muted)',
-                      }}
-                    />
-                    {p.name}
-                    {p.status !== 'running' && p.exitCode !== null && <span style={{ opacity: .75 }}>({p.exitCode})</span>}
-                  </button>
-                ))}
-              </div>
+      <ModalFrame
+        open={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        closeOnBackdrop
+        maxWidth={820}
+        height="78vh"
+        title={
+          <span className="ds-row">
+            <StatusDot kind={isRunning ? 'working' : 'recent'} />
+            Execução · {status?.profileName || activeProfile?.name || 'Projeto'}
+          </span>
+        }
+        titleBadge={machine ? <Badge>{machine}</Badge> : undefined}
+        headerActions={
+          <>
+            {allUrls.map((u) => (
+              <a key={u} href={u} target="_blank" rel="noreferrer" className="btn btn-sm ds-text-accent" style={{ textDecoration: 'none' }}>
+                <ExternalLink size={12} /> {u.replace(/^https?:\/\//i, '')}
+              </a>
+            ))}
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => handleStart(status?.profileId || activeProfile?.id)}
+              title="Reiniciar perfil"
+            >
+              <RotateCw size={12} /> Reiniciar
+            </Button>
+            {isRunning && (
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => handleStop()}>
+                <Square size={11} fill="currentColor" /> Parar tudo
+              </Button>
             )}
-
-            {activeLogProc ? (
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 11.5, color: 'var(--muted)', flexShrink: 0 }}>
-                  <code className="mono ell" style={{ flex: 1 }}>{activeLogProc.cmd}</code>
-                  {activeLogProc.cwd && <span className="badge mono">{activeLogProc.cwd}</span>}
-                  {activeLogProc.gui && <span className="badge">GUI</span>}
-                  {activeLogProc.pid > 0 && <span className="mono">PID {activeLogProc.pid}</span>}
-                  {activeLogProc.status === 'running' && status && status.processes.length > 1 && (
-                    <button className="btn btn-sm btn-danger" onClick={() => handleStop(activeLogProc.id)}>
-                      Parar {activeLogProc.name}
-                    </button>
-                  )}
-                </div>
-                <div className="term-stream" style={{ borderRadius: 9, border: '1px solid var(--border)' }}>
-                  {activeLogProc.logs.map((l, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        color: l.stream === 'err' ? '#f49b9b' : l.stream === 'sys' ? 'var(--accent)' : '#dbe1ec',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {l.text || ' '}
-                    </div>
-                  ))}
-                  <div ref={logEndRef} />
-                </div>
-              </div>
-            ) : (
-              <div className="empty">Nenhum log de execução ainda.</div>
-            )}
+          </>
+        }
+      >
+        {status && status.processes.length > 1 && (
+          <div className="ds-row ds-wrap" style={{ flexShrink: 0 }}>
+            {status.processes.map((p) => (
+              <Button
+                key={p.id}
+                size="sm"
+                variant={activeLogProc?.id === p.id ? 'primary' : 'default'}
+                onClick={() => setActiveProcId(p.id)}
+              >
+                <span
+                  className="col-dot"
+                  style={{
+                    background: p.status === 'running' ? 'var(--ds-ok)' : p.exitCode && p.exitCode !== 0 ? 'var(--ds-danger)' : 'var(--muted)',
+                  }}
+                />
+                {p.name}
+                {p.status !== 'running' && p.exitCode !== null && <span style={{ opacity: .75 }}>({p.exitCode})</span>}
+              </Button>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+
+        {activeLogProc ? (
+          <div className="ds-stack ds-flex-1" style={{ gap: 6, overflow: 'hidden' }}>
+            <div className="ds-row ds-text-muted" style={{ fontSize: 11.5, flexShrink: 0 }}>
+              <code className="mono ell ds-flex-1">{activeLogProc.cmd}</code>
+              {activeLogProc.cwd && <Badge mono>{activeLogProc.cwd}</Badge>}
+              {activeLogProc.gui && <Badge>GUI</Badge>}
+              {activeLogProc.pid > 0 && <span className="mono">PID {activeLogProc.pid}</span>}
+              {activeLogProc.status === 'running' && status && status.processes.length > 1 && (
+                <Button size="sm" variant="danger" onClick={() => handleStop(activeLogProc.id)}>
+                  Parar {activeLogProc.name}
+                </Button>
+              )}
+            </div>
+            <div className="term-stream" style={{ borderRadius: 9, border: '1px solid var(--border)' }}>
+              {activeLogProc.logs.map((l, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    color: l.stream === 'err' ? 'var(--ds-err-text)' : l.stream === 'sys' ? 'var(--accent)' : 'var(--ds-text)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {l.text || ' '}
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          </div>
+        ) : (
+          <EmptyState>Nenhum log de execução ainda.</EmptyState>
+        )}
+      </ModalFrame>
 
       {/* Modal de Configuração de Perfis (.ai-workspace/run.json) */}
-      {configOpen && draftCfg && (
-        <div className="modal-bg">
-          <div className="modal" style={{ maxWidth: 740, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, flexShrink: 0 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16 }}>Configurar Play do Projeto</h3>
-                <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-                  Salvo em <code className="mono">.ai-workspace/run.json</code> · suporta jogos (GUI), Front+Back compostos e executáveis
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {detectedCfg && detectedCfg.profiles.length > 0 && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => {
-                      setDraftCfg(JSON.parse(JSON.stringify(detectedCfg)));
-                      setEditProfileIdx(0);
-                      onNotify('Perfis auto-detectados recarregados.');
-                    }}
-                    title="Restaurar perfis detectados automaticamente"
-                  >
-                    <RefreshCw size={12} /> Auto-detectar
-                  </button>
-                )}
-                <button className="btn btn-sm btn-icon" onClick={() => setConfigOpen(false)} title="Fechar">
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-
-            {/* Seletor de perfis */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, flexShrink: 0 }}>
+      <ModalFrame
+        open={configOpen && !!draftCfg}
+        onClose={() => setConfigOpen(false)}
+        closeOnBackdrop={false}
+        maxWidth={740}
+        title="Configurar Play do Projeto"
+        subtitle={
+          <>Salvo em <code className="mono">.ai-workspace/run.json</code> · suporta jogos (GUI), Front+Back compostos e executáveis</>
+        }
+        headerActions={
+          detectedCfg && detectedCfg.profiles.length > 0 ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                setDraftCfg(JSON.parse(JSON.stringify(detectedCfg)));
+                setEditProfileIdx(0);
+                onNotify('Perfis auto-detectados recarregados.');
+              }}
+              title="Restaurar perfis detectados automaticamente"
+            >
+              <RefreshCw size={12} /> Auto-detectar
+            </Button>
+          ) : undefined
+        }
+        footer={
+          <>
+            <div className="ds-flex-1" />
+            <Button size="sm" onClick={() => setConfigOpen(false)}>Cancelar</Button>
+            <Button size="sm" variant="primary" disabled={savingCfg} onClick={handleSaveConfig}>
+              <Save size={13} /> {savingCfg ? 'Salvando…' : 'Salvar configuração'}
+            </Button>
+          </>
+        }
+      >
+        {draftCfg && (
+          <>
+            <div className="ds-row ds-wrap">
               {draftCfg.profiles.map((p, idx) => (
-                <button
+                <Button
                   key={p.id}
-                  className={`btn btn-sm ${idx === editProfileIdx ? 'btn-primary' : ''}`}
+                  size="sm"
+                  variant={idx === editProfileIdx ? 'primary' : 'default'}
                   onClick={() => setEditProfileIdx(idx)}
                 >
                   {p.name || `Perfil ${idx + 1}`}
                   {draftCfg.defaultProfile === p.id && <span style={{ fontSize: 10, opacity: .8 }}>★</span>}
-                </button>
+                </Button>
               ))}
-              <button
-                className="btn btn-sm"
+              <Button
+                size="sm"
                 onClick={() => {
                   const np = makeEmptyProfile(draftCfg.profiles.length + 1);
                   setDraftCfg({ ...draftCfg, profiles: [...draftCfg.profiles, np] });
@@ -437,23 +446,21 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                 }}
               >
                 <Plus size={12} /> Novo perfil
-              </button>
+              </Button>
             </div>
 
             {editingProfile && (
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, paddingRight: 4 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>Nome do perfil</label>
+              <div className="ds-stack">
+                <div className="ds-grid-2">
+                  <Field label="Nome do perfil">
                     <input
                       className="inp"
                       value={editingProfile.name}
                       onChange={(e) => updateEditProfile((p) => ({ ...p, name: e.target.value }))}
                       placeholder="Ex.: Rodar Jogo (Godot), Dev (Back + Front)…"
                     />
-                  </div>
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>Tipo</label>
+                  </Field>
+                  <Field label="Tipo">
                     <select
                       className="sel"
                       value={editingProfile.kind}
@@ -463,11 +470,11 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                         <option key={k} value={k}>{KIND_LABELS[k]}</option>
                       ))}
                     </select>
-                  </div>
+                  </Field>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                <div className="ds-row-between">
+                  <label className="ds-row" style={{ fontSize: 12, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={draftCfg.defaultProfile === editingProfile.id}
@@ -478,8 +485,9 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                     Perfil padrão do botão Play
                   </label>
                   {draftCfg.profiles.length > 1 && (
-                    <button
-                      className="btn btn-sm btn-danger"
+                    <Button
+                      size="sm"
+                      variant="danger"
                       onClick={() => {
                         const next = draftCfg.profiles.filter((_, idx) => idx !== editProfileIdx);
                         setDraftCfg({ ...draftCfg, profiles: next });
@@ -487,14 +495,14 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                       }}
                     >
                       <Trash2 size={12} /> Remover perfil
-                    </button>
+                    </Button>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                <div className="ds-row-between">
                   <strong style={{ fontSize: 13 }}>Processos executados ({editingProfile.processes.length})</strong>
-                  <button
-                    className="btn btn-sm"
+                  <Button
+                    size="sm"
                     onClick={() =>
                       updateEditProfile((p) => ({
                         ...p,
@@ -507,15 +515,15 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                     }
                   >
                     <Plus size={12} /> Adicionar processo (Front + Back)
-                  </button>
+                  </Button>
                 </div>
 
                 {editingProfile.processes.map((pr: RunProcessSpec, pIdx: number) => (
-                  <div key={pIdx} className="card-item" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div key={pIdx} className="card-item ds-m0 ds-stack" style={{ gap: 8 }}>
+                    <div className="ds-row">
                       <input
-                        className="inp"
-                        style={{ flex: 1, fontSize: 12.5 }}
+                        className="inp ds-flex-1"
+                        style={{ fontSize: 12.5 }}
                         value={pr.name}
                         onChange={(e) =>
                           updateEditProfile((p) => ({
@@ -538,8 +546,10 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                         placeholder="Subpasta (opcional)"
                       />
                       {editingProfile.processes.length > 1 && (
-                        <button
-                          className="btn btn-sm btn-icon btn-danger"
+                        <Button
+                          size="sm"
+                          iconOnly
+                          variant="danger"
                           onClick={() =>
                             updateEditProfile((p) => ({
                               ...p,
@@ -549,7 +559,7 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                           title="Remover processo"
                         >
                           <Trash2 size={12} />
-                        </button>
+                        </Button>
                       )}
                     </div>
                     <input
@@ -564,8 +574,8 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                       }
                       placeholder='Comando ou executável (ex.: npm run dev, godot --path ., "C:\app\meu.exe")'
                     />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--muted)', cursor: 'pointer' }}>
+                    <div className="ds-row ds-wrap" style={{ gap: 12 }}>
+                      <label className="ds-row ds-text-muted" style={{ fontSize: 11.5, cursor: 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={!!pr.gui}
@@ -579,8 +589,8 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                         App gráfico / Jogo (abre janela no desktop)
                       </label>
                       <input
-                        className="inp mono"
-                        style={{ flex: 1, minWidth: 160, fontSize: 11.5, padding: '4px 8px' }}
+                        className="inp mono ds-flex-1"
+                        style={{ minWidth: 160, fontSize: 11.5, padding: '4px 8px' }}
                         value={pr.openUrl || ''}
                         onChange={(e) =>
                           updateEditProfile((p) => ({
@@ -595,16 +605,9 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                 ))}
               </div>
             )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-              <button className="btn btn-sm" onClick={() => setConfigOpen(false)}>Cancelar</button>
-              <button className="btn btn-sm btn-primary" disabled={savingCfg} onClick={handleSaveConfig}>
-                <Save size={13} /> {savingCfg ? 'Salvando…' : 'Salvar configuração'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalFrame>
     </>
   );
 }

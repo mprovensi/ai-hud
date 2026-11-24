@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronLeft, FileCode2, Folder, FolderPlus, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
 import { api } from '../api';
+import { Badge, Button, EmptyState } from '../ui';
 import type { FsEntry, GitInfo } from '../types';
 
 interface Props {
@@ -100,20 +101,20 @@ export function FilesAndGit({ cwd, machine = '', onNotify }: Props) {
   return (
     <div>
       <div className="toolbar">
-        <span className="badge mono">{machine ? `${machine}: ` : ''}{cwd}</span>
+        <Badge mono>{machine ? `${machine}: ` : ''}{cwd}</Badge>
         {git?.isRepo && (
-          <span className="badge in-progress">
+          <Badge tone="in-progress">
             <GitBranch size={12} /> {git.branch}
-          </span>
+          </Badge>
         )}
         {git?.isRepo && (
-          <span className={`badge ${git.modified.length ? 'waiting' : 'done'}`}>
+          <Badge tone={git.modified.length ? 'waiting' : 'done'}>
             {git.modified.length ? `${git.modified.length} alterado(s)` : 'Árvore limpa'}
-          </span>
+          </Badge>
         )}
-        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { loadDir(dir); loadGit(); }}>
+        <Button size="sm" style={{ marginLeft: 'auto' }} onClick={() => { loadDir(dir); loadGit(); }}>
           <RefreshCw size={13} /> Atualizar
-        </button>
+        </Button>
       </div>
 
       {git?.isRepo && git.modified.length > 0 && (
@@ -175,11 +176,11 @@ export function FilesAndGit({ cwd, machine = '', onNotify }: Props) {
               className={`sb-item ${selectedFile === e.path ? 'active' : ''}`}
               onClick={() => (e.type === 'dir' ? loadDir(e.path) : openPreview(e.path, 'content'))}
             >
-              {e.type === 'dir' ? <Folder size={14} color="#e5c063" /> : <FileCode2 size={14} color="#8f96a6" />}
+              {e.type === 'dir' ? <Folder size={14} color="var(--ds-warn)" /> : <FileCode2 size={14} color="var(--ds-muted)" />}
               <span className="ell">{e.name}</span>
             </button>
           ))}
-          {!entries.length && <div className="empty" style={{ padding: 16 }}>Pasta vazia</div>}
+          {!entries.length && <EmptyState compact>Pasta vazia</EmptyState>}
 
           {git?.commits && git.commits.length > 0 && (
             <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 10 }}>

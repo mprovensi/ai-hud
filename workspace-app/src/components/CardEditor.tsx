@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api';
+import { Badge, Button, EmptyState, ModalFrame, StageDot } from '../ui';
 import type { CardExecIntent } from './LiveHudPane';
 import type {
   CardDoc,
@@ -1509,7 +1510,7 @@ export function CardEditor({
                   </div>
                 </div>
                 {detailModal.bodyPreview ? (
-                  <div className="card-item md" style={{ minHeight: 110, marginBottom: 0, background: '#101216' }}>
+                  <div className="card-item md ds-m0" style={{ minHeight: 110, background: 'var(--ds-inset)' }}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{detailModal.draft.body || '*Sem descrição.*'}</ReactMarkdown>
                   </div>
                 ) : (
@@ -1650,7 +1651,7 @@ export function CardEditor({
                 <img
                   src={api.entityAssetUrl(entityId, detailModal.draft.image)}
                   alt={detailModal.draft.alt || detailModal.draft.title}
-                  style={{ width: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)', background: '#101216' }}
+                  style={{ width: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--ds-inset)' }}
                 />
               )}
 
@@ -1668,7 +1669,7 @@ export function CardEditor({
                       <RefreshCw size={11} className={checkingGit ? 'spin' : ''} /> Verificar Git
                     </button>
                   </div>
-                  <div style={{ fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: '#101216', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <div className="ds-inset-box ds-stack" style={{ gap: 5 }}>
                     {modalCommitSt.state === 'committed' ? (
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ok)', flexWrap: 'wrap' }}>
@@ -1740,72 +1741,69 @@ export function CardEditor({
       })()}
 
       {/* Modal de Tarefas Arquivadas */}
-      {archiveModalOpen && (
-        <div className="modal-bg" onClick={() => setArchiveModalOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620, maxHeight: '84vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Archive size={16} color="var(--accent)" />
-                <h3 style={{ margin: 0, fontSize: 16 }}>Tarefas arquivadas ({archivedItems.length})</h3>
-              </div>
-              <button className="btn btn-sm btn-icon" onClick={() => setArchiveModalOpen(false)} title="Fechar">
-                <X size={15} />
-              </button>
-            </div>
-            <input
-              className="sb-search"
-              style={{ width: '100%', marginBottom: 10, flexShrink: 0 }}
-              value={archiveQuery}
-              onChange={(e) => setArchiveQuery(e.target.value)}
-              placeholder="Filtrar tarefas arquivadas…"
-            />
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7, paddingRight: 3 }}>
-              {filteredArchivedItems.length === 0 ? (
-                <div style={{ padding: 18, textAlign: 'center', color: 'var(--muted)', fontSize: 12.5 }}>
-                  Nenhuma tarefa arquivada encontrada.
-                </div>
-              ) : (
-                filteredArchivedItems.map((it) => (
-                  <div key={it.id} className="card-item stage-done" style={{ marginBottom: 0, padding: '9px 11px', opacity: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{it.title || '(sem título)'}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
-                          {it.phase && <span className="badge" style={{ fontSize: 10 }}>{it.phase}</span>}
-                          {it.commit?.hash && <span className="badge done mono" style={{ fontSize: 10 }}>{it.commit.hash}</span>}
-                          {it.archivedAt && (
-                            <span>Arquivada em {new Date(it.archivedAt).toLocaleDateString('pt-BR')}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => {
-                            setArchiveModalOpen(false);
-                            openItemModal(it);
-                          }}
-                        >
-                          Detalhes
-                        </button>
-                        {!offlineFallback && (
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => unarchiveItem(it.id)}
-                            title="Restaurar para a coluna Concluído"
-                          >
-                            <ArchiveRestore size={12} /> Restaurar
-                          </button>
-                        )}
-                      </div>
+      <ModalFrame
+        open={archiveModalOpen}
+        onClose={() => setArchiveModalOpen(false)}
+        closeOnBackdrop
+        maxWidth={620}
+        title={
+          <span className="ds-row">
+            <Archive size={16} color="var(--accent)" />
+            Tarefas arquivadas ({archivedItems.length})
+          </span>
+        }
+      >
+        <input
+          className="sb-search"
+          style={{ width: '100%', flexShrink: 0 }}
+          value={archiveQuery}
+          onChange={(e) => setArchiveQuery(e.target.value)}
+          placeholder="Filtrar tarefas arquivadas…"
+        />
+        <div className="ds-stack" style={{ gap: 7 }}>
+          {filteredArchivedItems.length === 0 ? (
+            <EmptyState compact>Nenhuma tarefa arquivada encontrada.</EmptyState>
+          ) : (
+            filteredArchivedItems.map((it) => (
+              <div key={it.id} className="card-item stage-done ds-m0" style={{ padding: '9px 11px', opacity: 1 }}>
+                <div className="ds-row" style={{ alignItems: 'flex-start', gap: 8 }}>
+                  <div className="ds-flex-1">
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{it.title || '(sem título)'}</div>
+                    <div className="ds-row ds-wrap ds-text-muted" style={{ marginTop: 4, fontSize: 11 }}>
+                      {it.phase && <Badge compact>{it.phase}</Badge>}
+                      {it.commit?.hash && <Badge tone="done" mono compact>{it.commit.hash}</Badge>}
+                      {it.archivedAt && (
+                        <span>Arquivada em {new Date(it.archivedAt).toLocaleDateString('pt-BR')}</span>
+                      )}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
+                  <div className="ds-row" style={{ flexShrink: 0 }}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setArchiveModalOpen(false);
+                        openItemModal(it);
+                      }}
+                    >
+                      Detalhes
+                    </Button>
+                    {!offlineFallback && (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => unarchiveItem(it.id)}
+                        title="Restaurar para a coluna Concluído"
+                      >
+                        <ArchiveRestore size={12} /> Restaurar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
-      )}
+      </ModalFrame>
 
       {/* Modal Goldfish Review */}
       {reviewModal && (
@@ -2252,7 +2250,7 @@ export function CardEditor({
                 >
                   <div className="board-col-head">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span className={`col-dot ${col.id}`} />
+                      <StageDot stage={col.id} />
                       {col.label} ({items.length})
                     </span>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api';
+import { ToolIcon } from '../ui';
 import { XtermPty } from './XtermPty';
 import type { CardStatus, SessionCard, SessionDetail, Snapshot } from '../types';
 
@@ -323,13 +324,16 @@ export function LiveHudPane({
                   {s.group && <span className="badge" style={{ fontSize: 10 }}>{s.group}</span>}
                   <span className={`badge ${s.state}`}>{s.state}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 6, fontSize: 11.5, color: 'var(--muted)', marginBottom: 4 }}>
-                  <span>{s.tool}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)', marginBottom: 4 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <ToolIcon tool={s.tool} size={12} />
+                    {s.tool}
+                  </span>
                   {s.machine && <span>· {s.machine}</span>}
                   {!!s.contextWindow && s.contextWindow > 0 && <span>· ctx {Math.round(((s.context || 0) / s.contextWindow) * 100)}%</span>}
                 </div>
                 {(s.lastReply || s.title) && (
-                  <div className="ell" style={{ fontSize: 12, color: '#bcc3d2' }}>{s.lastReply || s.title}</div>
+                  <div className="ell" style={{ fontSize: 12, color: 'var(--ds-text-soft)' }}>{s.lastReply || s.title}</div>
                 )}
               </button>
             ))
@@ -342,7 +346,7 @@ export function LiveHudPane({
           {/* Action / metadata sub-bar */}
           <div className="hud-chat-bar">
             <span className={`badge ${detail.state}`}>{detail.state}</span>
-            <span className="badge">{detail.tool}</span>
+            <span className="badge" style={{ gap: 5 }}><ToolIcon tool={detail.tool} size={11} /> {detail.tool}</span>
             {detail.machine && <span className="badge">{detail.machine}</span>}
             {!!detail.contextWindow && detail.contextWindow > 0 && (
               <span className="badge">ctx {Math.round(((detail.context || 0) / detail.contextWindow) * 100)}%</span>

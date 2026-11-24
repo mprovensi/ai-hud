@@ -25,10 +25,11 @@ import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { FilesAndGit } from './components/FilesAndGit';
 import { LiveHudPane } from './components/LiveHudPane';
 import { MemoryPanel } from './components/MemoryPanel';
+import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjectDrawer';
 import { NewSessionDrawer } from './components/NewSessionDrawer';
 import { NotesAndReports } from './components/NotesAndReports';
 import { TerminalPane } from './components/TerminalPane';
-import type { MachineCaps, Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
+import type { Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
 
 type Selection =
   | { kind: 'entity'; id: string }
@@ -73,9 +74,16 @@ export function App() {
   // Englobadores colapsáveis na sidebar
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-  // Gaveta lateral esquerda em altura total para Nova Conversa (padrão Mr. Mak)
+  // Gaveta lateral direita em altura total para Nova Conversa
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatPrompt, setNewChatPrompt] = useState('');
+
+  // Gaveta lateral esquerda em altura total para Novo Projeto / Novo Englobador
+  const [projectDrawer, setProjectDrawer] = useState<{ open: boolean; mode: ProjectDrawerMode; presetGroup: string }>({
+    open: false,
+    mode: 'project',
+    presetGroup: '',
+  });
 
   // Resize das 3 colunas (esquerda | centro flex:1 | direita)
   const [leftW, setLeftW] = useState(() => readStoredWidth('ai_ws_left_w', 260, 180, 480));
@@ -107,16 +115,6 @@ export function App() {
       window.removeEventListener('mouseup', onUp);
     };
   }, [draggingCol]);
-
-  // Modal + Novo Projeto
-  const [newModal, setNewModal] = useState(false);
-  const [caps, setCaps] = useState<MachineCaps[]>([]);
-  const [npTitle, setNpTitle] = useState('');
-  const [npDesc, setNpDesc] = useState('');
-  const [npGroup, setNpGroup] = useState('');
-  const [npTemplate, setNpTemplate] = useState('board');
-  const [npMachine, setNpMachine] = useState('');
-  const [npCwd, setNpCwd] = useState('');
 
   // Toast
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
@@ -218,68 +216,23 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const openNewModal = useCallback(async (presetGroup = '') => {
-    setNpGroup(presetGroup);
-    setNewModal(true);
-    try {
-      const c = await api.getCapabilities();
-      setCaps(c.machines || []);
-      const first = c.machines.find((m) => m.online) || c.machines[0];
-      if (first) {
-        setNpMachine(first.name);
-        setNpCwd(first.pinned?.[0] || first.cwds?.[0] || '');
-      }
-    } catch {}
+  const openNewModal = useCallback((presetGroup = '') => {
+    setProjectDrawer({ open: true, mode: 'project', presetGroup });
   }, []);
 
-  const openNewGroup = useCallback(async () => {
-    const raw = window.prompt('Nome do englobador de projetos (ex.: TRT, Jogos, Pessoal):');
-    if (!raw || !raw.trim()) return;
-    try {
-      await api.saveGroup({ name: raw.trim() });
-      await loadWorkspace();
-      notify(`Workspace "${raw.trim()}" criado.`);
-    } catch (e) {
-      notify((e as Error).message, true);
-    }
-  }, [loadWorkspace, notify]);
-
-  async function handleCreateEntity() {
-    if (!npTitle.trim()) return notify('Informe o nome do projeto.', true);
-    try {
-      const bindings = npMachine && npCwd.trim() ? [{ machine: npMachine, cwd: npCwd.trim() }] : [];
-      const r = await api.createEntity({
-        title: npTitle.trim(),
-        description: npDesc.trim(),
-        group: npGroup.trim(),
-        template: npTemplate,
-        projectBindings: bindings,
-      });
-      setNewModal(false);
-      setNpTitle('');
-      setNpDesc('');
-      setNpGroup('');
-      await loadWorkspace();
-      setSelection({ kind: 'entity', id: r.entity.id });
-      setEntityTab('step');
-      setStepIdx(0);
-      notify(`Projeto "${r.entity.title}" criado.`);
-    } catch (e) {
-      notify((e as Error).message, true);
-    }
-  }
+  const openNewGroup = useCallback(() => {
+    setProjectDrawer({ open: true, mode: 'group', presetGroup: '' });
+  }, []);
 
   async function handleChangeEntityGroup(entity: WorkspaceEntity, nextGroup: string) {
-    let target = nextGroup;
     if (nextGroup === '__new__') {
-      const raw = window.prompt('Nome do novo englobador (ex.: TRT, Jogos):');
-      if (!raw || !raw.trim()) return;
-      target = raw.trim();
+      openNewGroup();
+      return;
     }
     try {
-      await api.updateEntity({ id: entity.id, group: target });
+      await api.updateEntity({ id: entity.id, group: nextGroup });
       await loadWorkspace();
-      notify(target ? `Movido para "${target}".` : 'Removido do englobador.');
+      notify(nextGroup ? `Movido para "${nextGroup}".` : 'Removido do englobador.');
     } catch (e) {
       notify((e as Error).message, true);
     }
@@ -730,7 +683,29 @@ export function App() {
         />
       </div>
 
-      {/* Item 2: Gaveta lateral esquerda em altura total para Nova Conversa (Pasta + IA) */}
+      {/* Gaveta lateral esquerda: Novo Projeto / Novo Englobador (com seletor de pasta) */}
+      <NewProjectDrawer
+        open={projectDrawer.open}
+        initialMode={projectDrawer.mode}
+        presetGroup={projectDrawer.presetGroup}
+        groups={allGroups}
+        entities={ws?.entities || []}
+        onClose={() => setProjectDrawer((prev) => ({ ...prev, open: false }))}
+        onProjectCreated={async (entity) => {
+          await loadWorkspace();
+          setSelection({ kind: 'entity', id: entity.id });
+          setEntityTab('step');
+          setStepIdx(0);
+          notify(`Projeto "${entity.title}" criado.`);
+        }}
+        onGroupCreated={async (name) => {
+          await loadWorkspace();
+          notify(`Workspace "${name}" criado.`);
+        }}
+        onNotify={notify}
+      />
+
+      {/* Gaveta lateral direita: Nova Conversa com IA */}
       <NewSessionDrawer
         open={newChatOpen}
         onClose={() => setNewChatOpen(false)}
@@ -741,72 +716,6 @@ export function App() {
         onCreated={() => pollNowRef.current()}
         onNotify={notify}
       />
-
-      {/* Modal: Novo Projeto */}
-      {newModal && (
-        <div className="modal-bg" onClick={() => setNewModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Novo projeto no AI Workspace</h3>
-            <div className="field">
-              <label>Englobador / Workspace (ex.: TRT, Jogos)</label>
-              <input
-                className="inp"
-                list="wsGroupOptions"
-                value={npGroup}
-                onChange={(e) => setNpGroup(e.target.value)}
-                placeholder="Ex.: TRT, Jogos (ou deixe em branco)"
-              />
-              <datalist id="wsGroupOptions">
-                {allGroups.map((g) => <option key={g} value={g} />)}
-              </datalist>
-            </div>
-            <div className="field">
-              <label>Nome do projeto</label>
-              <input className="inp" autoFocus value={npTitle} onChange={(e) => setNpTitle(e.target.value)} placeholder="Ex.: PJe Automação" />
-            </div>
-            <div className="field">
-              <label>Descrição curta</label>
-              <input className="inp" value={npDesc} onChange={(e) => setNpDesc(e.target.value)} placeholder="Objetivo principal do projeto…" />
-            </div>
-            <div className="field">
-              <label>Visão inicial do card</label>
-              <select className="sel" value={npTemplate} onChange={(e) => setNpTemplate(e.target.value)}>
-                <option value="board">Board (Kanban: Ideia / Em andamento / Revisão / Concluído)</option>
-                <option value="research">Research (Lista rica com notas e links)</option>
-                <option value="gallery">Gallery (Grade visual com imagens e prompts)</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Vincular a uma pasta de código (opcional)</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <select
-                  className="sel"
-                  style={{ width: 170 }}
-                  value={npMachine}
-                  onChange={(e) => {
-                    setNpMachine(e.target.value);
-                    const m = caps.find((x) => x.name === e.target.value);
-                    if (m?.cwds?.[0]) setNpCwd(m.cwds[0]);
-                  }}
-                >
-                  <option value="">Sem vínculo</option>
-                  {caps.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                </select>
-                <input
-                  className="inp mono"
-                  value={npCwd}
-                  onChange={(e) => setNpCwd(e.target.value)}
-                  placeholder="Ex.: d:\Projetos\ai-hud"
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-              <button className="btn" onClick={() => setNewModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleCreateEntity}>Criar projeto</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <CommandPalette open={paletteOpen} actions={paletteActions} onClose={() => setPaletteOpen(false)} />
       {toast && <div className={`toast ${toast.err ? 'err' : ''}`}>{toast.msg}</div>}

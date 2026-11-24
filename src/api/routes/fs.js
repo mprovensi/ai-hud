@@ -22,7 +22,11 @@ const IMAGE_MIMES = {
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
 module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
-  function checkAuthorizedCwd(cwd) {
+  function checkAuthorizedCwd(cwd, { allowHomeSubdirs = false } = {}) {
+    const home = os.homedir();
+    if (allowHomeSubdirs && !(config && config.strictRemoteCwd) && home && isWithinRoot(home, cwd) && !isSecretPath(cwd)) {
+      return { ok: true };
+    }
     const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
     const wsRoots = [];
     if (dataDir) {
@@ -41,7 +45,7 @@ module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, termina
     return isCwdAllowed(cwd, {
       allowedRoots: [...((config && config.allowedRoots) || []), ...wsRoots],
       knownCwds,
-      home: os.homedir(),
+      home,
       strict: true,
     });
   }
@@ -91,7 +95,7 @@ module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, termina
         const q = `/api/fs/list?local=1&cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(relDir)}`;
         return relay(res, peers.forward(peer, 'GET', q));
       }
-      const check = checkAuthorizedCwd(cwd);
+      const check = checkAuthorizedCwd(cwd, { allowHomeSubdirs: true });
       if (!check.ok) return text(res, 403, check.reason);
       const r = fileList({ cwd, relDir });
       return r.status !== 200 ? text(res, r.status, r.error) : json(res, r.body);
@@ -108,7 +112,7 @@ module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, termina
         if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
         return relay(res, peers.forward(peer, 'POST', '/api/fs/mkdir?local=1', { cwd, name }));
       }
-      const check = checkAuthorizedCwd(cwd);
+      const check = checkAuthorizedCwd(cwd, { allowHomeSubdirs: true });
       if (!check.ok) return text(res, 403, check.reason);
       const baseCwd = normalizePath(cwd);
       if (!baseCwd || !fs.existsSync(baseCwd)) return text(res, 404, 'pasta raiz não encontrada');

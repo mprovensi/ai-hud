@@ -84,6 +84,7 @@ class Peers {
         snap: {
           now: s.now || q.at || now, tz: s.tz,
           today: s.today, sessionsToday: s.sessionsToday,
+          costs: s.costs,
           hours: s.hours, days: s.days,
           recent: Array.isArray(s.recent) ? s.recent.slice(0, 40) : [],
           quotas: s.quotas, burn: s.burn,

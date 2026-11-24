@@ -12,6 +12,7 @@ const { createCollector } = require('./collect/collector');
 const { createCapabilities } = require('./collect/capabilities');
 const { readFilePreview, listProjectFiles, readProjectGit } = require('./collect/file-preview');
 const { createQuotaTracker } = require('./collect/quotas/tracker');
+const { createFxTracker } = require('./collect/fx');
 const { Ollama } = require('./collect/ollama-status');
 const { buildSnapshot } = require('./views/snapshot');
 const { buildSessionDetail } = require('./views/session-detail');
@@ -109,6 +110,7 @@ function createApp({
 
   // federation: este PC junta as sessões e tokens dos secundários (config.peers) e repassa a eles as ações das sessões deles
   const machineName = config.name || os.hostname();
+  const fx = createFxTracker({ dataDir, config });
   const peers = new Peers(config.peers, path.join(dataDir, 'peer-ollamas.json'), path.join(dataDir, 'peer-cache.json'));
 
   // Snapshot local (usado quando outro hub pede ?local=1, evitando loop de federação)
@@ -116,8 +118,11 @@ function createApp({
     if (quotas.expired(now) && quotas.sinceRefresh(now) > 60e3) quotas.refreshAll();
     // Releitura do log cria um objeto novo: reaplica o fim das sessões encerradas pelo HUD
     for (const s of sessions) if (!s.endedAt && closeFn.endedAt) s.endedAt = closeFn.endedAt(s.id);
-    return buildSnapshot({ sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode, ideListen,
-      ollamaState: () => (showOllama ? ollama.state : null) });
+    return buildSnapshot({
+      sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode, ideListen,
+      fxState: fx.view(), pricingOverrides: config.pricing || null,
+      ollamaState: () => (showOllama ? ollama.state : null),
+    });
   }
   // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation) + metadados (pin/alias/grupo)
   const sessionMeta = createSessionMeta(dataDir);
@@ -199,6 +204,7 @@ function createApp({
     if (showOllama) ollama.start();
     capabilities.start();
     collector.start();
+    fx.start();
     memory.startScheduler();
     workspaceSync.startAutoSync();
     peers.start(() => collector.poke());

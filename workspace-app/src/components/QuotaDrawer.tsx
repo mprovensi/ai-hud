@@ -43,6 +43,18 @@ function fmtTokens(n: number): string {
   return String(Math.round(n));
 }
 
+function fmtUsd(v: number): string {
+  const n = Number(v) || 0;
+  if (n > 0 && n < 0.01) return '< US$ 0,01';
+  return `US$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtBrl(usd: number, rate: number): string {
+  const n = (Number(usd) || 0) * (Number(rate) || 5.8);
+  if (n > 0 && n < 0.01) return '< R$ 0,01';
+  return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function fmtDuration(ms: number): string {
   const mins = Math.max(0, Math.round(ms / 60000));
   if (mins < 60) return `${mins} min`;
@@ -129,6 +141,11 @@ export function QuotaDrawer({ provider, snapshot, onChangeProvider, onClose, onP
   const todayStats = snapshot?.today?.[meta.toolName];
   const sessToday = snapshot?.sessionsToday?.[meta.toolName] || 0;
   const activeCount = (snapshot?.active || []).filter((s) => s.tool === meta.toolName || (provider === 'gemini' && s.tool === 'Antigravity')).length;
+  const costs = snapshot?.costs;
+  const fxRate = costs?.usdToBrl || 5.8;
+  const costToday = costs?.today?.[meta.toolName];
+  const costWeek = costs?.week?.[meta.toolName];
+  const costMonth = costs?.month?.[meta.toolName];
 
   async function doRefresh() {
     if (refreshing) return;
@@ -217,6 +234,44 @@ export function QuotaDrawer({ provider, snapshot, onChangeProvider, onClose, onP
 
           {/* Gráfico de ritmo/projeção se disponível */}
           {burn && <BurnMiniChart burn={burn} color={meta.color} />}
+
+          {/* Valor equivalente em API (USD / BRL) */}
+          {costs && (
+            <div className="card-item" style={{ marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong style={{ fontSize: 13 }}>Valor equivalente (API)</strong>
+                <span className="badge" style={{ fontSize: 10 }} title={`Cotação usada (${costs.fxSource || 'estimada'})`}>
+                  US$ 1 = R$ {fxRate.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
+                {[
+                  { label: 'Hoje', b: costToday },
+                  { label: '7 dias', b: costWeek },
+                  { label: '30 dias', b: costMonth },
+                ].map(({ label, b }) => (
+                  <div key={label} style={{ padding: '7px 8px', borderRadius: 8, background: '#111318', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>{label}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2, color: 'var(--accent)' }}>
+                      {fmtUsd(b?.usd || 0)}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#cfd6e3', marginTop: 1 }}>
+                      {fmtBrl(b?.usd || 0, fxRate)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {(costToday && (costToday.input + costToday.output + costToday.cacheRead + costToday.cacheWrite > 0)) && (
+                <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 7 }}>
+                  Hoje: {fmtTokens(costToday.input)} in · {fmtTokens(costToday.output)} out
+                  {costToday.cacheRead > 0 ? ` · ${fmtTokens(costToday.cacheRead)} cache` : ''}
+                </div>
+              )}
+              <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 6, lineHeight: 1.4 }}>
+                Estimativa baseada nos tokens reais e tabela pública de API por modelo. Em assinaturas fixas (Pro/Max/Plus), indica o valor equivalente consumido dentro do plano.
+              </div>
+            </div>
+          )}
 
           {/* Resumo do dia */}
           <div className="card-item" style={{ marginBottom: 0 }}>

@@ -58,6 +58,21 @@ function mergeSnapshots({ local, localName, list, live, ollamasFor }) {
   out.sessionsToday = { ...local.sessionsToday };
   out.hours = local.hours.map((h) => ({ ...h }));
   out.days = local.days.map((d) => ({ ...d }));
+  if (local.costs) {
+    out.costs = JSON.parse(JSON.stringify(local.costs));
+  }
+  const addCostGroup = (target, source) => {
+    if (!target || !source) return;
+    for (const tool of ['Claude Code', 'Codex', 'Gemini']) {
+      if (!source[tool]) continue;
+      if (!target[tool]) target[tool] = { usd: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+      target[tool].usd = Math.round(((target[tool].usd || 0) + (source[tool].usd || 0)) * 10000) / 10000;
+      target[tool].input = (target[tool].input || 0) + (source[tool].input || 0);
+      target[tool].output = (target[tool].output || 0) + (source[tool].output || 0);
+      target[tool].cacheRead = (target[tool].cacheRead || 0) + (source[tool].cacheRead || 0);
+      target[tool].cacheWrite = (target[tool].cacheWrite || 0) + (source[tool].cacheWrite || 0);
+    }
+  };
   const localDay = Number.isFinite(local.now) ? dayKey(local.now, local.tz) : '';
   for (const p of withSnap) {
     const s = p.snap;
@@ -71,6 +86,16 @@ function mergeSnapshots({ local, localName, list, live, ollamasFor }) {
         out.today[tool].cacheRead += s.today[tool].cacheRead;
       }
       for (const tool of Object.keys(out.sessionsToday)) out.sessionsToday[tool] += (s.sessionsToday && s.sessionsToday[tool]) || 0;
+      if (out.costs && s.costs && s.costs.today) addCostGroup(out.costs.today, s.costs.today);
+    }
+    if (out.costs && s.costs) {
+      if (s.costs.week) addCostGroup(out.costs.week, s.costs.week);
+      if (s.costs.month) addCostGroup(out.costs.month, s.costs.month);
+      if ((!out.costs.fxUpdatedAt || out.costs.fxSource === 'fallback') && s.costs.usdToBrl && s.costs.fxSource === 'live') {
+        out.costs.usdToBrl = s.costs.usdToBrl;
+        out.costs.fxSource = s.costs.fxSource;
+        out.costs.fxUpdatedAt = s.costs.fxUpdatedAt || 0;
+      }
     }
     mergeSeries(out.hours, s.hours);
     mergeSeries(out.days, s.days, { byDay: true, targetTz: local.tz, sourceTz: s.tz });

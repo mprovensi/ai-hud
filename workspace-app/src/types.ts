@@ -240,6 +240,23 @@ export interface BurnSeries {
   runsOutIn?: number | null;
 }
 
+export interface CostBucket {
+  usd: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+export interface SnapshotCosts {
+  usdToBrl: number;
+  fxSource?: string;
+  fxUpdatedAt?: number;
+  today?: Record<string, CostBucket>;
+  week?: Record<string, CostBucket>;
+  month?: Record<string, CostBucket>;
+}
+
 export interface Snapshot {
   now: number;
   version?: string;
@@ -256,6 +273,7 @@ export interface Snapshot {
   };
   today?: Record<string, { fresh: number; cacheRead: number }>;
   sessionsToday?: Record<string, number>;
+  costs?: SnapshotCosts;
   active: SessionCard[];
   recent: SessionCard[];
   machines?: { name: string; ok: boolean; error?: string }[];

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Folder, FolderOpen, FolderSearch, Monitor, Star } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, FolderPlus, FolderSearch, Monitor, Star } from 'lucide-react';
 import { api } from '../api';
 import type { FsEntry, MachineCaps, WorkspaceEntity } from '../types';
 
@@ -83,6 +83,8 @@ export function FolderPicker({
   const [browseRel, setBrowseRel] = useState('');
   const [browseDirs, setBrowseDirs] = useState<FsEntry[]>([]);
   const [pickingNative, setPickingNative] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const currentMachine = useMemo(() => caps.find((m) => m.name === machine) || caps[0] || null, [caps, machine]);
   const pinnedSet = useMemo(() => new Set((currentMachine?.pinned || []).map((p) => p.toLowerCase())), [currentMachine]);
@@ -136,6 +138,12 @@ export function FolderPicker({
 
   async function openNativePicker() {
     if (pickingNative) return;
+    // Em máquinas Linux/VPS (headless), abre direto o navegador de pastas remoto a partir do home/cwd
+    if (currentMachine?.platform === 'linux') {
+      const start = cwd.trim() || currentMachine.home || '/';
+      await exploreFolder(start, '');
+      return;
+    }
     setPickingNative(true);
     try {
       const r = await api.pickFolder({ machine: currentMachine?.name, initialDir: cwd.trim() || undefined });
@@ -146,9 +154,35 @@ export function FolderPicker({
         onChangeCwd(r.path);
       }
     } catch (e) {
-      onNotify((e as Error).message, true);
+      if (currentMachine?.home) {
+        await exploreFolder(currentMachine.home, '');
+      } else {
+        onNotify((e as Error).message, true);
+      }
     } finally {
       setPickingNative(false);
+    }
+  }
+
+  async function handleCreateNewFolder() {
+    const clean = newFolderName.trim();
+    if (!clean || creatingFolder) return;
+    const base = browseBase || cwd.trim() || currentMachine?.home || '';
+    if (!base) return onNotify('Escolha uma pasta base antes de criar uma nova pasta.', true);
+    const rel = browseBase && browseRel ? `${browseRel}/${clean}` : clean;
+    setCreatingFolder(true);
+    try {
+      const r = await api.mkdir({ cwd: base, name: rel, machine: currentMachine?.name });
+      setNewFolderName('');
+      onChangeCwd(r.path);
+      if (browseBase) {
+        await exploreFolder(browseBase, r.relPath);
+      }
+      onNotify(`Pasta "${clean}" criada em ${currentMachine?.name || 'servidor'}.`);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setCreatingFolder(false);
     }
   }
 
@@ -185,6 +219,16 @@ export function FolderPicker({
             {allowEmpty && cwd && (
               <button type="button" className="btn btn-sm" onClick={() => onChangeCwd('')}>
                 Sem vínculo
+              </button>
+            )}
+            {!browseBase && currentMachine?.home && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => exploreFolder(currentMachine.home!, '')}
+                title={`Explorar e criar pastas em ${currentMachine.home}`}
+              >
+                <FolderOpen size={12} /> Explorar {currentMachine.platform === 'linux' ? 'VPS' : 'Home'}
               </button>
             )}
             {browseBase && (
@@ -306,6 +350,26 @@ export function FolderPicker({
                 </button>
               ))
             )}
+            <div style={{ display: 'flex', gap: 6, padding: '6px 4px 2px', borderTop: '1px solid var(--border)', marginTop: 4 }}>
+              <input
+                className="inp mono"
+                style={{ flex: 1, minWidth: 0, fontSize: 11.5, padding: '5px 8px' }}
+                value={newFolderName}
+                disabled={creatingFolder}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateNewFolder(); } }}
+                placeholder="Nova pasta aqui (ex.: projetos)…"
+              />
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={creatingFolder || !newFolderName.trim()}
+                onClick={handleCreateNewFolder}
+                title="Criar nova pasta nesta máquina"
+              >
+                <FolderPlus size={12} /> {creatingFolder ? 'Criando…' : 'Criar'}
+              </button>
+            </div>
           </div>
         )}
       </div>

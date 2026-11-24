@@ -3,10 +3,11 @@
 // renomear ou remover quebra versões antigas que ainda estejam rodando.
 const { sessionState, compareSessions, base } = require('../core/session');
 const { usage } = require('../core/usage');
+const { summarizeCosts } = require('../core/pricing');
 
 // quotas: { view(now), burn(now, codexSessions) }; pendingInfo(s, now): resposta na fila, hook escutando,
 // permissão aberta; ollamaState(): cartão do Ollama deste PC (null = não mostrar)
-function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remoteMode, ideListen = false }) {
+function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remoteMode, ideListen = false, fxState = null, pricingOverrides = null }) {
   const card = (s) => ({
     tool: s.tool, id: s.id, where: s.where || '', project: s.project || base(s.cwd) || '—', title: s.title || s.firstPrompt,
     start: Date.parse(s.start), end: Date.parse(s.end), state: sessionState(s, now), lastTool: s.lastTool,
@@ -26,10 +27,20 @@ function buildSnapshot({ sessions, now, quotas, pendingInfo, ollamaState, remote
   // Pedido de permissão aberto: a sessão está parada esperando o usuário
   for (const v of cards) if (v.permission) v.state = 'permission';
 
+  const costSummary = summarizeCosts(sessions, now, pricingOverrides);
+  const fx = fxState && typeof fxState === 'object' ? fxState : { usdToBrl: 5.8, source: 'fallback', updatedAt: 0 };
+
   return {
     // tz: fuso do PC em minutos; os aparelhos mostram os horários no fuso e no relógio do PC
     now, tz: -new Date(now).getTimezoneOffset(), remoteMode, ideListen: !!ideListen, quotas: quotas.view(now),
-    ...usage(sessions, now), ollama: ollamaState(),
+    ...usage(sessions, now),
+    costs: {
+      usdToBrl: fx.usdToBrl || 5.8,
+      fxSource: fx.source || 'fallback',
+      fxUpdatedAt: fx.updatedAt || 0,
+      ...costSummary,
+    },
+    ollama: ollamaState(),
     burn: quotas.burn(now, sessions.filter((s) => s.tool === 'Codex')),
     // Permissões pendentes primeiro; os demais cards seguem a última atividade.
     active: cards.filter((s) => s.state !== 'closed').sort(compareSessions),

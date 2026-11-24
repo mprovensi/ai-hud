@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, FileCode2, Folder, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
+import { ChevronLeft, FileCode2, Folder, FolderPlus, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import type { FsEntry, GitInfo } from '../types';
 
@@ -17,6 +17,27 @@ export function FilesAndGit({ cwd, machine = '', onNotify }: Props) {
   const [mode, setMode] = useState<'diff' | 'content'>('diff');
   const [preview, setPreview] = useState<{ content: string; mode: string; binary?: boolean; redacted?: boolean; fallback?: string } | null>(null);
   const [loadingPrev, setLoadingPrev] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  async function createFolderHere() {
+    const clean = newFolderName.trim();
+    if (!clean || creatingFolder) return;
+    const rel = dir ? `${dir}/${clean}` : clean;
+    setCreatingFolder(true);
+    try {
+      await api.mkdir({ cwd, name: rel, machine });
+      setNewFolderName('');
+      setNewFolderOpen(false);
+      await loadDir(dir);
+      onNotify(`Pasta "${clean}" criada.`);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
 
   async function loadDir(nextDir: string) {
     try {
@@ -118,8 +139,36 @@ export function FilesAndGit({ cwd, machine = '', onNotify }: Props) {
                 <ChevronLeft size={14} />
               </button>
             )}
-            <span className="mono ell" style={{ fontSize: 12, color: 'var(--muted)' }}>/{dir}</span>
+            <span className="mono ell" style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>/{dir}</span>
+            <button
+              className="btn btn-sm btn-icon"
+              onClick={() => setNewFolderOpen((v) => !v)}
+              title="Criar nova pasta neste diretório"
+              aria-label="Nova pasta"
+            >
+              <FolderPlus size={13} />
+            </button>
           </div>
+          {newFolderOpen && (
+            <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+              <input
+                className="inp mono"
+                style={{ flex: 1, minWidth: 0, fontSize: 11.5, padding: '4px 7px' }}
+                autoFocus
+                value={newFolderName}
+                disabled={creatingFolder}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); createFolderHere(); }
+                  if (e.key === 'Escape') setNewFolderOpen(false);
+                }}
+                placeholder="nome-da-pasta"
+              />
+              <button className="btn btn-sm btn-primary" disabled={creatingFolder || !newFolderName.trim()} onClick={createFolderHere}>
+                Criar
+              </button>
+            </div>
+          )}
           {entries.map((e) => (
             <button
               key={e.path}

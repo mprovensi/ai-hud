@@ -30,6 +30,7 @@ import type {
   CardTemplate,
   ConflictError,
   GoldfishEstimate,
+  GoldfishReviewResult,
   ProjectDocEntry,
 } from '../types';
 
@@ -91,8 +92,16 @@ export function CardEditor({
   const [aiStructLoading, setAiStructLoading] = useState(false);
   const [aiProposed, setAiProposed] = useState<CardItem[] | null>(null);
 
-  // Revisão Goldfish sob demanda direto do Quadro
-  const [reviewTarget, setReviewTarget] = useState<{ itemId: string; docPath: string; estimate: GoldfishEstimate } | null>(null);
+  // Revisão Goldfish sob demanda direto do Quadro (modal sempre visível)
+  const [reviewModal, setReviewModal] = useState<{
+    itemId: string;
+    itemTitle: string;
+    docPath: string;
+    loading: boolean;
+    estimate: GoldfishEstimate | null;
+    result: GoldfishReviewResult | null;
+    error: string;
+  } | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
 
   // Drag-and-drop entre colunas
@@ -166,7 +175,7 @@ export function CardEditor({
     setImportOpen(false);
     setAiStructEstimate(null);
     setAiProposed(null);
-    setReviewTarget(null);
+    setReviewModal(null);
     load();
     refreshProjectDocs();
   }, [entityId, filePath, hasProjectCwd, reloadKey]);
@@ -321,36 +330,52 @@ export function CardEditor({
     const docPath = (item.docRef || '').split('#')[0];
     if (!docPath || reviewRunning) return;
     setReviewRunning(true);
+    setReviewModal({
+      itemId: item.id,
+      itemTitle: item.title,
+      docPath,
+      loading: true,
+      estimate: null,
+      result: null,
+      error: '',
+    });
     try {
       const r = await api.reviewProjectSpec({ entityId, docPath, itemId: item.id, dryRun: true });
       if ('dryRun' in r && r.dryRun) {
-        setReviewTarget({ itemId: item.id, docPath, estimate: r });
+        setReviewModal((prev) => (prev ? { ...prev, loading: false, estimate: r } : null));
+      } else {
+        setReviewModal((prev) => (prev ? { ...prev, loading: false, error: 'Resposta inesperada da estimativa.' } : null));
       }
     } catch (e) {
-      onNotify((e as Error).message, true);
+      const msg = (e as Error).message || 'Falha ao calcular estimativa.';
+      setReviewModal((prev) => (prev ? { ...prev, loading: false, error: msg } : null));
+      onNotify(msg, true);
     } finally {
       setReviewRunning(false);
     }
   }
 
   async function confirmItemReview() {
-    if (!reviewTarget || reviewRunning) return;
+    if (!reviewModal || reviewRunning) return;
     setReviewRunning(true);
+    setReviewModal((prev) => (prev ? { ...prev, loading: true, error: '' } : null));
     try {
       const r = await api.reviewProjectSpec({
         entityId,
-        docPath: reviewTarget.docPath,
-        itemId: reviewTarget.itemId,
+        docPath: reviewModal.docPath,
+        itemId: reviewModal.itemId,
         dryRun: false,
       });
       if (!('dryRun' in r)) {
         const tok = r.usage ? ` · ${fmtTok(r.usage.totalTokens)} tok${r.usage.estimated ? ' est.' : ''}` : '';
         onNotify(`Goldfish (${r.engine}${tok}): ${r.verdict === 'approved' ? 'Spec aprovada' : 'Ajustes sugeridos'}`);
-        setReviewTarget(null);
+        setReviewModal((prev) => (prev ? { ...prev, loading: false, result: r } : null));
         await load(true);
       }
     } catch (e) {
-      onNotify((e as Error).message, true);
+      const msg = (e as Error).message || 'Falha durante a revisão Goldfish.';
+      setReviewModal((prev) => (prev ? { ...prev, loading: false, error: msg } : null));
+      onNotify(msg, true);
     } finally {
       setReviewRunning(false);
     }
@@ -653,7 +678,7 @@ export function CardEditor({
   const totalTasksInDocs = projectDocs.reduce((acc, d) => acc + (d.taskCount || 0), 0);
 
   return (
-    <div>
+    <div className="card-editor-root">
       {conflict && (
         <div className="conflict-box">
           <h4>Conflito 409 — o quadro mudou em disco</h4>
@@ -696,33 +721,117 @@ export function CardEditor({
         </div>
       )}
 
-      {reviewTarget && (
-        <div className="goldfish-box">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-            <div>
-              <strong style={{ fontSize: 13 }}>🐟 Revisão Goldfish de <code className="mono">{reviewTarget.docPath}</code></strong>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
-                {reviewTarget.estimate.available ? (
-                  <>
-                    1 chamada isolada (contexto zero) · Motor: <b style={{ color: 'var(--text)' }}>{reviewTarget.estimate.engine}{reviewTarget.estimate.model ? `/${reviewTarget.estimate.model}` : ''}</b> ·
-                    Estimativa: <b style={{ color: 'var(--text)' }}>~{fmtTok(reviewTarget.estimate.estimatedTotalTokens)} tokens</b>
-                    {reviewTarget.estimate.engine === 'Ollama' ? ' (0 de cota!)' : ''}
-                  </>
-                ) : (
-                  <span style={{ color: 'var(--warn)' }}>Nenhum motor disponível: {reviewTarget.estimate.reason}</span>
-                )}
+      {reviewModal && (
+        <div className="modal-bg" onClick={() => { if (!reviewRunning) setReviewModal(null); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>🐟 Revisão Goldfish (EGM Lite)</h3>
+              <button className="btn btn-sm" disabled={reviewRunning} onClick={() => setReviewModal(null)}>Fechar</button>
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12 }}>
+              Item: <b style={{ color: 'var(--text)' }}>{reviewModal.itemTitle}</b><br />
+              Documento: <code className="mono" style={{ color: 'var(--accent)' }}>{reviewModal.docPath}</code>
+            </div>
+
+            {reviewModal.error && (
+              <div className="conflict-box" style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12.5 }}>{reviewModal.error}</div>
               </div>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-sm" onClick={() => setReviewTarget(null)}>Cancelar</button>
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={!reviewTarget.estimate.available || reviewRunning}
-                onClick={confirmItemReview}
-              >
-                {reviewRunning ? 'Revisando…' : 'Confirmar revisão'}
-              </button>
-            </div>
+            )}
+
+            {reviewModal.loading && !reviewModal.result ? (
+              <div className="goldfish-box" style={{ textAlign: 'center', padding: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {reviewModal.estimate ? 'Revisando especificação com contexto zero (Goldfish)…' : 'Calculando estimativa de tokens…'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  {reviewModal.estimate ? 'Aguarde alguns segundos pela resposta estruturada.' : 'Custo atual: 0 tokens.'}
+                </div>
+              </div>
+            ) : reviewModal.result ? (
+              <div className="goldfish-box">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {reviewModal.result.verdict === 'approved'
+                    ? <CheckCircle2 size={16} color="var(--ok)" />
+                    : <ShieldAlert size={16} color="var(--warn)" />}
+                  <strong style={{ fontSize: 13.5 }}>
+                    {reviewModal.result.verdict === 'approved' ? 'Spec Aprovada pelo Goldfish' : 'Goldfish sugeriu ajustes'}
+                  </strong>
+                  <span className="badge">{reviewModal.result.engine}{reviewModal.result.model ? `/${reviewModal.result.model}` : ''}</span>
+                  {reviewModal.result.usage && (
+                    <span className="badge">
+                      {fmtTok(reviewModal.result.usage.totalTokens)} tok ({reviewModal.result.usage.estimated ? 'est.' : 'real'})
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: '0 0 8px', fontSize: 13 }}>{reviewModal.result.summary}</p>
+                {reviewModal.result.gaps.length > 0 && (
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    <b>Lacunas:</b>
+                    <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+                      {reviewModal.result.gaps.map((g, i) => <li key={i}>{g}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {reviewModal.result.risks.length > 0 && (
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    <b>Riscos:</b>
+                    <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+                      {reviewModal.result.risks.map((rk, i) => <li key={i}>{rk}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {reviewModal.result.cuts.length > 0 && (
+                  <div style={{ fontSize: 12, marginTop: 6 }}>
+                    <b>Simplificações:</b>
+                    <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+                      {reviewModal.result.cuts.map((c, i) => <li key={i}>{c}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  {reviewModal.result.reportPath && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => {
+                        const rp = reviewModal.result?.reportPath;
+                        setReviewModal(null);
+                        if (rp) onOpenDoc?.(rp);
+                      }}
+                    >
+                      Abrir parecer em Docs & Specs
+                    </button>
+                  )}
+                  <button className="btn btn-sm" onClick={() => setReviewModal(null)}>Concluir</button>
+                </div>
+              </div>
+            ) : reviewModal.estimate ? (
+              <div className="goldfish-box">
+                <div style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 12 }}>
+                  {reviewModal.estimate.available ? (
+                    <>
+                      1 chamada isolada (contexto zero, sem histórico de conversa).<br />
+                      Motor: <b>{reviewModal.estimate.engine}{reviewModal.estimate.model ? `/${reviewModal.estimate.model}` : ''}</b><br />
+                      Estimativa: <b>~{fmtTok(reviewModal.estimate.estimatedTotalTokens)} tokens</b>
+                      {' '}(entrada ~{fmtTok(reviewModal.estimate.estimatedInputTokens)} / saída ~{fmtTok(reviewModal.estimate.estimatedOutputTokens)})
+                      {reviewModal.estimate.engine === 'Ollama' ? ' · 0 de cota!' : ''}
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--warn)' }}>Nenhum motor disponível: {reviewModal.estimate.reason}</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button className="btn btn-sm" onClick={() => setReviewModal(null)}>Cancelar</button>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    disabled={!reviewModal.estimate.available || reviewRunning}
+                    onClick={confirmItemReview}
+                  >
+                    Confirmar revisão Goldfish
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}

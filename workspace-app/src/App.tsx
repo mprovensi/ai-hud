@@ -710,7 +710,7 @@ export function App() {
                 </div>
               </div>
 
-              <div className="stage-content">
+              <div className={`stage-content ${entityTab === 'step' && activeStep && (activeStep.viewer === 'card' || activeStep.path.endsWith('.card.json')) ? 'stage-board' : ''}`}>
                 {entityTab === 'step' && activeStep ? (
                   activeStep.viewer === 'card' || activeStep.path.endsWith('.card.json') ? (
                     <CardEditor

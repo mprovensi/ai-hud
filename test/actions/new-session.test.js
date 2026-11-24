@@ -161,6 +161,20 @@ test('createReplies continua Claude sem terminal via claude -p --resume e Codex 
   assert.equal(rx.status, 200);
   assert.deepEqual(rx.body, { sent: true });
   assert.deepEqual(s.calls[1].args, ['exec', 'resume', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', uuid, 'rode os testes']);
+
+  // Sessão Codex headless (`codexExec: true`, criada pelo HUD/Workspace) NUNCA deve cair em `codex queue` mesmo que ele retorne exit 0
+  let queueCalled = false;
+  const replyHeadless = createReplies({
+    queue: { set() {}, listenState: () => null },
+    codexExe: 'codex.exe',
+    exec: (exe, args, opts, cb) => { queueCalled = true; cb(null, '', ''); },
+    spawn: s.spawn,
+    findSession: () => ({ tool: 'Codex', id: `rollout-2026-${uuid}`, cwd: '/proj', codexExec: true }),
+  });
+  const rx2 = await replyHeadless({ key: uuid, text: 'segunda mensagem', tool: 'Codex' });
+  assert.equal(rx2.status, 200);
+  assert.equal(queueCalled, false, 'codex queue não deve ser chamado para sessão codex_exec');
+  assert.deepEqual(s.calls[2].args, ['exec', 'resume', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', uuid, 'segunda mensagem']);
 });
 
 test('running bloqueia respostas concorrentes na mesma sessão (409) e expõe erro tardio no /api/session', async () => {

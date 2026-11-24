@@ -112,6 +112,7 @@ function parseCodex(f) {
       s.cwd = p.cwd || '';
       s.subagent = !!(p.source && p.source.subagent);
       s.where = codexWhere(p);
+      s.codexExec = p.originator === 'codex_exec' || p.source === 'exec';
       s.contextWindow = p.context_window || s.contextWindow;
     }
     if (r.type === 'turn_context' && p.model) s.models.add(p.model);

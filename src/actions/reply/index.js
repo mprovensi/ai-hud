@@ -57,12 +57,24 @@ function createReplies({ queue, claudeExe = '', codexExe, agyExe, exec, spawn, f
     if (tool === 'Codex') {
       if (!/^[0-9a-f-]{36}$/.test(key) || !text) return { status: 400, body: 'sessão inválida' };
       if (running && running.isBusy(key)) return { status: 409, body: 'esta sessão já está executando uma resposta; aguarde terminar' };
+      const s = findSession((x) => x.tool === 'Codex' && (x.id === key || x.id.endsWith('-' + key)));
+      // Sessões iniciadas em modo headless (`codex exec`, ex.: criadas pelo AI Workspace/HUD) não possuem TUI/VS Code
+      // ouvindo `codex queue` — se chamarmos `codex queue`, ele retorna 0 e a mensagem fica presa em queue_1.sqlite sem executar!
+      // Nesses casos, retomamos diretamente via `codex exec resume`.
+      if (s && s.codexExec) {
+        if (!codexExe) return { status: 502, body: 'Codex CLI não encontrado neste PC.' };
+        try {
+          await spawnDetached(codexExe,
+            ['exec', 'resume', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', key, text],
+            s && s.cwd, spawn, running, key);
+          return { status: 200, body: { sent: true } };
+        } catch (e) { return { status: 502, body: e.message }; }
+      }
       try {
         await codexQueue({ exe: codexExe, key, text, exec });
         return { status: 200, body: { sent: true } };
       } catch (queueErr) {
-        // Sessão criada pelo HUD (ou sem terminal aberto): retoma via `codex exec resume`
-        const s = findSession((x) => x.tool === 'Codex' && (x.id === key || x.id.endsWith('-' + key)));
+        // Sessão sem terminal aberto: retoma via `codex exec resume`
         if (!codexExe) return { status: 502, body: queueErr.message };
         try {
           await spawnDetached(codexExe,

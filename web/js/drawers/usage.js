@@ -28,6 +28,47 @@
 
   function usageRow(label, value) { return '<div class="dl"><span>' + esc(label) + '</span><span>' + value + '</span></div>'; }
 
+  function fmtMoneyPt(val, prefix) {
+    var n = Number(val) || 0;
+    if (n > 0 && n < 0.01) return '< ' + prefix + ' 0,01';
+    var parts = n.toFixed(2).split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return prefix + ' ' + parts[0] + ',' + parts[1];
+  }
+
+  function usageCostPanel(costs, toolName) {
+    if (!costs) return '';
+    var rate = Number(costs.usdToBrl) || 5.8;
+    var cDay = (costs.today && costs.today[toolName]) || { usd: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    var cWeek = (costs.week && costs.week[toolName]) || { usd: 0 };
+    var cMonth = (costs.month && costs.month[toolName]) || { usd: 0 };
+    var rateTxt = 'US$ 1 = ' + fmtMoneyPt(rate, 'R$');
+    var periods = [
+      { lbl: 'Hoje', usd: cDay.usd || 0 },
+      { lbl: '7 dias', usd: cWeek.usd || 0 },
+      { lbl: '30 dias', usd: cMonth.usd || 0 }
+    ];
+    var h = '<div class="panel"><div class="row cost-head"><h2 class="grow" style="margin:0">Valor equivalente (API)</h2>' +
+      '<span class="cost-fx" title="Cotação (' + esc(costs.fxSource || 'estimada') + ')">' + esc(rateTxt) + '</span></div>' +
+      '<div class="cost-grid">';
+    for (var i = 0; i < periods.length; i++) {
+      var p = periods[i];
+      h += '<div class="cost-box">' +
+        '<div class="cost-lbl">' + p.lbl + '</div>' +
+        '<div class="cost-usd">' + esc(fmtMoneyPt(p.usd, 'US$')) + '</div>' +
+        '<div class="cost-brl">' + esc(fmtMoneyPt(p.usd * rate, 'R$')) + '</div>' +
+        '</div>';
+    }
+    h += '</div>';
+    var tokToday = (cDay.input || 0) + (cDay.output || 0) + (cDay.cacheRead || 0) + (cDay.cacheWrite || 0);
+    if (tokToday > 0) {
+      h += '<div class="cost-meta">Hoje: ' + k(cDay.input || 0) + ' in · ' + k(cDay.output || 0) + ' out' +
+        (cDay.cacheRead > 0 ? ' · ' + k(cDay.cacheRead) + ' cache' : '') + '</div>';
+    }
+    h += '<div class="cost-note">Estimativa baseada nos tokens reais e tabela pública de API por modelo. Em planos fixos, mostra o valor equivalente consumido.</div></div>';
+    return h;
+  }
+
   function extraGroupLabel(name) {
     if (/^claude and gpt models$/i.test(String(name || ''))) return 'Claude e GPT (Antigravity)';
     return String(name || 'Outros modelos');
@@ -89,6 +130,7 @@
       html += '<div class="panel"><h2>' + burnTitle + '</h2><div class="burnbox" id="burn"></div><div class="axis" id="burnAxis"></div>' +
         '<div class="legend"><span>━ real</span><span>╌ ritmo atual</span><span>│ agora</span><span class="hi">● cota acaba</span></div></div>';
     }
+    html += usageCostPanel(s.costs, u.tool);
     var t = (s.today && s.today[u.tool]) || { fresh: 0, cacheRead: 0 }, n = (s.sessionsToday && s.sessionsToday[u.tool]) || 0;
     var h = bars(s.hours || [], false, u.tool);
     html += '<div class="panel"><h2>Hoje</h2><div class="today"><div class="tday"><div class="big">' + k(t.fresh) + '</div><small>tokens novos</small></div>' +

@@ -86,4 +86,17 @@
 .path { font-family: Menlo, monospace; font-size: .8em; color: #b5b5ae; word-wrap: break-word; }
 .egroup + .egroup { margin-top: 12px; padding-top: 10px; border-top: 1px solid #2c2c29; }
 .ename { font-size: .88em; font-weight: 700; color: #d5d5cf; margin-bottom: 6px; }
+/* Valor monetário equivalente em API (sem gap, ES5/Safari 9) */
+.cost-head { margin-bottom: 10px; }
+.cost-fx { font-size: .74em; color: #9ea3b0; background: #222630; border: 1px solid #303544; border-radius: 99px;
+  padding: 2px 8px; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.cost-grid { display: -webkit-flex; display: flex; }
+.cost-box { -webkit-flex: 1 1 0%; flex: 1 1 0%; min-width: 0; background: #14171d; border: 1px solid #282c38;
+  border-radius: 10px; padding: 8px 9px; margin-right: 8px; }
+.cost-box:last-child { margin-right: 0; }
+.cost-lbl { font-size: .72em; color: #8d92a0; margin-bottom: 3px; }
+.cost-usd { font-size: 1.02em; font-weight: 700; color: #5fb8a4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cost-brl { font-size: .78em; color: #c4c8d4; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cost-meta { font-size: .74em; color: #9aa0ad; margin-top: 8px; }
+.cost-note { font-size: .72em; color: #7e8390; margin-top: 6px; line-height: 1.4; }
 

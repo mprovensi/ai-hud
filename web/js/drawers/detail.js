@@ -427,6 +427,14 @@
   // Horário da última resposta no título do painel ("às 09:12", "ontem 18:40")
   function replyTime(d) { return d.lastReplyAt ? ' <span class="htime">· ' + when(d.lastReplyAt) + '</span>' : ''; }
 
+  function speakIcon(name) {
+    if (typeof icon === 'function') return icon(name);
+    var p = name === 'stop'
+      ? '<rect x="6" y="6" width="12" height="12" rx="2"/>'
+      : '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>';
+    return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + p + '</svg>';
+  }
+
   function renderConversation(d) {
     var msgs = d.history && d.history.length ? d.history : null;
     if (!msgs && (d.lastPrompt || d.lastReply)) {
@@ -439,7 +447,7 @@
     if (msgs && msgs.length) {
       var title = d.where === 'ollama-run' && !d.lastReply ? 'Últimos comandos no terminal' : 'Conversa';
       html += '<div class="row chead"><h2 class="grow">' + title + '</h2>' +
-        (d.lastReply ? '<button type="button" class="pcmini" id="speakLast" title="Ouvir última resposta (TTS local)">🔊 Ler</button>' : '') +
+        (d.lastReply ? '<button type="button" class="speak-ico" id="speakLast" aria-label="Ouvir última resposta" title="Ouvir última resposta">' + speakIcon('volume') + '</button>' : '') +
         (d.lastReplyAt ? '<span class="muted ctime">' + when(d.lastReplyAt) + '</span>' : '') + '</div>' +
         '<div class="convo lastreply" id="lastReply" tabindex="-1">';
       for (var i = 0; i < msgs.length; i++) {
@@ -645,30 +653,49 @@
         if (!err && r.ok) { d.canStop = false; if (d.state === 'working') d.state = 'waiting'; renderDetail(d); }
       }, { id: d.id });
     };
+    function setSpeakBtn(b, state) {
+      if (!b) return;
+      if (state === 'playing') {
+        b.className = 'speak-ico playing';
+        b.innerHTML = speakIcon('stop');
+        b.title = 'Parar leitura';
+        b.setAttribute('aria-label', 'Parar leitura');
+      } else if (state === 'loading') {
+        b.className = 'speak-ico loading';
+        b.innerHTML = speakIcon('volume');
+        b.title = 'Carregando áudio…';
+        b.setAttribute('aria-label', 'Carregando áudio');
+      } else {
+        b.className = 'speak-ico';
+        b.innerHTML = speakIcon('volume');
+        b.title = 'Ouvir última resposta';
+        b.setAttribute('aria-label', 'Ouvir última resposta');
+      }
+    }
     if ($('speakLast')) $('speakLast').onclick = function () {
       var b = this;
       if (window._hudTtsAudio) {
         try { window._hudTtsAudio.pause(); } catch (e) {}
         window._hudTtsAudio = null;
-        b.textContent = '🔊 Ler';
+        setSpeakBtn(b, 'idle');
         return;
       }
       if (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) {
         try { speechSynthesis.cancel(); } catch (e) {}
-        b.textContent = '🔊 Ler';
+        setSpeakBtn(b, 'idle');
         return;
       }
       b.disabled = true;
-      b.textContent = '🔊…';
+      setSpeakBtn(b, 'loading');
       request('POST', '/api/voice/speak?format=json', function (err, r) {
         b.disabled = false;
         if (!err && r && r.audioBase64) {
           try {
             var audio = new Audio('data:' + (r.contentType || 'audio/wav') + ';base64,' + r.audioBase64);
             window._hudTtsAudio = audio;
-            b.textContent = '⏹ Parar';
-            audio.onended = function () { window._hudTtsAudio = null; if ($('speakLast')) $('speakLast').textContent = '🔊 Ler'; };
-            audio.onerror = function () { window._hudTtsAudio = null; if ($('speakLast')) $('speakLast').textContent = '🔊 Ler'; };
+            setSpeakBtn(b, 'playing');
+            audio.onended = function () { window._hudTtsAudio = null; setSpeakBtn($('speakLast'), 'idle'); };
+            audio.onerror = function () { window._hudTtsAudio = null; setSpeakBtn($('speakLast'), 'idle'); };
             audio.play();
             return;
           } catch (playErr) {}
@@ -676,12 +703,12 @@
         if (typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined') {
           var u = new SpeechSynthesisUtterance(String(d.lastReply || '').slice(0, 1200));
           u.lang = 'pt-BR';
-          b.textContent = '⏹ Parar';
-          u.onend = function () { if ($('speakLast')) $('speakLast').textContent = '🔊 Ler'; };
+          setSpeakBtn(b, 'playing');
+          u.onend = function () { setSpeakBtn($('speakLast'), 'idle'); };
           speechSynthesis.speak(u);
           return;
         }
-        b.textContent = '🔊 Ler';
+        setSpeakBtn(b, 'idle');
         flash('Leitura em voz indisponível: ' + (err ? err.message : 'sem áudio'), false);
       }, { text: String(d.lastReply || '').slice(0, 1800) });
     };

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
+  Archive,
+  ArchiveRestore,
   Bot,
   CheckCircle2,
   Columns3,
@@ -265,6 +267,8 @@ export function CardEditor({
 
   // Modal de detalhes e edição de card
   const [detailModal, setDetailModal] = useState<{ draft: CardItem; isNew: boolean; bodyPreview: boolean } | null>(null);
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [archiveQuery, setArchiveQuery] = useState('');
 
   // Descoberta e importação de docs/ (0 tokens + opção IA)
   const [projectDocs, setProjectDocs] = useState<ProjectDocEntry[]>([]);
@@ -752,6 +756,53 @@ export function CardEditor({
     await save(nextCard);
   }
 
+  async function archiveItem(id: string) {
+    if (!card || offlineFallback) return;
+    const now = Date.now();
+    const nextCard: CardDoc = {
+      ...card,
+      items: card.items.map((it) => (it.id === id ? { ...it, status: 'done', archived: true, archivedAt: now } : it)),
+    };
+    updateCard(nextCard);
+    setDetailModal((cur) => (cur && cur.draft.id === id ? null : cur));
+    await save(nextCard, true);
+    onNotify('Tarefa arquivada.');
+  }
+
+  async function unarchiveItem(id: string) {
+    if (!card || offlineFallback) return;
+    const now = Date.now();
+    const nextCard: CardDoc = {
+      ...card,
+      items: card.items.map((it) => {
+        if (it.id !== id) return it;
+        const copy: CardItem = { ...it, status: 'done', updatedAt: now };
+        delete copy.archived;
+        delete copy.archivedAt;
+        return copy;
+      }),
+    };
+    updateCard(nextCard);
+    setDetailModal((cur) => (cur && cur.draft.id === id ? null : cur));
+    await save(nextCard, true);
+    onNotify('Tarefa restaurada para Concluído.');
+  }
+
+  async function archiveAllDone() {
+    if (!card || offlineFallback) return;
+    const doneIds = card.items.filter((it) => !it.archived && (it.status || 'idea') === 'done').map((it) => it.id);
+    if (!doneIds.length) return;
+    const idSet = new Set(doneIds);
+    const now = Date.now();
+    const nextCard: CardDoc = {
+      ...card,
+      items: card.items.map((it) => (idSet.has(it.id) ? { ...it, archived: true, archivedAt: now } : it)),
+    };
+    updateCard(nextCard);
+    await save(nextCard, true);
+    onNotify(`${doneIds.length} tarefa(s) concluída(s) arquivada(s).`);
+  }
+
   async function handleDropCard(droppedId: string, targetCol: CardStatus, beforeItem?: CardItem) {
     if (!card || offlineFallback) return;
     const found = card.items.find((i) => i.id === droppedId);
@@ -1225,41 +1276,52 @@ export function CardEditor({
           </div>
         )}
 
-        {isDone && projectCwd && !offlineFallback && commitSt && commitSt.state !== 'unknown' && (
+        {isDone && !offlineFallback && (
           <div className="card-actions" style={{ marginTop: 7, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-            {commitSt.state === 'pending' ? (
-              <button
-                className="btn btn-sm"
-                style={{ padding: '3px 7px', fontSize: 11 }}
-                title={commitSt.reason || 'Commitar alterações pendentes no Git do projeto (0 tokens)'}
-                onClick={() => promptQuickCommit(item.title, true, item.id)}
-              >
-                <GitCommitHorizontal size={11} /> Commitar
-                {commitSt.pendingFiles > 0 && (
-                  <span style={{ color: 'var(--warn)', fontSize: 10, fontWeight: 700 }}>· {commitSt.pendingFiles}</span>
-                )}
-              </button>
-            ) : commitSt.state === 'committed' ? (
-              <span
-                className="badge done mono"
-                style={{ fontSize: 10, gap: 4 }}
-                title={
-                  commitSt.source === 'git-log'
-                    ? `Commit detectado no Git (${commitSt.hash}): ${commitSt.message}`
-                    : `Commitado (${commitSt.hash}${commitSt.branch ? ` em ${commitSt.branch}` : ''}): ${commitSt.message || item.title}`
-                }
-              >
-                <CheckCircle2 size={10} /> {commitSt.hash}
-              </span>
-            ) : (
-              <span
-                className="badge done"
-                style={{ fontSize: 10, gap: 4, opacity: .85 }}
-                title={`Repositório limpo em ${commitSt.branch || 'git'} — nenhuma alteração pendente para commitar`}
-              >
-                <CheckCircle2 size={10} /> Git limpo
-              </span>
+            {projectCwd && commitSt && commitSt.state !== 'unknown' && (
+              commitSt.state === 'pending' ? (
+                <button
+                  className="btn btn-sm"
+                  style={{ padding: '3px 7px', fontSize: 11 }}
+                  title={commitSt.reason || 'Commitar alterações pendentes no Git do projeto (0 tokens)'}
+                  onClick={() => promptQuickCommit(item.title, true, item.id)}
+                >
+                  <GitCommitHorizontal size={11} /> Commitar
+                  {commitSt.pendingFiles > 0 && (
+                    <span style={{ color: 'var(--warn)', fontSize: 10, fontWeight: 700 }}>· {commitSt.pendingFiles}</span>
+                  )}
+                </button>
+              ) : commitSt.state === 'committed' ? (
+                <span
+                  className="badge done mono"
+                  style={{ fontSize: 10, gap: 4 }}
+                  title={
+                    commitSt.source === 'git-log'
+                      ? `Commit detectado no Git (${commitSt.hash}): ${commitSt.message}`
+                      : `Commitado (${commitSt.hash}${commitSt.branch ? ` em ${commitSt.branch}` : ''}): ${commitSt.message || item.title}`
+                  }
+                >
+                  <CheckCircle2 size={10} /> {commitSt.hash}
+                </span>
+              ) : (
+                <span
+                  className="badge done"
+                  style={{ fontSize: 10, gap: 4, opacity: .85 }}
+                  title={`Repositório limpo em ${commitSt.branch || 'git'} — nenhuma alteração pendente para commitar`}
+                >
+                  <CheckCircle2 size={10} /> Git limpo
+                </span>
+              )
             )}
+            <button
+              className="btn btn-sm btn-icon"
+              style={{ marginLeft: 'auto', padding: '3px 5px', borderColor: 'transparent', background: 'transparent', color: 'var(--muted)' }}
+              title="Arquivar tarefa concluída"
+              aria-label="Arquivar tarefa"
+              onClick={() => archiveItem(item.id)}
+            >
+              <Archive size={12} />
+            </button>
           </div>
         )}
       </div>
@@ -1267,6 +1329,11 @@ export function CardEditor({
   }
 
   const totalTasksInDocs = projectDocs.reduce((acc, d) => acc + (d.taskCount || 0), 0);
+  const activeItems = card.items.filter((i) => !i.archived);
+  const archivedItems = sortRecentFirst(card.items.filter((i) => !!i.archived));
+  const filteredArchivedItems = archiveQuery.trim()
+    ? archivedItems.filter((i) => `${i.title} ${i.phase || ''} ${i.body || ''} ${i.commit?.hash || ''}`.toLowerCase().includes(archiveQuery.trim().toLowerCase()))
+    : archivedItems;
 
   return (
     <div key={entityId} className="card-editor-root board-fade-in">
@@ -1354,6 +1421,24 @@ export function CardEditor({
                     }}
                   >
                     <GitCommitHorizontal size={13} /> Commitar
+                  </button>
+                )}
+                {!detailModal.isNew && modalStage === 'done' && !detailModal.draft.archived && !offlineFallback && (
+                  <button
+                    className="btn btn-sm"
+                    title="Arquivar tarefa concluída (sai da coluna Concluído mas continua acessível em Arquivados)"
+                    onClick={() => archiveItem(detailModal.draft.id)}
+                  >
+                    <Archive size={13} /> Arquivar
+                  </button>
+                )}
+                {!detailModal.isNew && detailModal.draft.archived && !offlineFallback && (
+                  <button
+                    className="btn btn-sm"
+                    title="Restaurar tarefa para a coluna Concluído"
+                    onClick={() => unarchiveItem(detailModal.draft.id)}
+                  >
+                    <ArchiveRestore size={13} /> Desarquivar
                   </button>
                 )}
                 <button className="btn btn-sm btn-icon" onClick={() => setDetailModal(null)} title="Fechar (Esc)">
@@ -1654,6 +1739,74 @@ export function CardEditor({
         );
       })()}
 
+      {/* Modal de Tarefas Arquivadas */}
+      {archiveModalOpen && (
+        <div className="modal-bg" onClick={() => setArchiveModalOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620, maxHeight: '84vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Archive size={16} color="var(--accent)" />
+                <h3 style={{ margin: 0, fontSize: 16 }}>Tarefas arquivadas ({archivedItems.length})</h3>
+              </div>
+              <button className="btn btn-sm btn-icon" onClick={() => setArchiveModalOpen(false)} title="Fechar">
+                <X size={15} />
+              </button>
+            </div>
+            <input
+              className="sb-search"
+              style={{ width: '100%', marginBottom: 10, flexShrink: 0 }}
+              value={archiveQuery}
+              onChange={(e) => setArchiveQuery(e.target.value)}
+              placeholder="Filtrar tarefas arquivadas…"
+            />
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7, paddingRight: 3 }}>
+              {filteredArchivedItems.length === 0 ? (
+                <div style={{ padding: 18, textAlign: 'center', color: 'var(--muted)', fontSize: 12.5 }}>
+                  Nenhuma tarefa arquivada encontrada.
+                </div>
+              ) : (
+                filteredArchivedItems.map((it) => (
+                  <div key={it.id} className="card-item stage-done" style={{ marginBottom: 0, padding: '9px 11px', opacity: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{it.title || '(sem título)'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
+                          {it.phase && <span className="badge" style={{ fontSize: 10 }}>{it.phase}</span>}
+                          {it.commit?.hash && <span className="badge done mono" style={{ fontSize: 10 }}>{it.commit.hash}</span>}
+                          {it.archivedAt && (
+                            <span>Arquivada em {new Date(it.archivedAt).toLocaleDateString('pt-BR')}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => {
+                            setArchiveModalOpen(false);
+                            openItemModal(it);
+                          }}
+                        >
+                          Detalhes
+                        </button>
+                        {!offlineFallback && (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => unarchiveItem(it.id)}
+                            title="Restaurar para a coluna Concluído"
+                          >
+                            <ArchiveRestore size={12} /> Restaurar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Goldfish Review */}
       {reviewModal && (
         <div className="modal-bg" onClick={() => { if (!reviewRunning) setReviewModal(null); }}>
@@ -1820,6 +1973,16 @@ export function CardEditor({
               <RotateCcw size={13} /> {undoing ? 'Desfazendo…' : 'Desfazer'}
             </button>
           </>
+        )}
+
+        {archivedItems.length > 0 && (
+          <button
+            className="btn btn-sm"
+            onClick={() => { setArchiveQuery(''); setArchiveModalOpen(true); }}
+            title="Ver ou restaurar tarefas concluídas arquivadas"
+          >
+            <Archive size={13} /> Arquivados ({archivedItems.length})
+          </button>
         )}
 
         <button
@@ -2062,7 +2225,7 @@ export function CardEditor({
         <div className="board-scroll">
           <div className="board-grid">
             {BOARD_STATUSES.map((col) => {
-              const items = sortRecentFirst(card.items.filter((i) => (i.status || 'idea') === col.id));
+              const items = sortRecentFirst(activeItems.filter((i) => (i.status || 'idea') === col.id));
               return (
                 <div
                   key={col.id}
@@ -2092,9 +2255,21 @@ export function CardEditor({
                       <span className={`col-dot ${col.id}`} />
                       {col.label} ({items.length})
                     </span>
-                    <button className="btn btn-sm btn-icon" onClick={() => openNewItemModal(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>
-                      <Plus size={12} />
-                    </button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {col.id === 'done' && items.length > 0 && !offlineFallback && (
+                        <button
+                          className="btn btn-sm btn-icon"
+                          onClick={archiveAllDone}
+                          title={`Arquivar todas as ${items.length} tarefa(s) concluída(s)`}
+                          aria-label="Arquivar tarefas concluídas"
+                        >
+                          <Archive size={12} />
+                        </button>
+                      )}
+                      <button className="btn btn-sm btn-icon" onClick={() => openNewItemModal(col.id)} title={`Adicionar em ${col.label}`} disabled={offlineFallback}>
+                        <Plus size={12} />
+                      </button>
+                    </div>
                   </div>
                   <div className="board-col-body">
                     {items.map(renderItemCard)}
@@ -2108,13 +2283,13 @@ export function CardEditor({
 
       {card.template === 'research' && (
         <div className="research-list">
-          {card.items.length === 0 ? <div className="empty">Nenhum item ainda. Clique em "Novo item" ou "Importar de docs/".</div> : sortRecentFirst(card.items).map(renderItemCard)}
+          {activeItems.length === 0 ? <div className="empty">Nenhum item ativo. Clique em "Novo item" ou "Importar de docs/".</div> : sortRecentFirst(activeItems).map(renderItemCard)}
         </div>
       )}
 
       {card.template === 'gallery' && (
         <div className="gallery-grid">
-          {card.items.length === 0 ? <div className="empty">Galeria vazia. Adicione itens com imagens ou prompts.</div> : sortRecentFirst(card.items).map(renderItemCard)}
+          {activeItems.length === 0 ? <div className="empty">Galeria vazia. Adicione itens com imagens ou prompts.</div> : sortRecentFirst(activeItems).map(renderItemCard)}
         </div>
       )}
     </div>

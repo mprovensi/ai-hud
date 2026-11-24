@@ -78,7 +78,7 @@ function validateCard(value, { draft = false } = {}) {
   for (const item of value.items) {
     assertKeys(
       item,
-      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review', 'commit', 'updatedAt'],
+      ['id', 'title', 'body', 'image', 'alt', 'prompt', 'url', 'linkLabel', 'status', 'sessionRef', 'handoffPath', 'docRef', 'phase', 'review', 'commit', 'archived', 'archivedAt', 'updatedAt'],
       'Um item do card',
     );
     if (typeof item.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(item.id) || seen.has(item.id)) {
@@ -123,6 +123,12 @@ function validateCard(value, { draft = false } = {}) {
         throw fail(`Timestamp de commit inválido no item "${item.id}".`);
       }
     }
+    if (item.archived !== undefined && typeof item.archived !== 'boolean') {
+      throw fail(`archived inválido no item "${item.id}".`);
+    }
+    if (item.archivedAt !== undefined && (typeof item.archivedAt !== 'number' || !Number.isFinite(item.archivedAt))) {
+      throw fail(`archivedAt inválido no item "${item.id}".`);
+    }
     if (item.image !== undefined && item.image !== '' && !isSafeRelativePath(item.image)) {
       throw fail(`Caminho de imagem inválido no item "${item.id}".`);
     }
@@ -160,9 +166,12 @@ function validateWorkspaceIndex(value) {
     if (!isPlainObj(value.groupMeta)) throw fail('workspace.json precisa de um objeto "groupMeta" válido.');
     for (const [gName, meta] of Object.entries(value.groupMeta)) {
       assertText(gName, 'Nome do workspace em groupMeta', 80, true);
-      assertKeys(meta, ['machine', 'rootCwd'], `groupMeta["${gName}"]`);
+      assertKeys(meta, ['machine', 'rootCwd', 'hidden'], `groupMeta["${gName}"]`);
       assertText(meta.machine, 'groupMeta.machine', 80);
       assertText(meta.rootCwd, 'groupMeta.rootCwd', 500);
+      if (meta.hidden !== undefined && typeof meta.hidden !== 'boolean') {
+        throw fail(`groupMeta["${gName}"].hidden deve ser booleano.`);
+      }
     }
   }
   if (!Array.isArray(value.entities) || value.entities.length > 500) {
@@ -172,7 +181,7 @@ function validateWorkspaceIndex(value) {
   for (const e of value.entities) {
     assertKeys(
       e,
-      ['id', 'title', 'description', 'group', 'category', 'status', 'pinned', 'folder', 'storageMode', 'projectBindings', 'defaultAgent', 'steps', 'created', 'updated'],
+      ['id', 'title', 'description', 'group', 'category', 'status', 'pinned', 'hidden', 'folder', 'storageMode', 'projectBindings', 'defaultAgent', 'steps', 'created', 'updated'],
       'Entidade do workspace',
     );
     if (typeof e.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(e.id) || seen.has(e.id)) {

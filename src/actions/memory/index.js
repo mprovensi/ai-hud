@@ -415,19 +415,34 @@ function createMemoryActions({
     const wsRoot = root();
     const sessions = collectMemorySessions(collector);
     const ws = readWorkspaceJson(wsRoot);
+    const groupMeta = (ws && ws.groupMeta) || {};
     const entities = Array.isArray(ws && ws.entities) ? ws.entities : [];
+    const isEntityHidden = (e) => !!(e && (e.hidden || (e.group && groupMeta[e.group] && groupMeta[e.group].hidden)));
+    const visibleEntities = entities.filter((e) => !isEntityHidden(e));
+    const hiddenNames = new Set(
+      entities.filter(isEntityHidden).flatMap((e) => [e.id, e.title].filter(Boolean).map((s) => String(s).toLowerCase())),
+    );
+    const hiddenCwds = new Set(
+      entities.filter(isEntityHidden).flatMap((e) => (e.projectBindings || []).map((b) => String(b.cwd || '').replace(/[\\/]+$/, '').toLowerCase())).filter(Boolean),
+    );
 
     let targets;
     if (workspaceOnly) {
-      targets = entities.map((e) => {
+      targets = visibleEntities.map((e) => {
         const firstBinding = Array.isArray(e.projectBindings) && e.projectBindings[0];
         const cwd = firstBinding ? firstBinding.cwd : '';
         const mem = readProjectMemory({ workspaceRoot: wsRoot, project: e.title || e.id, cwd, sessions });
         return { project: e.title || e.id, cwd, pendingCount: mem.pendingCount };
       }).filter((p) => p.pendingCount > 0);
     } else {
-      targets = listAllProjectMemories({ workspaceRoot: wsRoot, sessions, workspaceEntities: entities })
-        .filter((p) => p.pendingCount > 0);
+      targets = listAllProjectMemories({ workspaceRoot: wsRoot, sessions, workspaceEntities: visibleEntities })
+        .filter((p) => {
+          if (p.pendingCount <= 0) return false;
+          const pName = String(p.project || '').toLowerCase();
+          const pCwd = String(p.cwd || '').replace(/[\\/]+$/, '').toLowerCase();
+          if (hiddenNames.has(pName) || (pCwd && hiddenCwds.has(pCwd))) return false;
+          return true;
+        });
     }
 
     if (!targets.length) {

@@ -389,6 +389,32 @@ test('Portabilidade em <cwd>/.ai-workspace/, importação 0-token de docs/ e rev
     assert.ok(fs.existsSync(mkOk.json.path));
     const mkBad = await reqJson(port, 'POST', '/api/fs/mkdir', tok, { cwd: projDir, name: '../escape' });
     assert.equal(mkBad.status, 400);
+
+    // 14. Ocultar projeto e workspace sem apagar (hidden: true) + Arquivar tarefa concluída (ignorada no MCP board_read por padrão)
+    const hideEnt = await reqJson(port, 'PUT', '/api/workspace/entity', tok, { id: ent2.json.entity.id, hidden: true });
+    assert.equal(hideEnt.status, 200);
+    assert.equal(hideEnt.json.entity.hidden, true);
+
+    const hideGrp = await reqJson(port, 'POST', '/api/workspace/group', tok, { name: 'Beta', hidden: true });
+    assert.equal(hideGrp.status, 200);
+    assert.equal(hideGrp.json.groupMeta.Beta.hidden, true);
+
+    const bArch = await reqJson(port, 'GET', `/api/workspace/project/board?entityId=${recreated.json.entity.id}`, tok);
+    const archivedItems = bArch.json.content.items.map((it, idx) => (
+      idx === 0 ? { ...it, status: 'done', archived: true, archivedAt: Date.now() } : it
+    ));
+    const saveArch = await reqJson(port, 'PUT', '/api/workspace/project/board', tok, {
+      entityId: recreated.json.entity.id,
+      content: { ...bArch.json.content, items: archivedItems },
+      baseHash: bArch.json.hash,
+    });
+    assert.equal(saveArch.status, 200);
+
+    const mcpHiddenArch = mcp.readBoardCompact({ cwd: projDir });
+    assert.equal(mcpHiddenArch.archivedCount, 1);
+    assert.equal(mcpHiddenArch.total, archivedItems.length - 1);
+    const mcpWithArch = mcp.readBoardCompact({ cwd: projDir, includeArchived: true });
+    assert.equal(mcpWithArch.total, archivedItems.length);
   } finally {
     app.server.close();
   }

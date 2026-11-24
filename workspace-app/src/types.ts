@@ -31,6 +31,8 @@ export interface CardItem {
   phase?: string;
   review?: CardReviewMeta | null;
   commit?: CardCommitMeta | null;
+  archived?: boolean;
+  archivedAt?: number;
   updatedAt?: number;
 }
 
@@ -104,6 +106,7 @@ export interface WorkspaceEntity {
   category?: string;
   status?: string;
   pinned?: boolean;
+  hidden?: boolean;
   folder: string;
   storageMode?: 'in-project' | 'hub';
   projectBindings?: ProjectBinding[];
@@ -122,6 +125,7 @@ export interface GlobalDocItem {
 export interface WorkspaceGroupMeta {
   machine?: string;
   rootCwd?: string;
+  hidden?: boolean;
 }
 
 export interface WorkspaceIndex {

@@ -249,7 +249,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return { status: 200, body: { ok: true, path: rel, size: buf.length } };
   }
 
-  function updateEntity({ id, title, description, group, pinned, projectBindings } = {}) {
+  function updateEntity({ id, title, description, group, pinned, hidden, projectBindings } = {}) {
     const wsRoot = root();
     const index = readWorkspaceJson(wsRoot);
     const idx = index.entities.findIndex((e) => e.id === id);
@@ -258,6 +258,10 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     if (typeof title === 'string' && title.trim()) cur.title = title.trim().slice(0, 200);
     if (typeof description === 'string') cur.description = description.trim().slice(0, 1000);
     if (typeof pinned === 'boolean') cur.pinned = pinned;
+    if (typeof hidden === 'boolean') {
+      if (hidden) cur.hidden = true;
+      else delete cur.hidden;
+    }
     if (Array.isArray(projectBindings)) cur.projectBindings = projectBindings;
     const groups = Array.isArray(index.groups) ? [...index.groups] : [];
     if (typeof group === 'string') {
@@ -293,7 +297,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     return { status: 200, body: { ok: true, entity: cur, groups } };
   }
 
-  function saveGroup({ name = '', renameFrom = '', remove = false, machine, rootCwd } = {}) {
+  function saveGroup({ name = '', renameFrom = '', remove = false, machine, rootCwd, hidden } = {}) {
     const wsRoot = root();
     const index = readWorkspaceJson(wsRoot);
     let groups = Array.isArray(index.groups) ? [...index.groups] : [];
@@ -327,14 +331,26 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       if (!groups.includes(cleanName)) groups.push(cleanName);
     }
 
-    if (!remove && cleanName && (rootCwd !== undefined || machine !== undefined)) {
-      const cleanRoot = String(rootCwd || '').trim().slice(0, 500);
-      const cleanMach = String(machine || '').trim().slice(0, 80);
-      if (cleanRoot) {
-        groupMeta[cleanName] = { ...(cleanMach ? { machine: cleanMach } : {}), rootCwd: cleanRoot };
-      } else {
-        delete groupMeta[cleanName];
+    if (!remove && cleanName && (rootCwd !== undefined || machine !== undefined || typeof hidden === 'boolean')) {
+      const prev = { ...(groupMeta[cleanName] || {}) };
+      if (rootCwd !== undefined || machine !== undefined) {
+        const cleanRoot = String(rootCwd || '').trim().slice(0, 500);
+        const cleanMach = String(machine || '').trim().slice(0, 80);
+        if (cleanRoot) {
+          prev.rootCwd = cleanRoot;
+          if (cleanMach) prev.machine = cleanMach;
+          else delete prev.machine;
+        } else {
+          delete prev.rootCwd;
+          delete prev.machine;
+        }
       }
+      if (typeof hidden === 'boolean') {
+        if (hidden) prev.hidden = true;
+        else delete prev.hidden;
+      }
+      if (Object.keys(prev).length > 0) groupMeta[cleanName] = prev;
+      else delete groupMeta[cleanName];
     }
 
     const nextIndex = {

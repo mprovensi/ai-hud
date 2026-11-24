@@ -241,11 +241,17 @@ test('runScheduledCycle com workspaceOnly consolida apenas projetos cadastrados 
   };
   const ws = createWorkspaceActions({ dataDir, config });
   ws.createEntity({ title: 'Projeto Oficial', projectBindings: [{ machine: 'MateusNote', cwd: '/proj/oficial' }] });
+  const hidProj = ws.createEntity({ title: 'Projeto Oculto', projectBindings: [{ machine: 'MateusNote', cwd: '/proj/oculto' }] });
+  ws.updateEntity({ id: hidProj.body.entity.id, hidden: true });
+  ws.saveGroup({ name: 'Pausados', hidden: true });
+  ws.createEntity({ title: 'Projeto Em Grupo Oculto', group: 'Pausados', projectBindings: [{ machine: 'MateusNote', cwd: '/proj/pausado' }] });
 
   const collector = {
     current: () => ({
       sessions: [
         { id: 's-of', tool: 'Claude Code', project: 'Projeto Oficial', cwd: '/proj/oficial', end: '2026-11-24T01:00:00Z', prompts: 2, lastPrompt: 'feat', lastReply: 'done' },
+        { id: 's-hid', tool: 'Claude Code', project: 'Projeto Oculto', cwd: '/proj/oculto', end: '2026-11-24T01:00:00Z', prompts: 2, lastPrompt: 'feat', lastReply: 'done' },
+        { id: 's-grp', tool: 'Claude Code', project: 'Projeto Em Grupo Oculto', cwd: '/proj/pausado', end: '2026-11-24T01:00:00Z', prompts: 2, lastPrompt: 'feat', lastReply: 'done' },
         { id: 's-avulsa', tool: 'Claude Code', project: 'ubuntu', cwd: '/home/ubuntu', end: '2026-11-24T01:00:00Z', prompts: 2, lastPrompt: 'ls', lastReply: 'ok' },
       ],
       snapshot: { active: [], recent: [] },

@@ -191,7 +191,7 @@ function syncMarkdownCheckboxStandalone(projectRoot, docRef, title, done) {
   } catch { return false; }
 }
 
-function readBoardCompact({ cwd = '', status = '' } = {}) {
+function readBoardCompact({ cwd = '', status = '', includeArchived = false } = {}) {
   const r = resolveBoardFile(cwd);
   if (r.error) return r;
   if (!fs.existsSync(r.boardFile)) {
@@ -203,22 +203,29 @@ function readBoardCompact({ cwd = '', status = '' } = {}) {
   }
   const counts = { idea: 0, spec: 0, 'in-progress': 0, review: 0, done: 0 };
   const all = Array.isArray(board.items) ? board.items : [];
+  let archivedCount = 0;
   for (const it of all) {
+    if (it.archived) {
+      archivedCount++;
+      continue;
+    }
     const st = VALID_BOARD_STATUSES.has(it.status) ? it.status : 'idea';
     counts[st]++;
   }
+  const visible = includeArchived ? all : all.filter((it) => !it.archived);
   const filterSt = VALID_BOARD_STATUSES.has(status) ? status : '';
-  const items = all
+  const items = visible
     .filter((it) => !filterSt || (it.status || 'idea') === filterSt)
     .map((it) => ({
       id: it.id,
       status: it.status || 'idea',
       title: it.title,
+      ...(it.archived ? { archived: true } : {}),
       ...(it.phase ? { phase: it.phase } : {}),
       ...(it.docRef ? { docRef: it.docRef } : {}),
       ...(it.review && it.review.status ? { review: it.review.status } : {}),
     }));
-  return { cwd: r.root, title: board.title || path.basename(r.root), counts, total: all.length, items };
+  return { cwd: r.root, title: board.title || path.basename(r.root), counts, total: visible.length, archivedCount, items };
 }
 
 function updateBoardStatus({ cwd = '', updates = [], syncDocs = true } = {}) {
@@ -333,6 +340,7 @@ const TOOLS = [
       properties: {
         cwd: { type: 'string', description: 'Caminho absoluto da pasta do projeto' },
         status: { type: 'string', description: 'Filtro opcional de coluna: idea, spec, in-progress, review ou done' },
+        includeArchived: { type: 'boolean', description: 'Se true, inclui tarefas concluídas arquivadas (padrão false)' },
       },
       required: ['cwd'],
     },

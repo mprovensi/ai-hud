@@ -64,7 +64,8 @@ export function WorkspaceHome({
       .catch(() => {});
   }, [ws?.entities?.length]);
 
-  const entities = ws?.entities || [];
+  const groupMeta = ws?.groupMeta || {};
+  const entities = (ws?.entities || []).filter((e) => !e.hidden && !(e.group && groupMeta[e.group]?.hidden));
   const recentProjects = entities
     .slice()
     .sort((a, b) => {

@@ -5,6 +5,8 @@ import {
   Brain,
   ChevronDown,
   ChevronRight,
+  Eye,
+  EyeOff,
   FileText,
   FolderGit2,
   FolderKanban,
@@ -94,6 +96,7 @@ export function App() {
 
   // Englobadores colapsáveis na sidebar
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [showHidden, setShowHidden] = useState(false);
 
   // Gaveta lateral direita em altura total para Nova Conversa
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -397,11 +400,52 @@ export function App() {
 
   const filteredEntities = useMemo(() => {
     if (!ws) return [];
+    const gm = ws.groupMeta || {};
     const q = search.trim().toLowerCase();
-    return q
-      ? ws.entities.filter((e) => `${e.title} ${e.description || ''} ${e.group || ''} ${e.category || ''}`.toLowerCase().includes(q))
-      : ws.entities;
-  }, [ws, search]);
+    return ws.entities.filter((e) => {
+      const isHid = !!(e.hidden || (e.group && gm[e.group]?.hidden));
+      if (isHid && !showHidden) return false;
+      if (!q) return true;
+      return `${e.title} ${e.description || ''} ${e.group || ''} ${e.category || ''}`.toLowerCase().includes(q);
+    });
+  }, [ws, search, showHidden]);
+
+  const hiddenCount = useMemo(() => {
+    if (!ws) return 0;
+    const gm = ws.groupMeta || {};
+    const hidGroups = Object.values(gm).filter((m) => m && m.hidden).length;
+    const hidEntities = ws.entities.filter((e) => e.hidden && !(e.group && gm[e.group]?.hidden)).length;
+    return hidGroups + hidEntities;
+  }, [ws]);
+
+  async function toggleHideEntity(entity: WorkspaceEntity) {
+    const nextHidden = !entity.hidden;
+    try {
+      await api.updateEntity({ id: entity.id, hidden: nextHidden });
+      if (nextHidden && !showHidden && selection?.kind === 'entity' && selection.id === entity.id) {
+        setSelection(null);
+      }
+      await loadWorkspace();
+      notify(nextHidden ? `Projeto "${entity.title}" ocultado (Dreaming pausado).` : `Projeto "${entity.title}" reexibido.`);
+    } catch (e) {
+      notify((e as Error).message, true);
+    }
+  }
+
+  async function toggleHideGroup(groupName: string) {
+    const curHidden = !!ws?.groupMeta?.[groupName]?.hidden;
+    const nextHidden = !curHidden;
+    try {
+      await api.saveGroup({ name: groupName, hidden: nextHidden });
+      if (nextHidden && !showHidden && selectedEntity?.group === groupName) {
+        setSelection(null);
+      }
+      await loadWorkspace();
+      notify(nextHidden ? `Workspace "${groupName}" ocultado (Dreaming pausado).` : `Workspace "${groupName}" reexibido.`);
+    } catch (e) {
+      notify((e as Error).message, true);
+    }
+  }
 
   const allGroups = useMemo(() => {
     const out: string[] = [];
@@ -512,11 +556,15 @@ export function App() {
     return map;
   }, [ws?.entities, snap]);
 
-  // Agrupa projetos filtrados por englobador (mantendo englobadores vazios quando sem busca)
+  // Agrupa projetos filtrados por workspace (mantendo workspaces vazios quando sem busca e ocultando os marcados como hidden)
   const groupedSections = useMemo(() => {
+    const gm = ws?.groupMeta || {};
     const map = new Map<string, WorkspaceEntity[]>();
     if (!search.trim()) {
-      for (const g of allGroups) map.set(g, []);
+      for (const g of allGroups) {
+        if (gm[g]?.hidden && !showHidden) continue;
+        map.set(g, []);
+      }
     }
     const ungrouped: WorkspaceEntity[] = [];
     for (const e of filteredEntities) {
@@ -528,15 +576,15 @@ export function App() {
         ungrouped.push(e);
       }
     }
-    const sections: { name: string; label: string; items: WorkspaceEntity[] }[] = [];
+    const sections: { name: string; label: string; hidden: boolean; items: WorkspaceEntity[] }[] = [];
     for (const [name, items] of map.entries()) {
-      sections.push({ name, label: name, items });
+      sections.push({ name, label: name, hidden: !!gm[name]?.hidden, items });
     }
     if (ungrouped.length || sections.length === 0) {
-      sections.push({ name: '', label: sections.length ? 'Geral (sem workspace)' : 'Projetos', items: ungrouped });
+      sections.push({ name: '', label: sections.length ? 'Geral (sem workspace)' : 'Projetos', hidden: false, items: ungrouped });
     }
     return sections;
-  }, [allGroups, filteredEntities, search]);
+  }, [allGroups, filteredEntities, search, ws?.groupMeta, showHidden]);
 
   const paletteActions: PaletteAction[] = useMemo(() => {
     const acts: PaletteAction[] = [
@@ -686,7 +734,7 @@ export function App() {
               return (
                 <div
                   key={sec.name || '__ungrouped'}
-                  className={`ws-group ${isGroupDragOver ? 'sb-drag-over' : ''} ${isGroupDragging ? 'sb-dragging' : ''}`}
+                  className={`ws-group ${sec.hidden ? 'sb-hidden' : ''} ${isGroupDragOver ? 'sb-drag-over' : ''} ${isGroupDragging ? 'sb-dragging' : ''}`}
                   onDragOver={(ev) => {
                     if (!dragSb) return;
                     if (dragSb.kind === 'group' && (!sec.name || dragSb.name === sec.name)) return;
@@ -731,6 +779,7 @@ export function App() {
                       {isCol ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                       <Layers size={12} color="var(--accent)" style={{ flexShrink: 0 }} />
                       <span className="ell">{sec.label}</span>
+                      {sec.hidden && <span className="badge" style={{ fontSize: 9.5, padding: '1px 5px' }}>oculto</span>}
                       <span style={{ fontSize: 10.5, color: 'var(--muted)', marginLeft: 3 }}>({sec.items.length})</span>
                     </button>
                     {sec.name && (
@@ -778,7 +827,7 @@ export function App() {
                           return (
                             <div
                               key={e.id}
-                              className={`sb-row ${isEntDragging ? 'sb-dragging' : ''} ${isEntOver ? 'sb-drag-over' : ''}`}
+                              className={`sb-row ${e.hidden ? 'sb-hidden' : ''} ${isEntDragging ? 'sb-dragging' : ''} ${isEntOver ? 'sb-drag-over' : ''}`}
                               draggable
                               onDragStart={(ev) => {
                                 ev.stopPropagation();
@@ -819,6 +868,7 @@ export function App() {
                                   active={active}
                                 />
                                 <span className="ell">{e.title}</span>
+                                {e.hidden && <span className="badge" style={{ fontSize: 9.5, padding: '1px 5px' }}>oculto</span>}
                                 {act && <span className={`sb-dot ${act.kind}`} title={act.tip} />}
                                 {e.projectBindings?.[0] && (
                                   <span className="meta">{e.projectBindings[0].machine}</span>
@@ -888,6 +938,20 @@ export function App() {
               </button>
             ))}
           </div>
+
+          {hiddenCount > 0 && (
+            <div className="sb-foot">
+              <button
+                className={`btn btn-sm ${showHidden ? 'btn-primary' : ''}`}
+                style={{ width: '100%', justifyContent: 'center', fontSize: 11.5 }}
+                onClick={() => setShowHidden((v) => !v)}
+                title="Mostrar ou esconder workspaces e projetos ocultos"
+              >
+                {showHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                {showHidden ? `Esconder ocultos (${hiddenCount})` : `Mostrar ocultos (${hiddenCount})`}
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* Item 6: Left ↔ Center Resizer */}
@@ -1142,6 +1206,19 @@ export function App() {
               }}
             >
               <Pencil size={13} /> Editar
+            </button>
+            <button
+              className="ctx-menu-item"
+              onClick={() => {
+                const cur = itemMenu;
+                setItemMenu(null);
+                if (cur.kind === 'entity') toggleHideEntity(cur.entity);
+                else toggleHideGroup(cur.name);
+              }}
+            >
+              {((itemMenu.kind === 'entity' && itemMenu.entity.hidden) || (itemMenu.kind === 'group' && ws?.groupMeta?.[itemMenu.name]?.hidden))
+                ? <><Eye size={13} /> Reexibir</>
+                : <><EyeOff size={13} /> Ocultar</>}
             </button>
             <button
               className="ctx-menu-item danger"

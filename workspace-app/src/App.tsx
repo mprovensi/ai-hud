@@ -668,8 +668,9 @@ export function App() {
                   setEntityTab(tab);
                   setStepIdx(0);
                 }}
-                onOpenSession={(sid) => setFocusSessionId(sid)}
                 onNewProject={(g = '') => openNewModal(g)}
+                onNewGroup={openNewGroup}
+                onNewConversation={() => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); }}
               />
             </div>
           )}

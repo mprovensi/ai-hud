@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Brain, Clock, FolderGit2, FolderKanban, Monitor, Plus, ShieldAlert, Terminal } from 'lucide-react';
+import { Activity, Brain, Clock, FolderGit2, FolderKanban, FolderPlus, MessageSquarePlus, Monitor, Plus, Terminal } from 'lucide-react';
 import { api } from '../api';
 import type { Snapshot, WorkspaceEntity, WorkspaceIndex } from '../types';
 
@@ -8,8 +8,9 @@ interface Props {
   snap: Snapshot | null;
   groupsCount: number;
   onOpenEntity: (id: string, tab?: 'step' | 'memory' | 'files' | 'terminal') => void;
-  onOpenSession: (sessionId: string) => void;
   onNewProject: (presetGroup?: string) => void;
+  onNewGroup: () => void;
+  onNewConversation: () => void;
 }
 
 interface MemSummaryItem {
@@ -35,7 +36,15 @@ function countProjectSessions(e: WorkspaceEntity, snap: Snapshot | null): { acti
   return { active, attention };
 }
 
-export function WorkspaceHome({ ws, snap, groupsCount, onOpenEntity, onOpenSession, onNewProject }: Props) {
+export function WorkspaceHome({
+  ws,
+  snap,
+  groupsCount,
+  onOpenEntity,
+  onNewProject,
+  onNewGroup,
+  onNewConversation,
+}: Props) {
   const [memPending, setMemPending] = useState<MemSummaryItem[]>([]);
 
   useEffect(() => {
@@ -55,7 +64,6 @@ export function WorkspaceHome({ ws, snap, groupsCount, onOpenEntity, onOpenSessi
     .slice(0, 12);
 
   const activeSessions = snap?.active || [];
-  const attentionSessions = activeSessions.filter((s) => s.state === 'permission' || s.state === 'waiting').slice(0, 4);
   const workingCount = activeSessions.filter((s) => s.state === 'working').length;
   const permCount = activeSessions.filter((s) => s.state === 'permission').length;
   const machines = snap?.machines || [];
@@ -63,6 +71,27 @@ export function WorkspaceHome({ ws, snap, groupsCount, onOpenEntity, onOpenSessi
 
   return (
     <div className="home-wrap">
+      {/* Cabeçalho sem a palavra "Início" */}
+      <div className="home-hero">
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>AI Workspace</h1>
+          <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+            Seus projetos, englobadores, memória compartilhada e sessões ativas em um só lugar.
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button className="btn btn-primary" onClick={() => onNewProject('')}>
+            <Plus size={14} /> Novo projeto
+          </button>
+          <button className="btn" onClick={onNewGroup}>
+            <FolderPlus size={14} /> Novo englobador
+          </button>
+          <button className="btn" onClick={onNewConversation}>
+            <MessageSquarePlus size={14} /> Nova conversa
+          </button>
+        </div>
+      </div>
+
       {/* 4 cards de resumo */}
       <div className="home-kpis">
         <div className="home-kpi">
@@ -92,33 +121,6 @@ export function WorkspaceHome({ ws, snap, groupsCount, onOpenEntity, onOpenSessi
           </div>
         </div>
       </div>
-
-      {/* Aguardando você (somente se houver permissão / esperando resposta) */}
-      {attentionSessions.length > 0 && (
-        <section className="home-sec">
-          <div className="home-sec-head">
-            <h2 style={{ color: permCount ? '#f6b3b3' : 'var(--warn)' }}>
-              <ShieldAlert size={14} /> Aguardando você ({attentionSessions.length})
-            </h2>
-          </div>
-          <div className="home-attn-grid">
-            {attentionSessions.map((s) => (
-              <button key={s.id} className="home-attn-card" onClick={() => onOpenSession(s.id)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <strong className="ell" style={{ flex: 1, fontSize: 13 }}>{s.alias || s.project}</strong>
-                  <span className={`badge ${s.state}`}>{s.state === 'permission' ? 'permissão' : 'sua vez'}</span>
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 4 }}>
-                  {s.tool}{s.machine ? ` · ${s.machine}` : ''}
-                </div>
-                <div className="ell" style={{ fontSize: 12, color: '#cdd3e0' }}>
-                  {s.lastReply || s.lastPrompt || s.title || 'Abrir conversa'}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Últimos projetos alterados */}
       <section className="home-sec">

@@ -7,6 +7,7 @@ import {
   RotateCw,
   Save,
   Settings2,
+  Sparkles,
   Square,
   Terminal,
   Trash2,
@@ -18,6 +19,8 @@ import type { ProjectRunConfig, ProjectRunStatus, RunProcessSpec, RunProfile } f
 interface Props {
   cwd: string;
   machine?: string;
+  projectTitle?: string;
+  refreshKey?: number;
   onNotify: (msg: string, err?: boolean) => void;
 }
 
@@ -38,12 +41,13 @@ function makeEmptyProfile(idx: number): RunProfile {
   };
 }
 
-export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
+export function ProjectRunControl({ cwd, machine = '', projectTitle = '', refreshKey = 0, onNotify }: Props) {
   const [runCfg, setRunCfg] = useState<ProjectRunConfig | null>(null);
   const [detectedCfg, setDetectedCfg] = useState<ProjectRunConfig | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState('');
   const [status, setStatus] = useState<ProjectRunStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [aiConfiguring, setAiConfiguring] = useState(false);
 
   // Modais
   const [logsOpen, setLogsOpen] = useState(false);
@@ -83,6 +87,10 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
     loadAll();
   }, [cwd, machine]);
 
+  useEffect(() => {
+    if (refreshKey > 0) loadAll();
+  }, [refreshKey]);
+
   // Polling leve enquanto há processo rodando ou modal de logs aberto
   useEffect(() => {
     if (!cwd || (!status?.running && !logsOpen)) return;
@@ -109,16 +117,50 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
   const profiles = runCfg?.profiles || [];
   const activeProfile = profiles.find((p) => p.id === selectedProfileId) || profiles[0] || null;
   const isRunning = !!status?.running;
-  const runningCount = (status?.processes || []).filter((p) => p.status === 'running').length;
-  const allUrls = useMemo(() => {
+  const totalCount = status?.processes?.length || 0;
+  const readyCount = (status?.processes || []).filter((p) => p.status === 'running' && p.ready).length;
+  const allReady = !!status?.allReady;
+  const bootState = status?.bootState || (isRunning ? 'starting' : 'stopped');
+  const primaryOpenUrl = allReady ? (status?.openUrl || '') : '';
+  const expectsWebUrl = useMemo(() => {
+    if (!status) return false;
+    if (status.openUrl) return true;
+    if (status.kind === 'web' || status.kind === 'compound') return true;
+    return (status.processes || []).some((p) => p.expectsUrl || (p.detectedUrls && p.detectedUrls.length > 0));
+  }, [status]);
+  const allReachableUrls = useMemo(() => {
+    if (!allReady) return [];
     const out: string[] = [];
     for (const p of status?.processes || []) {
-      for (const u of p.detectedUrls || []) {
+      for (const u of p.reachableUrls || []) {
         if (!out.includes(u)) out.push(u);
       }
     }
+    if (primaryOpenUrl && !out.includes(primaryOpenUrl)) out.unshift(primaryOpenUrl);
     return out;
-  }, [status]);
+  }, [status, allReady, primaryOpenUrl]);
+
+  async function handleAiAutoConfigure() {
+    if (!cwd || aiConfiguring) return;
+    setAiConfiguring(true);
+    onNotify('Configurando Play via IA e validando inicialização…');
+    try {
+      const r = await api.autoConfigureRun({ cwd, machine, project: projectTitle, force: true });
+      setRunCfg(r.config);
+      setDraftCfg(JSON.parse(JSON.stringify(r.config)));
+      setEditProfileIdx(0);
+      setSelectedProfileId(r.config.defaultProfile || r.config.profiles[0]?.id || '');
+      if (r.bootOk) {
+        onNotify(`Play configurado${r.engine ? ` (${r.engine}${r.model ? '/' + r.model : ''})` : ''} e validado sem erros!`);
+      } else {
+        onNotify(`Play salvo, mas houve erro ao subir: ${r.bootError || 'verifique os logs'}`, true);
+      }
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setAiConfiguring(false);
+    }
+  }
 
   function openConfigModal() {
     const base: ProjectRunConfig = runCfg && runCfg.profiles.length > 0
@@ -253,23 +295,41 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
             <Button
               size="sm"
               onClick={() => setLogsOpen(true)}
-              title="Ver logs e URLs em tempo real"
+              title={
+                allReady
+                  ? 'Projeto pronto — ver logs e URLs em tempo real'
+                  : bootState === 'degraded'
+                    ? 'Um ou mais processos falharam — clique para ver logs'
+                    : `Subindo processos (${readyCount}/${totalCount} prontos)`
+              }
             >
-              <StatusDot kind="working" />
-              Logs ({runningCount}/{status?.processes.length || 0})
+              <StatusDot kind={allReady ? 'working' : 'recent'} />
+              Logs ({readyCount}/{totalCount})
             </Button>
-            {allUrls[0] && (
+            {allReady && primaryOpenUrl ? (
               <a
-                href={allUrls[0]}
+                href={primaryOpenUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-sm"
                 style={{ textDecoration: 'none' }}
-                title={`Abrir ${allUrls[0]}`}
+                title={`Abrir ${primaryOpenUrl}`}
               >
                 <ExternalLink size={12} /> Abrir
               </a>
-            )}
+            ) : expectsWebUrl ? (
+              <Button
+                size="sm"
+                disabled
+                title={
+                  bootState === 'degraded'
+                    ? 'Projeto não subiu por completo — verifique os Logs'
+                    : `Aguardando o projeto subir por completo (${readyCount}/${totalCount} prontos)…`
+                }
+              >
+                <ExternalLink size={12} /> {bootState === 'degraded' ? 'Falhou' : 'Subindo…'}
+              </Button>
+            ) : null}
           </>
         )}
 
@@ -311,11 +371,19 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
         titleBadge={machine ? <Badge>{machine}</Badge> : undefined}
         headerActions={
           <>
-            {allUrls.map((u) => (
+            {allReachableUrls.map((u) => (
               <a key={u} href={u} target="_blank" rel="noreferrer" className="btn btn-sm ds-text-accent" style={{ textDecoration: 'none' }}>
                 <ExternalLink size={12} /> {u.replace(/^https?:\/\//i, '')}
               </a>
             ))}
+            {isRunning && !allReady && expectsWebUrl && (
+              <Badge
+                tone={bootState === 'degraded' ? 'neutral' : 'permission'}
+                style={bootState === 'degraded' ? { color: 'var(--ds-danger)', borderColor: 'rgba(217, 91, 91, .45)' } : undefined}
+              >
+                {bootState === 'degraded' ? 'Subida incompleta' : `Subindo (${readyCount}/${totalCount})…`}
+              </Badge>
+            )}
             <Button
               size="sm"
               disabled={busy}
@@ -341,14 +409,20 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
                 variant={activeLogProc?.id === p.id ? 'primary' : 'default'}
                 onClick={() => setActiveProcId(p.id)}
               >
-                <span
-                  className="col-dot"
-                  style={{
-                    background: p.status === 'running' ? 'var(--ds-ok)' : p.exitCode && p.exitCode !== 0 ? 'var(--ds-danger)' : 'var(--muted)',
-                  }}
-                />
-                {p.name}
-                {p.status !== 'running' && p.exitCode !== null && <span style={{ opacity: .75 }}>({p.exitCode})</span>}
+                  <span
+                    className="col-dot"
+                    style={{
+                      background:
+                        p.status === 'running'
+                          ? (p.ready ? 'var(--ds-ok)' : 'var(--ds-warn)')
+                          : p.exitCode && p.exitCode !== 0
+                            ? 'var(--ds-danger)'
+                            : 'var(--muted)',
+                    }}
+                  />
+                  {p.name}
+                  {p.status === 'running' && !p.ready && <span style={{ opacity: .75, fontSize: 10.5 }}>(subindo…)</span>}
+                  {p.status !== 'running' && p.exitCode !== null && <span style={{ opacity: .75 }}>({p.exitCode})</span>}
               </Button>
             ))}
           </div>
@@ -399,19 +473,29 @@ export function ProjectRunControl({ cwd, machine = '', onNotify }: Props) {
           <>Salvo em <code className="mono">.ai-workspace/run.json</code> · suporta jogos (GUI), Front+Back compostos e executáveis</>
         }
         headerActions={
-          detectedCfg && detectedCfg.profiles.length > 0 ? (
+          <div className="ds-row">
             <Button
               size="sm"
-              onClick={() => {
-                setDraftCfg(JSON.parse(JSON.stringify(detectedCfg)));
-                setEditProfileIdx(0);
-                onNotify('Perfis auto-detectados recarregados.');
-              }}
-              title="Restaurar perfis detectados automaticamente"
+              disabled={aiConfiguring}
+              onClick={handleAiAutoConfigure}
+              title="Gerar .ai-workspace/run.json via IA e validar se o projeto sobe sem erros"
             >
-              <RefreshCw size={12} /> Auto-detectar
+              <Sparkles size={12} /> {aiConfiguring ? 'Configurando…' : 'Configurar via IA'}
             </Button>
-          ) : undefined
+            {detectedCfg && detectedCfg.profiles.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setDraftCfg(JSON.parse(JSON.stringify(detectedCfg)));
+                  setEditProfileIdx(0);
+                  onNotify('Perfis auto-detectados recarregados.');
+                }}
+                title="Restaurar perfis detectados automaticamente"
+              >
+                <RefreshCw size={12} /> Auto-detectar
+              </Button>
+            )}
+          </div>
         }
         footer={
           <>

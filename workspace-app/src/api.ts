@@ -463,4 +463,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  autoConfigureRun: (body: { cwd: string; machine?: string; project?: string; force?: boolean; skipValidate?: boolean }) =>
+    apiFetch<import('./types').AutoConfigureRunResult>('/api/run/auto-configure', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

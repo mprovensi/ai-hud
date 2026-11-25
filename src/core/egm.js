@@ -5,6 +5,101 @@ const { slugifyEntity } = require('./workspace-schema');
 const SPEC_MAX_CHARS = 12000;
 const MEMORY_CONTEXT_MAX_CHARS = 3500;
 const STRUCTURE_DOCS_MAX_CHARS = 14000;
+const RUN_SNAPSHOT_MAX_CHARS = 9000;
+
+const COMPLEX_SIGNAL_RE = /\b(arquitetura|architecture|migra[cç][aã]o|migration|seguran[cç]a|security|auth|concorr[eê]ncia|concurrency|race|protocolo|federation|banco de dados|schema|refactor|refatora|multi-?m[aá]quina|websocket|pty|performance|cripto)\b/i;
+
+// Classifica a complexidade de uma tarefa EGM para selecionar o tier de modelo adequado:
+// - simple: tarefas mecânicas/curtas (triagem, estruturação pequena, checagens simples) → haiku / flash / mini / Ollama
+// - standard: implementação padrão ou revisão Goldfish de spec enxuta → sonnet / modelo padrão
+// - complex: revisão Goldfish profunda, arquitetura, segurança, multi-módulo ou alta prioridade → opus / pro / Codex completo
+function classifyEgmComplexity({ kind = 'goldfish-review', docContent = '', docCount = 1, priority = '', body = '' } = {}) {
+  const text = `${docContent || ''}\n${body || ''}`;
+  const chars = text.trim().length;
+  const prio = String(priority || '').toLowerCase();
+  const hasComplexSignal = COMPLEX_SIGNAL_RE.test(text);
+
+  if (kind === 'structure-from-docs') {
+    if (docCount <= 3 && chars <= 5000 && !hasComplexSignal) {
+      return { tier: 'simple', reason: 'estruturação mecânica de poucos documentos' };
+    }
+    return { tier: 'standard', reason: 'estruturação de múltiplos documentos/escopo amplo' };
+  }
+
+  if (kind === 'run-config') {
+    if (chars <= 3500 && !/docker-compose|monorepo|microservice|workspace/i.test(text)) {
+      return { tier: 'simple', reason: 'detecção simples de comando de execução' };
+    }
+    return { tier: 'standard', reason: 'configuração multi-serviço / full-stack de Play' };
+  }
+
+  // Revisão Goldfish ou tarefa de board
+  if (prio === 'high' || prio === 'alta' || prio === 'urgent' || chars >= 4500 || (hasComplexSignal && chars >= 1200)) {
+    return {
+      tier: 'complex',
+      reason: prio === 'high' || prio === 'alta'
+        ? 'alta prioridade — exige raciocínio profundo'
+        : hasComplexSignal
+          ? 'escopo arquitetural/segurança/crítico detectado'
+          : 'especificação extensa — exige revisão profunda',
+    };
+  }
+  if (kind === 'goldfish-review') {
+    return { tier: 'standard', reason: 'revisão fria Goldfish — usa modelo equilibrado (nunca modelo mínimo)' };
+  }
+  if (chars < 400 && !hasComplexSignal) {
+    return { tier: 'simple', reason: 'tarefa curta e delimitada' };
+  }
+  return { tier: 'standard', reason: 'tarefa de complexidade padrão' };
+}
+
+// Mapeia tier EGM para o modelo padrão por motor (sem forçar IDs inválidos em CLIs que usam alias próprio).
+function defaultModelForEgmTier(engine, tier = 'standard', { ollamaModels = [] } = {}) {
+  if (engine === 'Claude Code') {
+    if (tier === 'simple') return 'haiku';
+    if (tier === 'complex') return 'opus';
+    return 'sonnet';
+  }
+  if (engine === 'Ollama') {
+    return Array.isArray(ollamaModels) && ollamaModels.length ? ollamaModels[0] : '';
+  }
+  // Gemini (agy) e Codex usam o modelo padrão configurado na conta (ou override explícito em config.dream.models)
+  return '';
+}
+
+function buildRunConfigPrompt({ project = '', cwd = '', snapshotText = '', detected = null }) {
+  const safeSnap = redactSecrets(clip(snapshotText, RUN_SNAPSHOT_MAX_CHARS)).text;
+  const detJson = detected ? JSON.stringify(detected, null, 2).slice(0, 2000) : '{}';
+  return [
+    `Você está configurando o arquivo \`.ai-workspace/run.json\` (botão Play) do projeto "${project}" (${cwd}).`,
+    'Analise os arquivos de configuração abaixo e gere o perfil de execução mais adequado para subir o projeto inteiro de forma confiável.',
+    '',
+    'REGRAS:',
+    '1. Responda APENAS com um objeto JSON válido (sem texto fora do JSON) no schema `ai-run` v1.',
+    '2. Se o projeto for Full-Stack (Backend + Frontend em pastas separadas ou scripts separados), crie um perfil `"kind": "compound"` com ambos os processos em `"processes"` (Backend primeiro, Frontend depois com `"openUrl": "auto"` ou URL exata se conhecida).',
+    '3. Se for um servidor web único (Node, Vite, Next, Python/Flask/Django, Go, etc.), use `"kind": "web"` com `"openUrl": "auto"` ou URL local.',
+    '4. Se for um jogo/app gráfico (Godot, Electron, binário desktop), use `"kind": "gui"` e `"gui": true` no processo.',
+    '5. Use comandos reais compatíveis com os scripts encontrados nos manifestos (nunca invente scripts inexistentes).',
+    '6. Em `"cwd"` de cada processo, use caminho relativo à raiz do projeto (ex.: `"backend"`, `"frontend"`) ou omita para usar a raiz.',
+    '',
+    'Esquema JSON exato:',
+    '{"format":"ai-run","version":1,"defaultProfile":"id-perfil","profiles":[{"id":"id-perfil","name":"Nome amigável","kind":"compound|web|gui|service|script","processes":[{"id":"proc1","name":"Backend","cmd":"npm run dev","cwd":"backend","gui":false,"openUrl":"auto"}]}]}',
+    '',
+    '--- DETECÇÃO AUTOMÁTICA INICIAL (0-token) ---',
+    detJson,
+    '',
+    '--- ESTRUTURA E MANIFESTOS DO PROJETO ---',
+    safeSnap,
+  ].join('\n');
+}
+
+function parseRunConfigFromAi(raw) {
+  const obj = parseJsonPayload(raw);
+  if (!obj || !Array.isArray(obj.profiles) || !obj.profiles.length) {
+    throw Object.assign(new Error('A IA não retornou um JSON de configuração Play válido.'), { status: 502 });
+  }
+  return obj;
+}
 
 function clip(text, max) {
   const s = String(text || '').trim();
@@ -228,10 +323,15 @@ module.exports = {
   SPEC_MAX_CHARS,
   MEMORY_CONTEXT_MAX_CHARS,
   STRUCTURE_DOCS_MAX_CHARS,
+  RUN_SNAPSHOT_MAX_CHARS,
+  classifyEgmComplexity,
+  defaultModelForEgmTier,
   buildSpecTemplate,
   buildGoldfishReviewPrompt,
   parseGoldfishReview,
   buildStructureFromDocsPrompt,
   parseStructuredItems,
+  buildRunConfigPrompt,
+  parseRunConfigFromAi,
   estimateTokens,
 };

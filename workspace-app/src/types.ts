@@ -53,6 +53,8 @@ export interface GoldfishEstimate {
   docPath: string;
   engine: string;
   model: string;
+  complexity?: 'simple' | 'standard' | 'complex';
+  complexityReason?: string;
   reason: string;
   available: boolean;
   estimatedInputTokens: number;
@@ -66,6 +68,8 @@ export interface GoldfishReviewResult {
   docPath: string;
   engine: string;
   model: string;
+  complexity?: 'simple' | 'standard' | 'complex';
+  complexityReason?: string;
   durationMs: number;
   verdict: 'approved' | 'changes';
   summary: string;
@@ -341,21 +345,43 @@ export interface RunProcessState {
   gui?: boolean;
   pid: number;
   status: 'running' | 'stopped' | 'exited';
+  ready?: boolean;
+  readyReason?: string;
+  expectsUrl?: boolean;
   exitCode: number | null;
   startedAt: number;
   endedAt: number;
   detectedUrls: string[];
+  reachableUrls?: string[];
   logs: { ts: number; stream: 'out' | 'err' | 'sys'; text: string }[];
 }
 
 export interface ProjectRunStatus {
   ok: boolean;
   running: boolean;
+  allReady?: boolean;
+  bootState?: 'stopped' | 'starting' | 'ready' | 'degraded' | 'failed';
+  openUrl?: string;
   profileId: string;
   profileName: string;
   kind: string;
   startedAt: number;
   processes: RunProcessState[];
+}
+
+export interface AutoConfigureRunResult {
+  ok: boolean;
+  alreadyConfigured: boolean;
+  configured: boolean;
+  engine?: string;
+  model?: string;
+  aiFallbackNote?: string;
+  config: ProjectRunConfig;
+  bootOk: boolean;
+  bootState?: string;
+  bootError?: string;
+  openUrl?: string;
+  processes?: RunProcessState[];
 }
 
 export interface GitInfo {

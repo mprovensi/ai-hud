@@ -11,10 +11,14 @@ const {
   formatDreamUsageCompact,
 } = require('../../core/memory');
 const {
+  classifyEgmComplexity,
+  defaultModelForEgmTier,
   buildGoldfishReviewPrompt,
   parseGoldfishReview,
   buildStructureFromDocsPrompt,
   parseStructuredItems,
+  buildRunConfigPrompt,
+  parseRunConfigFromAi,
   estimateTokens,
 } = require('../../core/egm');
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
@@ -77,7 +81,7 @@ function createWorkspaceWorkflow({
 }) {
   const root = () => resolveWorkspaceRoot(dataDir, config);
 
-  function buildAvailableTools() {
+  function buildAvailableTools(tier = 'standard') {
     const ollamaOnline = !!(ollama && ollama.state && ollama.state.online);
     const ollamaModels = ollamaOnline
       ? (Array.isArray(ollama.installedModels) && ollama.installedModels.length
@@ -85,21 +89,35 @@ function createWorkspaceWorkflow({
         : (ollama.state.models || []).map((m) => m.name).filter(Boolean))
       : [];
     return {
-      Ollama: { available: ollamaOnline && ollamaModels.length > 0, defaultModel: ollamaModels[0] || '' },
-      Gemini: { available: hasExe(agyExe), defaultModel: '' },
-      Codex: { available: hasExe(codexExe), defaultModel: '' },
-      'Claude Code': { available: hasExe(claudeExe), defaultModel: 'haiku' },
+      Ollama: { available: ollamaOnline && ollamaModels.length > 0, defaultModel: defaultModelForEgmTier('Ollama', tier, { ollamaModels }) },
+      Gemini: { available: hasExe(agyExe), defaultModel: defaultModelForEgmTier('Gemini', tier) },
+      Codex: { available: hasExe(codexExe), defaultModel: defaultModelForEgmTier('Codex', tier) },
+      'Claude Code': { available: hasExe(claudeExe), defaultModel: defaultModelForEgmTier('Claude Code', tier) },
     };
   }
 
-  function pickEngine({ engine = '', model = '', ignoreQuota = false } = {}) {
+  function pickEngine({ engine = '', model = '', tier = 'standard', ignoreQuota = false } = {}) {
     const dreamCfg = (config && config.dream) || {};
-    const enginesList = engine ? [engine] : (Array.isArray(dreamCfg.engines) && dreamCfg.engines.length ? dreamCfg.engines : DEFAULT_DREAM_ENGINES);
+    const tierModels = (dreamCfg.tierModels && dreamCfg.tierModels[tier]) || {};
+    // Em tarefas complexas, evita herdar `haiku` do Dreaming noturno caso o usuário não tenha passado modelo explícito
+    const baseModels = tier === 'simple' ? { ...(dreamCfg.models || {}) } : {};
+    const preferredModels = {
+      ...baseModels,
+      ...tierModels,
+      ...(engine && model ? { [engine]: model } : {}),
+    };
+    // Para revisões Goldfish complexas, prioriza motores de raciocínio (Claude/Codex/Gemini) antes do Ollama local se não houver override
+    const defaultOrder = tier === 'complex'
+      ? ['Claude Code', 'Codex', 'Gemini', 'Ollama']
+      : DEFAULT_DREAM_ENGINES;
+    const enginesList = engine
+      ? [engine]
+      : (Array.isArray(dreamCfg.engines) && dreamCfg.engines.length && tier === 'simple' ? dreamCfg.engines : defaultOrder);
     return selectDreamEngine({
       engines: enginesList,
       quotas: quotas && quotas.snapshot ? quotas.snapshot() : null,
-      availableTools: buildAvailableTools(),
-      preferredModels: { ...(dreamCfg.models || {}), ...(engine && model ? { [engine]: model } : {}) },
+      availableTools: buildAvailableTools(tier),
+      preferredModels,
       maxQuotaPct: typeof dreamCfg.maxQuotaPct === 'number' ? dreamCfg.maxQuotaPct : 75,
       ignoreQuota: !!ignoreQuota,
     });
@@ -153,7 +171,8 @@ function createWorkspaceWorkflow({
     if (!String(docContent || '').trim()) {
       return { status: 400, body: 'O documento está vazio — escreva ao menos o objetivo antes de pedir revisão Goldfish.' };
     }
-    const picked = pickEngine({ engine, model, ignoreQuota });
+    const complexity = classifyEgmComplexity({ kind: 'goldfish-review', docContent });
+    const picked = pickEngine({ engine, model, tier: complexity.tier, ignoreQuota });
     const prompt = buildGoldfishReviewPrompt({ project, docPath, docContent, pinnedMd, memoryMd });
     const estIn = estimateTokens(prompt.length);
     const estOut = 500;
@@ -167,6 +186,8 @@ function createWorkspaceWorkflow({
           docPath,
           engine: picked.engine || '',
           model: picked.model || '',
+          complexity: complexity.tier,
+          complexityReason: complexity.reason,
           reason: picked.reason,
           available: !!picked.engine,
           estimatedInputTokens: estIn,
@@ -200,11 +221,12 @@ function createWorkspaceWorkflow({
         docPath,
         engine: picked.engine,
         model: picked.model || '',
+        complexity: complexity.tier,
         verdict: parsed.verdict,
         durationMs,
         ...usage,
       });
-      log(`[egm-goldfish] ${project} (${docPath}) · ${engineLabel} · ${parsed.verdict} · ${usageCompact} · ${(durationMs / 1000).toFixed(1)}s`);
+      log(`[egm-goldfish] ${project} (${docPath}) · ${complexity.tier} · ${engineLabel} · ${parsed.verdict} · ${usageCompact} · ${(durationMs / 1000).toFixed(1)}s`);
 
       return {
         status: 200,
@@ -213,6 +235,8 @@ function createWorkspaceWorkflow({
           docPath,
           engine: picked.engine,
           model: picked.model || '',
+          complexity: complexity.tier,
+          complexityReason: complexity.reason,
           durationMs,
           usage,
           ...parsed,
@@ -228,7 +252,9 @@ function createWorkspaceWorkflow({
     if (!Array.isArray(docs) || !docs.length) {
       return { status: 400, body: 'Selecione ao menos um documento para estruturar.' };
     }
-    const picked = pickEngine({ engine, model, ignoreQuota });
+    const joinedDocs = docs.map((d) => d.content || '').join('\n');
+    const complexity = classifyEgmComplexity({ kind: 'structure-from-docs', docContent: joinedDocs, docCount: docs.length });
+    const picked = pickEngine({ engine, model, tier: complexity.tier, ignoreQuota });
     const prompt = buildStructureFromDocsPrompt({ project, docs });
     const estIn = estimateTokens(prompt.length);
     const estOut = 900;
@@ -242,6 +268,8 @@ function createWorkspaceWorkflow({
           docCount: docs.length,
           engine: picked.engine || '',
           model: picked.model || '',
+          complexity: complexity.tier,
+          complexityReason: complexity.reason,
           reason: picked.reason,
           available: !!picked.engine,
           estimatedInputTokens: estIn,
@@ -276,10 +304,11 @@ function createWorkspaceWorkflow({
         itemsGenerated: items.length,
         engine: picked.engine,
         model: picked.model || '',
+        complexity: complexity.tier,
         durationMs,
         ...usage,
       });
-      log(`[egm-structure] ${project} (${docs.length} docs) · ${engineLabel} · ${items.length} itens · ${usageCompact} · ${(durationMs / 1000).toFixed(1)}s`);
+      log(`[egm-structure] ${project} (${docs.length} docs) · ${complexity.tier} · ${engineLabel} · ${items.length} itens · ${usageCompact} · ${(durationMs / 1000).toFixed(1)}s`);
 
       return {
         status: 200,
@@ -287,6 +316,8 @@ function createWorkspaceWorkflow({
           ok: true,
           engine: picked.engine,
           model: picked.model || '',
+          complexity: complexity.tier,
+          complexityReason: complexity.reason,
           durationMs,
           usage,
           items,
@@ -298,7 +329,56 @@ function createWorkspaceWorkflow({
     }
   }
 
-  return { reviewSpec, structureDocsWithAi };
+  async function configureRunWithAi({ project = '', cwd = '', snapshotText = '', detected = null, engine = '', model = '', ignoreQuota = true } = {}) {
+    const complexity = classifyEgmComplexity({ kind: 'run-config', docContent: snapshotText });
+    const picked = pickEngine({ engine, model, tier: complexity.tier, ignoreQuota });
+    if (!picked.engine) {
+      return { status: 503, body: `Nenhum motor disponível para configurar Play (${picked.reason}).` };
+    }
+    const prompt = buildRunConfigPrompt({ project, cwd, snapshotText, detected });
+    const startedAt = now();
+    try {
+      const modelRes = await executeModel({ engine: picked.engine, model: picked.model, prompt });
+      const rawOut = typeof modelRes === 'object' && modelRes !== null ? String(modelRes.raw || modelRes.text || '') : String(modelRes || '');
+      const textOut = typeof modelRes === 'object' && modelRes !== null ? String(modelRes.text || modelRes.raw || '') : String(modelRes || '');
+      const ts = now();
+      const durationMs = Math.max(0, ts - startedAt);
+      const usage = extractDreamUsage(rawOut, { prompt, outputText: textOut });
+      const usageCompact = formatDreamUsageCompact(usage);
+      const engineLabel = `${picked.engine}${picked.model ? '/' + picked.model : ''}`;
+      const runConfig = parseRunConfigFromAi(textOut);
+
+      appendUsage({
+        at: new Date(ts).toISOString(),
+        kind: 'run-config',
+        project,
+        engine: picked.engine,
+        model: picked.model || '',
+        complexity: complexity.tier,
+        durationMs,
+        ...usage,
+      });
+      log(`[egm-run-config] ${project} · ${complexity.tier} · ${engineLabel} · ${usageCompact} · ${(durationMs / 1000).toFixed(1)}s`);
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          engine: picked.engine,
+          model: picked.model || '',
+          complexity: complexity.tier,
+          durationMs,
+          usage,
+          config: runConfig,
+        },
+      };
+    } catch (e) {
+      log(`[egm-run-config] erro em ${project}: ${e.message}`);
+      return { status: e.status || 502, body: e.message || 'Falha ao gerar configuração Play via IA.' };
+    }
+  }
+
+  return { reviewSpec, structureDocsWithAi, configureRunWithAi };
 }
 
 module.exports = { createWorkspaceWorkflow };

@@ -79,6 +79,7 @@ export function App() {
   const [stepIdx, setStepIdx] = useState(0);
   const [activeProjectDoc, setActiveProjectDoc] = useState('');
   const [boardReloadKey, setBoardReloadKey] = useState(0);
+  const [runConfigVersion, setRunConfigVersion] = useState(0);
   const [search, setSearch] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState('');
@@ -236,6 +237,25 @@ export function App() {
           }
           if (exec.nextStatus === 'done') {
             setLastAutoDone({ entityId: exec.entityId, itemId: exec.itemId, title: exec.title, ts: Date.now() });
+          }
+          if (exec.nextStatus === 'review') {
+            const ent = (ws?.entities || []).find((x) => x.id === exec.entityId);
+            const bnd = ent?.projectBindings?.[0];
+            if (bnd?.cwd) {
+              api.getRunConfig(bnd.cwd, bnd.machine || '')
+                .then(async (cfg) => {
+                  if (cfg.source === 'saved') return;
+                  notify('Sem Play configurado — configurando .ai-workspace/run.json via IA e validando boot…');
+                  const r = await api.autoConfigureRun({ cwd: bnd.cwd, machine: bnd.machine || '', project: ent?.title });
+                  if (r.configured) setRunConfigVersion((v) => v + 1);
+                  if (r.bootOk) {
+                    notify('Play configurado via IA e validado: projeto subiu sem erros!');
+                  } else {
+                    notify(`Play salvo, mas houve erro ao validar boot: ${r.bootError || 'verifique os logs'}`, true);
+                  }
+                })
+                .catch(() => {});
+            }
           }
           setBoardReloadKey((k) => k + 1);
           notify(`"${exec.title}" movido automaticamente para ${exec.nextLabel}.`);
@@ -989,6 +1009,8 @@ export function App() {
                     <ProjectRunControl
                       cwd={activeBinding.cwd}
                       machine={activeBinding.machine}
+                      projectTitle={selectedEntity.title}
+                      refreshKey={runConfigVersion}
                       onNotify={notify}
                     />
                   )}
@@ -1057,6 +1079,7 @@ export function App() {
                       hasProjectCwd={!!activeBinding}
                       projectCwd={activeBinding?.cwd}
                       projectMachine={activeBinding?.machine}
+                      projectTitle={selectedEntity.title}
                       lastAutoDone={lastAutoDone}
                       reloadKey={boardReloadKey}
                       snapshotVersion={snap?.version}
@@ -1064,6 +1087,7 @@ export function App() {
                       onSendPrompt={(p) => { setPendingCardExec(null); setDraftPrompt(p); }}
                       onExecuteItem={(intent) => { setPendingCardExec(intent); setDraftPrompt(intent.prompt); }}
                       onOpenDoc={(p) => { setActiveProjectDoc(p); setEntityTab('docs'); }}
+                      onRunConfigUpdated={() => setRunConfigVersion((v) => v + 1)}
                     />
                   ) : (
                     <NotesAndReports

@@ -85,6 +85,7 @@ interface Props {
   hasProjectCwd?: boolean;
   projectCwd?: string;
   projectMachine?: string;
+  projectTitle?: string;
   lastAutoDone?: { entityId: string; itemId?: string; title: string; ts: number } | null;
   reloadKey?: number;
   snapshotVersion?: string;
@@ -92,6 +93,7 @@ interface Props {
   onSendPrompt: (prompt: string) => void;
   onExecuteItem?: (intent: CardExecIntent) => void;
   onOpenDoc?: (docPath: string) => void;
+  onRunConfigUpdated?: () => void;
 }
 
 const AUDIT_BOARD_PROMPT =
@@ -247,6 +249,7 @@ export function CardEditor({
   hasProjectCwd = false,
   projectCwd = '',
   projectMachine = '',
+  projectTitle = '',
   lastAutoDone = null,
   reloadKey = 0,
   snapshotVersion = '',
@@ -254,6 +257,7 @@ export function CardEditor({
   onSendPrompt,
   onExecuteItem,
   onOpenDoc,
+  onRunConfigUpdated,
 }: Props) {
   const draftKey = `aiws.draft.${entityId}.${filePath}`;
   const [card, setCard] = useState<CardDoc | null>(null);
@@ -264,6 +268,8 @@ export function CardEditor({
   const [loadingBoard, setLoadingBoard] = useState(true);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState<{ currentContent: CardDoc; currentHash: string } | null>(null);
+  const [runBootAlert, setRunBootAlert] = useState<{ title: string; error: string } | null>(null);
+  const runAutoCfgBusyRef = useRef(false);
   const loadSeqRef = useRef(0);
 
   // Modal de detalhes e edição de card
@@ -719,6 +725,37 @@ export function CardEditor({
     }
   }
 
+  async function ensurePlayConfiguredOnReview(itemTitle: string) {
+    if (!hasProjectCwd || !projectCwd || runAutoCfgBusyRef.current) return;
+    runAutoCfgBusyRef.current = true;
+    try {
+      const cur = await api.getRunConfig(projectCwd, projectMachine);
+      if (cur.source === 'saved') return;
+      onNotify('Sem Play configurado — configurando .ai-workspace/run.json via IA e validando boot…');
+      const r = await api.autoConfigureRun({
+        cwd: projectCwd,
+        machine: projectMachine,
+        project: projectTitle || undefined,
+      });
+      if (r.configured) onRunConfigUpdated?.();
+      if (r.bootOk) {
+        setRunBootAlert(null);
+        const via = r.engine ? ` (${r.engine}${r.model ? '/' + r.model : ''})` : '';
+        onNotify(`Play configurado via IA${via} e validado: projeto subiu sem erros!`);
+      } else {
+        const errMsg = r.bootError || 'O projeto não subiu por completo na validação.';
+        setRunBootAlert({ title: itemTitle, error: errMsg });
+        onNotify(`Play salvo, mas falhou ao validar boot: ${errMsg}`, true);
+      }
+    } catch (e) {
+      const msg = (e as Error).message || 'Falha ao configurar Play automaticamente.';
+      setRunBootAlert({ title: itemTitle, error: msg });
+      onNotify(msg, true);
+    } finally {
+      runAutoCfgBusyRef.current = false;
+    }
+  }
+
   async function saveDetailModal() {
     if (!card || !detailModal || offlineFallback) return;
     const cleanTitle = detailModal.draft.title.trim();
@@ -742,6 +779,9 @@ export function CardEditor({
       const nextSt = (stamped.status || 'idea') as CardStatus;
       if (prev) {
         await syncCheckboxIfCrossedDone(prevSt, nextSt, stamped);
+      }
+      if (prevSt !== 'review' && nextSt === 'review') {
+        ensurePlayConfiguredOnReview(stamped.title);
       }
       if (prevSt !== 'done' && nextSt === 'done') {
         promptQuickCommit(stamped.title, false, stamped.id);
@@ -840,6 +880,9 @@ export function CardEditor({
     updateCard(nextCard);
     await save(nextCard, true);
     await syncCheckboxIfCrossedDone(prevStatus, targetCol, updatedItem);
+    if (prevStatus !== 'review' && targetCol === 'review') {
+      ensurePlayConfiguredOnReview(updatedItem.title);
+    }
     if (prevStatus !== 'done' && targetCol === 'done') {
       promptQuickCommit(updatedItem.title, false, updatedItem.id);
     }
@@ -1052,6 +1095,14 @@ export function CardEditor({
       ? `Parecer Goldfish (${item.review.status === 'approved' ? 'aprovado' : 'ajustes sugeridos'}): \`${item.review.reportPath}\`${item.review.summary ? ` — ${item.review.summary}` : ''}.`
       : '';
 
+    const isHighComplexity =
+      (item.body || '').length > 600 ||
+      /\b(arquitetura|migra[cç][aã]o|seguran[cç]a|concorr[eê]ncia|refactor|multi-?m[aá]quina|websocket|pty|schema)\b/i.test(`${item.title} ${item.body || ''}`);
+
+    const subagentRoutingLine = isHighComplexity
+      ? `Roteamento de subagentes EGM (tarefa complexa): delegue buscas/leituras mecânicas a subagentes leves (\`haiku\`/\`flash\`/\`mini\`), mas execute arquitetura, implementação crítica e revisão Goldfish em modelo forte (\`sonnet\`/\`opus\`/\`pro\`).`
+      : `Roteamento de subagentes EGM (tarefa simples/padrão): use subagentes leves (\`haiku\`/\`flash\`/\`mini\`) para buscas, leituras e checagens mecânicas; mantenha implementação e revisão Goldfish em modelo equilibrado (\`sonnet\`/padrão).`;
+
     if (st === 'idea') {
       const slug = normCommitText(item.title).replace(/\s+/g, '-').slice(0, 48) || 'spec';
       const targetDoc = docClean || `docs/specs/${slug}.md`;
@@ -1062,8 +1113,9 @@ export function CardEditor({
         `Regras Elephant-Goldfish (fase Elefante / Spec-First):`,
         `1. NÃO implemente código de produção ainda.`,
         `2. Leia apenas os arquivos relevantes do projeto para entender o contexto real.`,
-        `3. Crie ou atualize uma especificação enxuta em \`${targetDoc}\` com: Objetivo, Escopo, Fora de escopo, Arquivos impactados e Critérios de aceite objetivos.`,
-        `4. Ao concluir, atualize este item no \`.ai-workspace/board.card.json\` (ou via MCP \`board_update_status\`) com \`docRef: "${targetDoc}"\`.`,
+        `3. ${subagentRoutingLine}`,
+        `4. Crie ou atualize uma especificação enxuta em \`${targetDoc}\` com: Objetivo, Escopo, Fora de escopo, Arquivos impactados e Critérios de aceite objetivos.`,
+        `5. Ao concluir, atualize este item no \`.ai-workspace/board.card.json\` (ou via MCP \`board_update_status\`) com \`docRef: "${targetDoc}"\`.`,
       ].filter(Boolean).join('\n\n');
     }
 
@@ -1079,7 +1131,8 @@ export function CardEditor({
           : item.review?.status === 'approved'
             ? `1. A spec já foi aprovada pelo Goldfish; siga-a rigorosamente sem expandir o escopo.`
             : `1. Faça uma checagem rápida estilo Goldfish (lacunas, riscos ou ambiguidades) na spec antes de codar; se não houver bloqueios, inicie a implementação.`,
-        `2. Implemente de forma enxuta e focada apenas nos itens do escopo aprovado e valide com testes/build.`,
+        `2. ${subagentRoutingLine}`,
+        `3. Implemente de forma enxuta e focada apenas nos itens do escopo aprovado e valide com testes/build.`,
       ].filter(Boolean).join('\n\n');
     }
 
@@ -1091,8 +1144,10 @@ export function CardEditor({
         bodyLine,
         `Regras Elephant-Goldfish (Execução focada + Evidência):`,
         `1. Finalize a implementação estritamente dentro do escopo e critérios de aceite da tarefa (sem refatorações fora de escopo).`,
-        `2. Rode os testes e/ou build do projeto para comprovar que tudo passa sem regressões.`,
-        `3. Entregue um resumo objetivo dos arquivos alterados e dos testes executados para a etapa de Revisão.`,
+        `2. ${subagentRoutingLine}`,
+        `3. Rode os testes e/ou build do projeto para comprovar que tudo passa sem regressões.`,
+        `4. Verifique se \`.ai-workspace/run.json\` (Play do projeto) existe; se não existir, crie-o com o perfil correto e valide que o projeto sobe sem erros.`,
+        `5. Entregue um resumo objetivo dos arquivos alterados e dos testes executados para a etapa de Revisão.`,
       ].filter(Boolean).join('\n\n');
     }
 
@@ -1103,8 +1158,9 @@ export function CardEditor({
         bodyLine,
         `Regras Elephant-Goldfish (Modo Goldfish — Revisão fria e aceite):`,
         `1. Atue como revisor independente a frio: inspecione o \`git diff\` atual contra a spec e os critérios de aceite.`,
-        `2. Procure apenas bugs concretos, regressões, edge-cases, segurança ou falta de testes; corrija pendências críticas se houver.`,
-        `3. Confirme que os testes/build passam 100%${docClean ? ` e sincronize os checkboxes \`- [x]\` em \`${docClean}\`` : ''}.`,
+        `2. ${subagentRoutingLine}`,
+        `3. Procure apenas bugs concretos, regressões, edge-cases, segurança ou falta de testes; corrija pendências críticas se houver.`,
+        `4. Confirme que \`.ai-workspace/run.json\` está configurado e que o projeto sobe como um todo sem erros, e que os testes/build passam 100%${docClean ? ` (sincronizando \`- [x]\` em \`${docClean}\`)` : ''}.`,
       ].filter(Boolean).join('\n\n');
     }
 
@@ -1376,6 +1432,30 @@ export function CardEditor({
           <h4 style={{ color: 'var(--warn)' }}>Máquina do projeto offline — exibindo cópia em cache</h4>
           <div style={{ fontSize: 12, color: 'var(--muted)' }}>
             Ligue a máquina dona da pasta para editar <code className="mono">.ai-workspace/board.card.json</code>.
+          </div>
+        </div>
+      )}
+
+      {runBootAlert && (
+        <div className="conflict-box">
+          <h4>Validação do Play falhou ao mover "{runBootAlert.title}" para Revisão</h4>
+          <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--muted)', wordBreak: 'break-word' }}>
+            {runBootAlert.error}
+          </p>
+          <div className="ds-row">
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                onSendPrompt(
+                  `Ao mover "${runBootAlert.title}" para Revisão, a configuração de Play (\`.ai-workspace/run.json\`) foi testada mas o projeto não subiu sem erros:\n\n${runBootAlert.error}\n\nInvestigue a causa, ajuste \`.ai-workspace/run.json\` ou o código necessário e valide que o projeto sobe por completo sem erros.`,
+                );
+                setRunBootAlert(null);
+              }}
+            >
+              <Sparkles size={12} /> Pedir à IA para corrigir boot
+            </Button>
+            <Button size="sm" onClick={() => setRunBootAlert(null)}>Fechar</Button>
           </div>
         </div>
       )}

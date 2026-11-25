@@ -334,6 +334,52 @@ function readProjectRunConfig(cwd, opts = {}) {
   };
 }
 
+function collectProjectBootSnapshot(cwd) {
+  const cleanCwd = normalizePath(cwd);
+  if (!cleanCwd || !fs.existsSync(cleanCwd)) return '';
+  let realCwd;
+  try { realCwd = fs.realpathSync(cleanCwd); } catch { return ''; }
+
+  const parts = [];
+  try {
+    const topEntries = fs.readdirSync(realCwd, { withFileTypes: true })
+      .filter((e) => !e.name.startsWith('.git') && e.name !== 'node_modules' && e.name !== 'dist' && e.name !== 'build')
+      .slice(0, 40)
+      .map((e) => `${e.name}${e.isDirectory() ? '/' : ''}`);
+    parts.push(`Arquivos na raiz: ${topEntries.join(', ')}`);
+  } catch {}
+
+  const filesToRead = [
+    'package.json',
+    'project.godot',
+    'docker-compose.yml',
+    'compose.yaml',
+    'compose.yml',
+    'pyproject.toml',
+    'requirements.txt',
+    'Cargo.toml',
+    'go.mod',
+    'Makefile',
+  ];
+  const subDirs = ['backend', 'server', 'api', 'frontend', 'client', 'web', 'app', 'ui', 'workspace-app'];
+  for (const sub of subDirs) {
+    filesToRead.push(`${sub}/package.json`, `${sub}/pyproject.toml`, `${sub}/requirements.txt`, `${sub}/go.mod`, `${sub}/Cargo.toml`);
+  }
+
+  for (const rel of filesToRead) {
+    const full = resolveContainedPath(realCwd, rel);
+    if (!full || !isWithinRoot(realCwd, full) || !fs.existsSync(full)) continue;
+    try {
+      const st = fs.statSync(full);
+      if (!st.isFile() || st.size > 64 * 1024) continue;
+      const content = fs.readFileSync(full, 'utf8').slice(0, 1800);
+      parts.push(`### ${rel}\n${content}`);
+    } catch {}
+  }
+
+  return parts.join('\n\n').slice(0, 9000);
+}
+
 module.exports = {
   RUN_FORMAT,
   RUN_VERSION,
@@ -341,4 +387,5 @@ module.exports = {
   normalizeRunConfig,
   detectProjectRunProfiles,
   readProjectRunConfig,
+  collectProjectBootSnapshot,
 };

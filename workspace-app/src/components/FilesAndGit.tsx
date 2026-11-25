@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, FileCode2, Folder, FolderPlus, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
+import { ChevronLeft, Code2, FileCode2, Folder, FolderPlus, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import { Badge, Button, EmptyState } from '../ui';
 import type { FsEntry, GitInfo } from '../types';
@@ -21,6 +21,20 @@ export function FilesAndGit({ cwd, machine = '', onNotify }: Props) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [openingVsCode, setOpeningVsCode] = useState(false);
+
+  async function openProjectInVsCode() {
+    if (!cwd || openingVsCode) return;
+    setOpeningVsCode(true);
+    try {
+      const r = await api.openInVsCode({ cwd, machine });
+      onNotify(r.message || (r.launched ? 'VS Code aberto na pasta do projeto.' : 'VS Code não disponível nesta máquina.'), !r.launched);
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setOpeningVsCode(false);
+    }
+  }
 
   async function createFolderHere() {
     const clean = newFolderName.trim();
@@ -112,9 +126,19 @@ export function FilesAndGit({ cwd, machine = '', onNotify }: Props) {
             {git.modified.length ? `${git.modified.length} alterado(s)` : 'Árvore limpa'}
           </Badge>
         )}
-        <Button size="sm" style={{ marginLeft: 'auto' }} onClick={() => { loadDir(dir); loadGit(); }}>
-          <RefreshCw size={13} /> Atualizar
-        </Button>
+        <div className="ds-row" style={{ marginLeft: 'auto' }}>
+          <Button
+            size="sm"
+            disabled={openingVsCode}
+            onClick={openProjectInVsCode}
+            title={`Abrir ${cwd} no VS Code${machine ? ` (${machine})` : ''}`}
+          >
+            <Code2 size={13} /> {openingVsCode ? 'Abrindo…' : 'Abrir no VS Code'}
+          </Button>
+          <Button size="sm" onClick={() => { loadDir(dir); loadGit(); }}>
+            <RefreshCw size={13} /> Atualizar
+          </Button>
+        </div>
       </div>
 
       {git?.isRepo && git.modified.length > 0 && (

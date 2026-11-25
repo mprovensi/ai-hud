@@ -499,9 +499,18 @@ export function ProjectRunControl({ cwd, machine = '', projectTitle = '', refres
         }
         footer={
           <>
+            <Button
+              size="sm"
+              variant="play"
+              disabled={aiConfiguring || savingCfg}
+              onClick={handleAiAutoConfigure}
+              title="Analisa o projeto com IA, grava .ai-workspace/run.json e valida se sobe sem erros"
+            >
+              <Sparkles size={13} /> {aiConfiguring ? 'Configurando via IA…' : 'Configurar Play com IA'}
+            </Button>
             <div className="ds-flex-1" />
             <Button size="sm" onClick={() => setConfigOpen(false)}>Cancelar</Button>
-            <Button size="sm" variant="primary" disabled={savingCfg} onClick={handleSaveConfig}>
+            <Button size="sm" variant="primary" disabled={savingCfg || aiConfiguring} onClick={handleSaveConfig}>
               <Save size={13} /> {savingCfg ? 'Salvando…' : 'Salvar configuração'}
             </Button>
           </>

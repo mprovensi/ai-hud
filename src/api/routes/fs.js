@@ -21,7 +21,7 @@ const IMAGE_MIMES = {
 };
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
-module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, terminal, ptyManager, pickFolder, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
+module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, terminal, ptyManager, pickFolder, openVsCode, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
   function checkAuthorizedCwd(cwd, { allowHomeSubdirs = false } = {}) {
     const home = os.homedir();
     if (allowHomeSubdirs && !(config && config.strictRemoteCwd) && home && isWithinRoot(home, cwd) && !isSecretPath(cwd)) {
@@ -235,6 +235,22 @@ module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, termina
         return relay(res, peers.forward(peer, 'POST', '/api/fs/pick-folder?local=1', { initialDir }));
       }
       const r = await pickFolder({ initialDir });
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    { method: 'POST', path: '/api/fs/open-vscode', json: true, maxBytes: 4096, handler: async ({ res, url, body }) => {
+      if (!openVsCode) return text(res, 501, 'Abertura de VS Code indisponível.');
+      const cwd = String((body && body.cwd) || '').trim();
+      const machine = String((body && body.machine) || '').trim();
+      if (!cwd) return text(res, 400, 'informe cwd do projeto');
+      if (url.searchParams.get('local') !== '1' && machine && machine !== machineName) {
+        const peer = peers.list.find((p) => p.name === machine);
+        if (!peer) return text(res, 404, `máquina "${machine}" não encontrada`);
+        return relay(res, peers.forward(peer, 'POST', '/api/fs/open-vscode?local=1', { cwd }));
+      }
+      const check = checkAuthorizedCwd(cwd);
+      if (!check.ok) return text(res, 403, check.reason);
+      const r = openVsCode({ cwd });
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 

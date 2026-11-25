@@ -638,9 +638,55 @@ button.qchip:hover { border-color: var(--border-hi); background: var(--card-hove
 }
 .typing-dots span:nth-child(2) { animation-delay: .18s; }
 .typing-dots span:nth-child(3) { animation-delay: .36s; }
-.hud-chat-footer.drag-over {
+.hud-chat-footer.drag-over .chat-composer {
   background: rgba(95, 184, 164, .09);
-  box-shadow: inset 0 0 0 1.5px var(--ds-accent);
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 1px rgba(95, 184, 164, .35);
+}
+.chat-slash-pop {
+  border: 1px solid var(--border-hi); border-radius: 12px;
+  background: var(--ds-surface-muted); overflow: hidden; margin-bottom: 6px;
+}
+/* Composer estilo Mr. Mak: cartão arredondado unificado com textarea limpa + barra inferior */
+.chat-composer {
+  border: 1px solid var(--border); background: var(--ds-card);
+  border-radius: 18px; padding: 8px 10px 7px;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.chat-composer:focus-within {
+  border-color: rgba(95, 184, 164, .5);
+  box-shadow: 0 0 0 1px rgba(95, 184, 164, .18);
+}
+.chat-composer-ta {
+  width: 100%; min-height: 36px; max-height: 180px; resize: none;
+  background: transparent; border: 0; outline: none;
+  color: var(--ds-text); font: inherit; font-size: 13.5px; line-height: 1.48;
+  padding: 4px 4px 2px;
+}
+.chat-composer-ta::placeholder { color: var(--ds-muted); }
+.chat-composer-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding-top: 2px;
+}
+.chat-composer-tools { display: flex; align-items: center; gap: 2px; }
+.chat-tool-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: 0; background: transparent;
+  color: var(--ds-muted); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; transition: background-color .14s, color .14s;
+}
+.chat-tool-btn:hover { background: rgba(255, 255, 255, .07); color: var(--ds-text); }
+.chat-send-btn {
+  width: 32px; height: 32px; border-radius: 9px; border: 0;
+  background: var(--ds-accent); color: #0b1110;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; flex-shrink: 0;
+  transition: background-color .14s, color .14s, transform .12s;
+}
+.chat-send-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.chat-send-btn:active:not(:disabled) { transform: scale(.94); }
+.chat-send-btn:disabled {
+  background: rgba(255, 255, 255, .08); color: var(--ds-muted); cursor: default;
 }
 .chat-attach-strip {
   display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px;

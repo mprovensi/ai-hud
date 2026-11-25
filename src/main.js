@@ -33,6 +33,7 @@ const { createVoice } = require('./actions/voice');
 const { createTerminal } = require('./actions/terminal');
 const { createPtyManager } = require('./actions/pty');
 const { createFolderPicker } = require('./actions/folder-picker');
+const { createOpenVsCode } = require('./actions/open-vscode');
 const { commitProjectGit } = require('./actions/project-git-commit');
 const { createProjectRunner } = require('./actions/project-runner');
 const { attachWsPty } = require('./api/ws-pty');
@@ -182,12 +183,13 @@ function createApp({
   const terminal = createTerminal({ config });
   const ptyManager = createPtyManager({ dataDir, config, claudeExe, codexExe, agyExe, log });
   const pickFolder = createFolderPicker({ exec });
+  const openVsCode = createOpenVsCode();
   const projectRunner = createProjectRunner({ config, log });
 
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, push, voice, terminal, ptyManager, pickFolder, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });

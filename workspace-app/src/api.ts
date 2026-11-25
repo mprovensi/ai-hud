@@ -469,4 +469,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  openInVsCode: (body: { cwd: string; machine?: string }) =>
+    apiFetch<{ ok: boolean; launched: boolean; cwd: string; message: string }>('/api/fs/open-vscode', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

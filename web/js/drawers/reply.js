@@ -2,6 +2,16 @@
   var QUICK = ['Sim', 'Continue', 'Sim, implemente', 'Resuma', 'Não, pare aqui', 'Faça o commit', 'Rode os testes', 'Explique melhor'];
   var chipsOpen = false;
 
+  function replyIcon(name) {
+    if (typeof icon === 'function' && typeof ICONS !== 'undefined' && ICONS[name]) return icon(name);
+    var p = name === 'paperclip'
+      ? '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'
+      : name === 'mic'
+        ? '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>'
+        : '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
+    return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + p + '</svg>';
+  }
+
   function replyBox(d) {
     // Um status curto: chega na hora (hook ouvindo, ou CLI livre) ou espera a sessão parar (fila)
     var isIdeAgy = d.tool === 'Gemini' && d.where === 'antigravity';
@@ -18,12 +28,9 @@
         if (String(rawSugg[i] || '').toLowerCase() !== 'sim') sugg.push(rawSugg[i]);
       }
     }
-    var html = '<div class="panel reply"><div class="row rhead"><h2 class="grow">Responder</h2>' +
-      (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">vai para a fila</span>') +
-      '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
-      (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button></div>';
+    var html = '<div class="reply">';
     if (d.tool === 'Ollama') html += '<div class="rnote">A resposta é gerada no Ollama e fica no HUD; não aparece no app do Ollama.</div>';
-    if (isIdeAgy && !live && d.state !== 'working') html += '<div class="rnote">Sessão parada na IDE: Enviar entra na fila. Toque em <b>📱 Assumir</b> no topo para responder na hora pelo HUD.</div>';
+    if (isIdeAgy && !live && d.state !== 'working') html += '<div class="rnote">Sessão parada na IDE: Enviar entra na fila. Toque em <b>Assumir</b> no topo para responder na hora.</div>';
     if (d.queued) html += '<div class="rqueued">Na fila: “' + esc(d.queued) + '” <button class="link" id="cancelReply">cancelar</button></div>';
     if (sugg.length) {
       html += '<div class="schips" id="suggChips">';
@@ -33,12 +40,20 @@
     html += '<div class="chips' + (chipsOpen ? ' open' : '') + '" id="quickChips">';
     for (i = 0; i < QUICK.length; i++) html += '<button type="button" class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
     return html + '</div><div class="slash-pop" id="slashPop" style="display:none"></div>' +
-      '<div class="row rform"><textarea id="replyText" rows="2" placeholder="Escreva, digite / ou fale uma resposta…"></textarea>' +
-      '<input type="file" id="replyAttachInput" accept="image/*" style="display:none">' +
-      '<button type="button" class="attach" id="attachReply" aria-label="Anexar imagem" title="Anexar imagem">📎</button>' +
-      (Speech ? '<button class="mic' + (rec ? ' on' : '') + '" id="micReply" aria-label="Falar a resposta" title="Falar a resposta">🎤</button>'
-        : (snap && snap.voiceStt ? '<input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" style="display:none"><button type="button" class="mic" id="voiceSttBtn" aria-label="Ditar via Whisper local" title="Ditar via Whisper local">🎤</button>' : '')) +
-      '<button class="send" id="sendReply">Enviar</button></div></div>';
+      '<div class="rcomposer">' +
+        '<div class="rform"><textarea id="replyText" rows="2" placeholder="Escreva, digite / ou fale uma resposta…"></textarea></div>' +
+        '<div class="row rbar">' +
+          '<input type="file" id="replyAttachInput" accept="image/*" style="display:none">' +
+          '<button type="button" class="rtool attach" id="attachReply" aria-label="Anexar imagem" title="Anexar imagem">' + replyIcon('paperclip') + '</button>' +
+          (Speech ? '<button type="button" class="rtool mic' + (rec ? ' on' : '') + '" id="micReply" aria-label="Falar a resposta" title="Falar a resposta">' + replyIcon('mic') + '</button>'
+            : (snap && snap.voiceStt ? '<input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" style="display:none"><button type="button" class="rtool mic" id="voiceSttBtn" aria-label="Ditar via Whisper local" title="Ditar via Whisper local">' + replyIcon('mic') + '</button>' : '')) +
+          '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
+            (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button>' +
+          '<span class="grow"></span>' +
+          (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">na fila</span>') +
+          '<button type="button" class="send" id="sendReply" aria-label="Enviar resposta" title="Enviar">' + replyIcon('arrowUp') + '</button>' +
+        '</div>' +
+      '</div></div>';
   }
 
   // ---- Ditado da resposta (Web Speech API do navegador ou Whisper local) ------
@@ -61,7 +76,7 @@
     return text;
   }
 
-  function micState() { var b = $('micReply'); if (b) b.className = 'mic' + (rec ? ' on' : ''); }
+  function micState() { var b = $('micReply'); if (b) b.className = 'rtool mic' + (rec ? ' on' : ''); }
 
   function stopMic() { if (rec) try { rec.stop(); } catch (e) {} }
 
@@ -199,12 +214,12 @@
         if (!f) return;
         var b = $('voiceSttBtn');
         b.disabled = true;
-        b.textContent = '…';
+        b.innerHTML = '…';
         var rd = new FileReader();
         rd.onload = function () {
           request('POST', '/api/voice/transcribe', function (err, r) {
             b.disabled = false;
-            b.textContent = '🎤';
+            b.innerHTML = replyIcon('mic');
             if (err) return flash('Transcrição falhou: ' + err.message, false);
             var box = $('replyText');
             if (box && r && r.text) {
@@ -213,7 +228,7 @@
             }
           }, { audioBase64: String(rd.result || ''), mimeType: f.type || 'audio/wav', language: 'pt' });
         };
-        rd.onerror = function () { b.disabled = false; b.textContent = '🎤'; };
+        rd.onerror = function () { b.disabled = false; b.innerHTML = replyIcon('mic'); };
         rd.readAsDataURL(f);
       };
     }

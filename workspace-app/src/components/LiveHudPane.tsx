@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft,
+  ArrowUp,
   Check,
   CheckCheck,
   Clock,
@@ -13,8 +14,8 @@ import {
   Paperclip,
   Plus,
   RotateCcw,
-  Send,
   ShieldAlert,
+  Slash,
   Square,
   Star,
   Terminal,
@@ -944,30 +945,8 @@ export function LiveHudPane({
                     </button>
                   </div>
                 )}
-                {pendingImgs.length > 0 && (
-                  <div className="chat-attach-strip">
-                    {pendingImgs.map((img) => (
-                      <div
-                        key={img.id}
-                        className={`chat-attach-chip ${img.error ? 'err' : ''}`}
-                        title={img.error ? `${img.name}: ${img.error}` : img.name}
-                      >
-                        <img src={img.previewUrl} alt={img.name} />
-                        {img.uploading && <div className="chat-attach-busy">…</div>}
-                        <button
-                          type="button"
-                          className="chat-attach-rm"
-                          title="Remover imagem"
-                          onClick={() => setPendingImgs((prev) => prev.filter((x) => x.id !== img.id))}
-                        >
-                          <X size={10} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
                 {replyText.startsWith('/') && skills.length > 0 && (
-                  <div style={{ border: '1px solid var(--border-hi)', borderRadius: 8, background: '#111318', overflow: 'hidden' }}>
+                  <div className="chat-slash-pop">
                     {skills
                       .filter((sk) => sk.cmd.toLowerCase().startsWith(replyText.trim().toLowerCase()))
                       .slice(0, 6)
@@ -985,14 +964,38 @@ export function LiveHudPane({
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <div className="chat-composer">
+                  {pendingImgs.length > 0 && (
+                    <div className="chat-attach-strip">
+                      {pendingImgs.map((img) => (
+                        <div
+                          key={img.id}
+                          className={`chat-attach-chip ${img.error ? 'err' : ''}`}
+                          title={img.error ? `${img.name}: ${img.error}` : img.name}
+                        >
+                          <img src={img.previewUrl} alt={img.name} />
+                          {img.uploading && <div className="chat-attach-busy">…</div>}
+                          <button
+                            type="button"
+                            className="chat-attach-rm"
+                            title="Remover imagem"
+                            onClick={() => setPendingImgs((prev) => prev.filter((x) => x.id !== img.id))}
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <textarea
-                    className="ta"
-                    rows={2}
+                    className="chat-composer-ta"
+                    rows={1}
                     value={replyText}
                     onChange={(e) => {
                       const v = e.target.value;
                       setReplyText(v);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(180, Math.max(36, e.target.scrollHeight))}px`;
                       if (v.startsWith('/') && !skills.length) {
                         api.getSkills(detail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
                       }
@@ -1023,32 +1026,50 @@ export function LiveHudPane({
                         sendReply();
                       }
                     }}
-                    placeholder="Responder (Enter envia, Ctrl+V cola imagem, / skills)…"
+                    placeholder="Responder… (Enter envia · Ctrl+V cola imagem · / skills)"
                   />
-                  <label className="btn btn-icon" title="Anexar ou colar imagem (Ctrl+V)" style={{ height: 36 }}>
-                    <Paperclip size={14} />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      style={{ display: 'none' }}
-                      disabled={uploadingImgs}
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        e.target.value = '';
-                        if (files.length) attachImageFiles(files);
-                      }}
-                    />
-                  </label>
-                  <button
-                    className="btn btn-primary btn-icon"
-                    style={{ height: 36, width: 38 }}
-                    disabled={sending || uploadingImgs || (!replyText.trim() && !readyImgs.length)}
-                    onClick={sendReply}
-                    title={uploadingImgs ? 'Aguarde o envio da imagem…' : 'Enviar resposta'}
-                  >
-                    <Send size={14} />
-                  </button>
+                  <div className="chat-composer-bar">
+                    <div className="chat-composer-tools">
+                      <label className="chat-tool-btn" title="Anexar ou colar imagem (Ctrl+V)">
+                        <Paperclip size={15} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          style={{ display: 'none' }}
+                          disabled={uploadingImgs}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = '';
+                            if (files.length) attachImageFiles(files);
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="chat-tool-btn"
+                        title="Comandos e skills (/)"
+                        onClick={() => {
+                          if (!replyText.startsWith('/')) setReplyText('/');
+                          if (!skills.length) {
+                            api.getSkills(detail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
+                          }
+                        }}
+                      >
+                        <Slash size={14} />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="chat-send-btn"
+                      disabled={sending || uploadingImgs || (!replyText.trim() && !readyImgs.length)}
+                      onClick={sendReply}
+                      title={uploadingImgs ? 'Aguarde o envio da imagem…' : 'Enviar resposta (Enter)'}
+                      aria-label="Enviar resposta"
+                    >
+                      <ArrowUp size={16} strokeWidth={2.4} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </>

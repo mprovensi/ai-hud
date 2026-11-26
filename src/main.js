@@ -36,6 +36,7 @@ const { createFolderPicker } = require('./actions/folder-picker');
 const { createOpenVsCode } = require('./actions/open-vscode');
 const { commitProjectGit } = require('./actions/project-git-commit');
 const { createProjectRunner } = require('./actions/project-runner');
+const { createMcpActions } = require('./actions/mcp');
 const { attachWsPty } = require('./api/ws-pty');
 const { createRunning } = require('./actions/running');
 const { compareSessions } = require('./core/session');
@@ -185,18 +186,38 @@ function createApp({
   const pickFolder = createFolderPicker({ exec });
   const openVsCode = createOpenVsCode();
   const projectRunner = createProjectRunner({ config, log });
+  const mcp = createMcpActions({ dataDir, config, machineName, log });
 
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, mcp, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
   const webauthn = createWebAuthn({ dataDir, config });
   const server = http.createServer(createHandler({ config, send, serveStatic, webAssets, workspaceDistDir, routes, webauthn, log }));
   attachWsPty({ server, dataDir, config, webauthn, ptyManager, peers, collector, machineName, log });
-  server.on('close', () => { ptyManager.closeAll(); projectRunner.stopAll(); });
+  let started = false;
+  let quotaTimer = null;
+
+  // Ponto único de encerramento: libera timers, agendadores, PTYs e processos do Play Runner.
+  function stop() {
+    if (quotaTimer) { clearInterval(quotaTimer); quotaTimer = null; }
+    started = false;
+    try { collector.stop(); } catch {}
+    try { if (fx && fx.stop) fx.stop(); } catch {}
+    try { if (memory && memory.stopScheduler) memory.stopScheduler(); } catch {}
+    try { if (workspaceSync && workspaceSync.stopAutoSync) workspaceSync.stopAutoSync(); } catch {}
+    try { if (sources && sources.stop) sources.stop(); } catch {}
+    try { if (ollama && ollama.stop) ollama.stop(); } catch {}
+    try { if (capabilities && capabilities.stop) capabilities.stop(); } catch {}
+    try { if (peers && peers.stop) peers.stop(); } catch {}
+    try { ptyManager.closeAll(); } catch {}
+    try { projectRunner.stopAll(); } catch {}
+  }
+
+  server.on('close', stop);
   // A página consulta com long-polling: manter a conexão aberta evita um novo handshake a cada vez
   // (caro no Wi-Fi em economia de energia do iPad)
   server.keepAliveTimeout = 65e3;
@@ -204,6 +225,8 @@ function createApp({
 
   // Leituras periódicas (coletor, cotas, Ollama, secundários, processos `ollama run`); fora dos testes
   function start() {
+    if (started) return;
+    started = true;
     if (sources.start) sources.start();
     if (showOllama) ollama.start();
     capabilities.start();
@@ -214,15 +237,16 @@ function createApp({
     peers.start(() => collector.poke());
     quotas.refreshAll().then(() => collector.poke());
     // Com alguma sessão trabalhando, lê a cada 1 min (o gráfico da janela de 5h fica mais detalhado)
-    setInterval(() => {
+    quotaTimer = setInterval(() => {
       const now = Date.now();
       let busy = false;
       try { busy = collector.current().snapshot.active.some((s) => s.state === 'working'); } catch {}
       if (quotas.sinceRefresh(now) >= (busy ? QUOTA_BUSY_MS : QUOTA_EVERY_MS)) quotas.refreshAll().then(() => collector.poke());
     }, 30e3);
+    if (quotaTimer.unref) quotaTimer.unref();
   }
 
-  return { server, config, start, warm: () => collector.current(), collector, quotas };
+  return { server, config, start, stop, warm: () => collector.current(), collector, quotas };
 }
 
 module.exports = { createApp };

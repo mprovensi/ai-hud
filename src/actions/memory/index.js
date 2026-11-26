@@ -520,7 +520,9 @@ function createMemoryActions({
 
   // Agendador leve fora do horário de trabalho (config.dream.schedule = { enabled: true, hour: 3, workspaceOnly: true })
   let lastAutoDay = '';
+  let schedulerTimer = null;
   function startScheduler() {
+    if (schedulerTimer) return schedulerTimer;
     const sched0 = config && config.dream && config.dream.schedule;
     if (sched0 && sched0.enabled) {
       const h = Number.isInteger(sched0.hour) ? sched0.hour : 3;
@@ -528,7 +530,7 @@ function createMemoryActions({
       const scope = sched0.workspaceOnly === false ? 'todos os projetos' : 'somente projetos do AI Workspace';
       log(`[dream-auto] agendado diariamente às ${String(h).padStart(2, '0')}:00 (${scope}, teto cota ${pct}%)`);
     }
-    const t = setInterval(async () => {
+    schedulerTimer = setInterval(async () => {
       const sched = config && config.dream && config.dream.schedule;
       if (!sched || !sched.enabled) return;
       const d = new Date(now());
@@ -542,11 +544,15 @@ function createMemoryActions({
         log(`[dream-auto] erro: ${e.message}`);
       }
     }, 15 * 60e3);
-    if (t.unref) t.unref();
-    return t;
+    if (schedulerTimer.unref) schedulerTimer.unref();
+    return schedulerTimer;
   }
 
-  return { saveMemoryFile, installBridges, dream, undoDream, runScheduledCycle, startScheduler };
+  function stopScheduler() {
+    if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
+  }
+
+  return { saveMemoryFile, installBridges, dream, undoDream, runScheduledCycle, startScheduler, stopScheduler };
 }
 
 module.exports = { createMemoryActions };

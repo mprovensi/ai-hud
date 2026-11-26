@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   MoreVertical,
   Pencil,
+  Plug,
   Plus,
   RefreshCw,
   Search,
@@ -27,26 +28,32 @@ import {
 } from 'lucide-react';
 import { api, withToken } from './api';
 import { evaluateStageAdvance } from './egmAdvance';
-import { CardEditor } from './components/CardEditor';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
-import { FilesAndGit } from './components/FilesAndGit';
 import { LiveHudPane, type CardExecIntent } from './components/LiveHudPane';
-import { MemoryPanel } from './components/MemoryPanel';
-import { NewProjectDrawer, type ProjectDrawerMode } from './components/NewProjectDrawer';
-import { NewSessionDrawer } from './components/NewSessionDrawer';
-import { NotesAndReports } from './components/NotesAndReports';
-import { ProjectDocsPane } from './components/ProjectDocsPane';
+import type { ProjectDrawerMode } from './components/NewProjectDrawer';
 import { ProjectIcon } from './components/ProjectIcon';
 import { ProjectRunControl } from './components/ProjectRunControl';
-import { QuotaDrawer, type QuotaProvider } from './components/QuotaDrawer';
-import { TerminalPane } from './components/TerminalPane';
+import type { QuotaProvider } from './components/QuotaDrawer';
 import { WorkspaceHome } from './components/WorkspaceHome';
 import { Badge, Button, ModalFrame, StatusDot } from './ui';
 import type { Snapshot, WorkspaceEntity, WorkspaceIndex, WorkspaceSyncStatus } from './types';
 
+// Carregamento sob demanda das áreas pesadas (code-splitting do bundle)
+const CardEditor = lazy(() => import('./components/CardEditor').then((m) => ({ default: m.CardEditor })));
+const FilesAndGit = lazy(() => import('./components/FilesAndGit').then((m) => ({ default: m.FilesAndGit })));
+const MemoryPanel = lazy(() => import('./components/MemoryPanel').then((m) => ({ default: m.MemoryPanel })));
+const McpPane = lazy(() => import('./components/McpPane').then((m) => ({ default: m.McpPane })));
+const NewProjectDrawer = lazy(() => import('./components/NewProjectDrawer').then((m) => ({ default: m.NewProjectDrawer })));
+const NewSessionDrawer = lazy(() => import('./components/NewSessionDrawer').then((m) => ({ default: m.NewSessionDrawer })));
+const NotesAndReports = lazy(() => import('./components/NotesAndReports').then((m) => ({ default: m.NotesAndReports })));
+const ProjectDocsPane = lazy(() => import('./components/ProjectDocsPane').then((m) => ({ default: m.ProjectDocsPane })));
+const QuotaDrawer = lazy(() => import('./components/QuotaDrawer').then((m) => ({ default: m.QuotaDrawer })));
+const TerminalPane = lazy(() => import('./components/TerminalPane').then((m) => ({ default: m.TerminalPane })));
+
 type Selection =
   | { kind: 'entity'; id: string }
   | { kind: 'doc'; area: 'context' | 'knowledge' | 'skills' | 'handoffs'; name: string }
+  | { kind: 'mcp' }
   | null;
 
 type EntityTab = 'step' | 'docs' | 'memory' | 'files' | 'terminal';
@@ -625,6 +632,7 @@ export function App() {
       { id: 'act-chat', group: 'Ação', label: 'Nova conversa com IA (escolher pasta e IA)', run: () => { setNewChatPrompt(''); setNewChatLocked(false); setNewChatOpen(true); } },
       { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: () => openNewModal('') },
       { id: 'act-grp', group: 'Ação', label: 'Criar workspace (ex.: TRT, Jogos)', run: openNewGroup },
+      { id: 'act-mcp', group: 'Navegação', label: 'MCPs Compartilhados (Claude · Codex · Antigravity)', run: () => setSelection({ kind: 'mcp' }) },
       { id: 'act-hud', group: 'Navegação', label: 'Abrir AI HUD Clássico (/)', run: () => { window.location.href = withToken('/'); } },
     ];
     for (const e of ws?.entities || []) {
@@ -934,6 +942,15 @@ export function App() {
               );
             })}
 
+            <div className="sb-sec"><span>Integrações</span></div>
+            <button
+              className={`sb-item ${selection?.kind === 'mcp' ? 'active' : ''}`}
+              onClick={() => setSelection({ kind: 'mcp' })}
+            >
+              <Plug size={13} color={selection?.kind === 'mcp' ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+              <span className="ell">MCPs Compartilhados</span>
+            </button>
+
             {([
               ['context', 'Contexto Global', BookOpen],
               ['knowledge', 'Conhecimento', FileText],
@@ -1082,60 +1099,82 @@ export function App() {
               </div>
 
               <div className={`stage-content ${entityTab === 'step' && activeStep && (activeStep.viewer === 'card' || activeStep.path.endsWith('.card.json')) ? 'stage-board' : ''}`}>
-                {entityTab === 'step' && activeStep ? (
-                  activeStep.viewer === 'card' || activeStep.path.endsWith('.card.json') ? (
-                    <CardEditor
+                <Suspense fallback={<div className="empty">Carregando módulo…</div>}>
+                  {entityTab === 'step' && activeStep ? (
+                    activeStep.viewer === 'card' || activeStep.path.endsWith('.card.json') ? (
+                      <CardEditor
+                        entityId={selectedEntity.id}
+                        filePath={activeStep.path}
+                        hasProjectCwd={!!activeBinding}
+                        projectCwd={activeBinding?.cwd}
+                        projectMachine={activeBinding?.machine}
+                        projectTitle={selectedEntity.title}
+                        lastAutoDone={lastAutoDone}
+                        reloadKey={boardReloadKey}
+                        snapshotVersion={snap?.version}
+                        onNotify={notify}
+                        onSendPrompt={(p) => { setPendingCardExec(null); setDraftPrompt(p); }}
+                        onExecuteItem={(intent) => { setPendingCardExec(intent); setDraftPrompt(intent.prompt); }}
+                        onOpenDoc={(p) => { setActiveProjectDoc(p); setEntityTab('docs'); }}
+                        onRunConfigUpdated={() => setRunConfigVersion((v) => v + 1)}
+                      />
+                    ) : (
+                      <NotesAndReports
+                        mode="entity"
+                        entityId={selectedEntity.id}
+                        filePath={activeStep.path}
+                        viewer={activeStep.viewer === 'html' || activeStep.path.endsWith('.html') ? 'html' : 'markdown'}
+                        onNotify={notify}
+                      />
+                    )
+                  ) : entityTab === 'docs' && activeBinding ? (
+                    <ProjectDocsPane
                       entityId={selectedEntity.id}
-                      filePath={activeStep.path}
-                      hasProjectCwd={!!activeBinding}
-                      projectCwd={activeBinding?.cwd}
-                      projectMachine={activeBinding?.machine}
-                      projectTitle={selectedEntity.title}
-                      lastAutoDone={lastAutoDone}
-                      reloadKey={boardReloadKey}
-                      snapshotVersion={snap?.version}
+                      initialDocPath={activeProjectDoc}
                       onNotify={notify}
-                      onSendPrompt={(p) => { setPendingCardExec(null); setDraftPrompt(p); }}
-                      onExecuteItem={(intent) => { setPendingCardExec(intent); setDraftPrompt(intent.prompt); }}
-                      onOpenDoc={(p) => { setActiveProjectDoc(p); setEntityTab('docs'); }}
-                      onRunConfigUpdated={() => setRunConfigVersion((v) => v + 1)}
+                      onSendPrompt={(p) => setDraftPrompt(p)}
+                      onBoardChanged={() => setBoardReloadKey((k) => k + 1)}
                     />
-                  ) : (
-                    <NotesAndReports
-                      mode="entity"
-                      entityId={selectedEntity.id}
-                      filePath={activeStep.path}
-                      viewer={activeStep.viewer === 'html' || activeStep.path.endsWith('.html') ? 'html' : 'markdown'}
+                  ) : entityTab === 'memory' ? (
+                    <MemoryPanel
+                      project={selectedEntity.id}
+                      cwd={activeBinding?.cwd}
                       onNotify={notify}
                     />
-                  )
-                ) : entityTab === 'docs' && activeBinding ? (
-                  <ProjectDocsPane
-                    entityId={selectedEntity.id}
-                    initialDocPath={activeProjectDoc}
-                    onNotify={notify}
-                    onSendPrompt={(p) => setDraftPrompt(p)}
-                    onBoardChanged={() => setBoardReloadKey((k) => k + 1)}
-                  />
-                ) : entityTab === 'memory' ? (
-                  <MemoryPanel
-                    project={selectedEntity.id}
-                    cwd={activeBinding?.cwd}
-                    onNotify={notify}
-                  />
-                ) : entityTab === 'files' && activeBinding ? (
-                  <FilesAndGit
-                    cwd={activeBinding.cwd}
-                    machine={activeBinding.machine}
-                    onNotify={notify}
-                  />
-                ) : entityTab === 'terminal' && activeBinding ? (
-                  <TerminalPane
-                    cwd={activeBinding.cwd}
-                    machine={activeBinding.machine}
-                    onNotify={notify}
-                  />
-                ) : null}
+                  ) : entityTab === 'files' && activeBinding ? (
+                    <FilesAndGit
+                      cwd={activeBinding.cwd}
+                      machine={activeBinding.machine}
+                      onNotify={notify}
+                    />
+                  ) : entityTab === 'terminal' && activeBinding ? (
+                    <TerminalPane
+                      cwd={activeBinding.cwd}
+                      machine={activeBinding.machine}
+                      onNotify={notify}
+                    />
+                  ) : null}
+                </Suspense>
+              </div>
+            </>
+          ) : selection?.kind === 'mcp' ? (
+            <>
+              <div className="stage-head">
+                <div className="stage-title-row">
+                  <button className="btn btn-sm btn-icon" onClick={() => setSelection(null)} aria-label="Voltar" title="Voltar">
+                    <ArrowLeft size={14} />
+                  </button>
+                  <Plug size={22} color="var(--accent)" />
+                  <div>
+                    <h1 className="stage-title">MCPs Compartilhados</h1>
+                    <p className="stage-desc">Catálogo único sincronizado para Claude Code, Codex CLI e Antigravity</p>
+                  </div>
+                </div>
+              </div>
+              <div className="stage-content">
+                <Suspense fallback={<div className="empty">Carregando catálogo MCP…</div>}>
+                  <McpPane snap={snap} onNotify={notify} />
+                </Suspense>
               </div>
             </>
           ) : selection?.kind === 'doc' ? (
@@ -1152,7 +1191,9 @@ export function App() {
                 </div>
               </div>
               <div className="stage-content">
-                <NotesAndReports mode="global" area={selection.area} docName={selection.name} onNotify={notify} />
+                <Suspense fallback={<div className="empty">Carregando documento…</div>}>
+                  <NotesAndReports mode="global" area={selection.area} docName={selection.name} onNotify={notify} />
+                </Suspense>
               </div>
             </>
           ) : (
@@ -1206,31 +1247,35 @@ export function App() {
       </div>
 
       {/* Gaveta lateral esquerda: Criar / Editar Projeto ou Workspace */}
-      <NewProjectDrawer
-        open={projectDrawer.open}
-        initialMode={projectDrawer.mode}
-        presetGroup={projectDrawer.presetGroup}
-        editEntity={projectDrawer.editEntity}
-        editGroup={projectDrawer.editGroup}
-        groups={allGroups}
-        groupMeta={ws?.groupMeta || {}}
-        entities={ws?.entities || []}
-        onClose={() => setProjectDrawer((prev) => ({ ...prev, open: false, editEntity: null, editGroup: null }))}
-        onProjectSaved={async (entity, isEdit) => {
-          await loadWorkspace();
-          if (!isEdit) {
-            setSelection({ kind: 'entity', id: entity.id });
-            setEntityTab('step');
-            setStepIdx(0);
-          }
-          notify(isEdit ? `Projeto "${entity.title}" atualizado.` : `Projeto "${entity.title}" criado.`);
-        }}
-        onGroupSaved={async (name, renamedFrom) => {
-          await loadWorkspace();
-          notify(renamedFrom ? `Workspace renomeado para "${name}".` : `Workspace "${name}" criado.`);
-        }}
-        onNotify={notify}
-      />
+      {projectDrawer.open && (
+        <Suspense fallback={null}>
+          <NewProjectDrawer
+            open={projectDrawer.open}
+            initialMode={projectDrawer.mode}
+            presetGroup={projectDrawer.presetGroup}
+            editEntity={projectDrawer.editEntity}
+            editGroup={projectDrawer.editGroup}
+            groups={allGroups}
+            groupMeta={ws?.groupMeta || {}}
+            entities={ws?.entities || []}
+            onClose={() => setProjectDrawer((prev) => ({ ...prev, open: false, editEntity: null, editGroup: null }))}
+            onProjectSaved={async (entity, isEdit) => {
+              await loadWorkspace();
+              if (!isEdit) {
+                setSelection({ kind: 'entity', id: entity.id });
+                setEntityTab('step');
+                setStepIdx(0);
+              }
+              notify(isEdit ? `Projeto "${entity.title}" atualizado.` : `Projeto "${entity.title}" criado.`);
+            }}
+            onGroupSaved={async (name, renamedFrom) => {
+              await loadWorkspace();
+              notify(renamedFrom ? `Workspace renomeado para "${name}".` : `Workspace "${name}" criado.`);
+            }}
+            onNotify={notify}
+          />
+        </Suspense>
+      )}
 
       {/* Menuzinho (...) da sidebar para Editar / Excluir Projeto ou Workspace */}
       {itemMenu && (
@@ -1288,41 +1333,49 @@ export function App() {
       )}
 
       {/* Gaveta lateral direita: Nova Conversa com IA */}
-      <NewSessionDrawer
-        open={newChatOpen}
-        onClose={() => setNewChatOpen(false)}
-        defaultBinding={activeBinding}
-        lockedProject={
-          newChatLocked && selectedEntity
-            ? {
-                title: selectedEntity.title,
-                machine: activeBinding?.machine || '',
-                cwd: activeBinding?.cwd || '',
+      {newChatOpen && (
+        <Suspense fallback={null}>
+          <NewSessionDrawer
+            open={newChatOpen}
+            onClose={() => setNewChatOpen(false)}
+            defaultBinding={activeBinding}
+            lockedProject={
+              newChatLocked && selectedEntity
+                ? {
+                    title: selectedEntity.title,
+                    machine: activeBinding?.machine || '',
+                    cwd: activeBinding?.cwd || '',
+                  }
+                : null
+            }
+            entities={ws?.entities || []}
+            snapshot={snap}
+            initialPrompt={newChatPrompt}
+            onCreated={(newSessionId) => {
+              if (newSessionId) {
+                setFocusSessionId(newSessionId);
+                attachCardExecToSession(newSessionId);
               }
-            : null
-        }
-        entities={ws?.entities || []}
-        snapshot={snap}
-        initialPrompt={newChatPrompt}
-        onCreated={(newSessionId) => {
-          if (newSessionId) {
-            setFocusSessionId(newSessionId);
-            attachCardExecToSession(newSessionId);
-          }
-          pollNowRef.current();
-        }}
-        onNotify={notify}
-      />
+              pollNowRef.current();
+            }}
+            onNotify={notify}
+          />
+        </Suspense>
+      )}
 
       {/* Gaveta lateral direita: Detalhes de uso da assinatura de IA */}
-      <QuotaDrawer
-        provider={quotaProvider}
-        snapshot={snap}
-        onChangeProvider={setQuotaProvider}
-        onClose={() => setQuotaProvider(null)}
-        onPollNow={() => pollNowRef.current()}
-        onNotify={notify}
-      />
+      {quotaProvider && (
+        <Suspense fallback={null}>
+          <QuotaDrawer
+            provider={quotaProvider}
+            snapshot={snap}
+            onChangeProvider={setQuotaProvider}
+            onClose={() => setQuotaProvider(null)}
+            onPollNow={() => pollNowRef.current()}
+            onNotify={notify}
+          />
+        </Suspense>
+      )}
 
       <CommandPalette open={paletteOpen} actions={paletteActions} onClose={() => setPaletteOpen(false)} />
 

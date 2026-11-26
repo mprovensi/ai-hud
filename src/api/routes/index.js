@@ -21,6 +21,7 @@ const routes = [
   require('./handoff'),
   require('./workspace'),
   require('./memory'),
+  require('./mcp'),
   require('./push'),
   require('./voice'),
   require('./hooks'),

@@ -412,3 +412,37 @@ export interface WorkspaceSyncStatus {
   lastSyncAt: number;
   lastError: string;
 }
+
+export type McpTarget = 'claude' | 'codex' | 'antigravity';
+export type McpTargetState = 'synced' | 'outdated' | 'missing' | 'disabled' | 'stale';
+
+export interface McpServerItem {
+  id: string;
+  name: string;
+  description?: string;
+  transport: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  url?: string;
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  targets: Record<McpTarget, boolean>;
+  machines: string[];
+  updatedAt?: number;
+  secretKeys?: string[];
+  missingSecrets?: string[];
+  targetStatus?: Record<McpTarget, McpTargetState>;
+}
+
+export interface McpStatusResponse {
+  ok: boolean;
+  machine: string;
+  catalogPath: string;
+  cliPaths: Record<McpTarget, string>;
+  cliExists: Record<McpTarget, boolean>;
+  localSecretKeys: string[];
+  managedIds: string[];
+  servers: McpServerItem[];
+  unmanaged: { id: string; transport: 'stdio' | 'http'; command?: string; url?: string; foundIn: McpTarget[] }[];
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -24,8 +24,9 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { ToolIcon } from '../ui';
-import { XtermPty } from './XtermPty';
 import type { CardStatus, SessionCard, SessionDetail, Snapshot } from '../types';
+
+const XtermPty = lazy(() => import('./XtermPty').then((m) => ({ default: m.XtermPty })));
 
 export interface CardExecIntent {
   entityId: string;
@@ -1130,16 +1131,18 @@ export function LiveHudPane({
                 </span>
               </div>
               {activeDetail.cwd || binding?.cwd ? (
-                <XtermPty
-                  ptyKey={`sess:${activeDetail.id}:${ptySubMode}`}
-                  cwd={activeDetail.cwd || binding?.cwd || ''}
-                  machine={activeDetail.machine || binding?.machine}
-                  mode={ptySubMode}
-                  tool={activeDetail.tool}
-                  sessionId={activeDetail.id}
-                  model={activeDetail.models?.[0] || ''}
-                  minHeight={260}
-                />
+                <Suspense fallback={<div className="empty">Carregando terminal PTY…</div>}>
+                  <XtermPty
+                    ptyKey={`sess:${activeDetail.id}:${ptySubMode}`}
+                    cwd={activeDetail.cwd || binding?.cwd || ''}
+                    machine={activeDetail.machine || binding?.machine}
+                    mode={ptySubMode}
+                    tool={activeDetail.tool}
+                    sessionId={activeDetail.id}
+                    model={activeDetail.models?.[0] || ''}
+                    minHeight={260}
+                  />
+                </Suspense>
               ) : (
                 <div className="empty">Esta sessão não possui pasta (cwd) registrada para abrir o terminal PTY.</div>
               )}

@@ -43,16 +43,32 @@ class Peers {
 
   // Uma volta: consulta, avisa e agenda a próxima (na hora com long-polling; 10 s sem ele ou após falha)
   follow(p, onUpdate) {
+    if (this._stopped) return Promise.resolve();
     const query = p.version ? `?local=1&desde=${encodeURIComponent(p.version)}&espera=${WAIT_S}` : '?local=1';
     return this.poll(p, query).then((changed) => {
+      if (this._stopped) return;
       if (changed) onUpdate();
       this.schedule(() => this.follow(p, onUpdate), p.version && !p.error ? 0 : POLL_MS);
     });
   }
 
   schedule(fn, ms) {
-    const t = setTimeout(fn, ms);
+    if (this._stopped) return;
+    if (!this._timers) this._timers = new Set();
+    const t = setTimeout(() => {
+      this._timers.delete(t);
+      if (!this._stopped) fn();
+    }, ms);
     if (t.unref) t.unref();
+    this._timers.add(t);
+  }
+
+  stop() {
+    this._stopped = true;
+    if (this._timers) {
+      for (const t of this._timers) clearTimeout(t);
+      this._timers.clear();
+    }
   }
 
   // Uma consulta; resolve true se o snapshot do secundário chegou

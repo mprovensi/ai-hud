@@ -88,17 +88,23 @@ function createFxTracker({ dataDir, config = {}, fetcher = defaultFetchUsdBrl, n
     return inflight;
   }
 
+  let timer = null;
   function start() {
+    if (timer) return;
     refresh(false);
-    const t = setInterval(() => refresh(false), REFRESH_MS);
-    if (t.unref) t.unref();
+    timer = setInterval(() => refresh(false), REFRESH_MS);
+    if (timer.unref) timer.unref();
+  }
+
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
   }
 
   function view() {
     return { ...state };
   }
 
-  return { view, refresh, start };
+  return { view, refresh, start, stop };
 }
 
 module.exports = { createFxTracker, DEFAULT_USD_TO_BRL };

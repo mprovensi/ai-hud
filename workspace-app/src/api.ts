@@ -488,4 +488,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  getMcpStatus: (machine = '') =>
+    apiFetch<import('./types').McpStatusResponse>(
+      `/api/mcp/status${machine ? `?machine=${encodeURIComponent(machine)}` : ''}`,
+    ),
+
+  saveMcpServer: (body: {
+    machine?: string;
+    server: Partial<import('./types').McpServerItem>;
+    secrets?: Record<string, string>;
+  }) =>
+    apiFetch<{ ok: boolean; server: import('./types').McpServerItem; status: import('./types').McpStatusResponse }>('/api/mcp/server', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteMcpServer: (body: { machine?: string; id: string }) =>
+    apiFetch<{ ok: boolean; id: string; status: import('./types').McpStatusResponse }>('/api/mcp/delete', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  importMcpFromClis: (body: { machine?: string; targets?: import('./types').McpTarget[] } = {}) =>
+    apiFetch<{ ok: boolean; importedCount: number; status: import('./types').McpStatusResponse }>('/api/mcp/import', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  installMcpMemoryPreset: (body: { machine?: string; sync?: boolean } = {}) =>
+    apiFetch<{ ok: boolean; status: import('./types').McpStatusResponse }>('/api/mcp/preset/memory', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  syncMcpToClis: (body: { machine?: string; targets?: import('./types').McpTarget[]; projectCwd?: string } = {}) =>
+    apiFetch<{ ok: boolean; results?: Record<string, { ok: boolean; count?: number; error?: string }>; status: import('./types').McpStatusResponse }>('/api/mcp/sync', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

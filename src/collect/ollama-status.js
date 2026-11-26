@@ -52,11 +52,21 @@ class Ollama {
     this.installed = null;
     this.installedModels = [];
     this.tagsAt = 0;
+    this._timer = null;
   }
 
   start() {
+    if (this._timer) return;
     this.poll();
-    setInterval(() => this.poll(), POLL_MS);
+    this._timer = setInterval(() => this.poll(), POLL_MS);
+    if (this._timer.unref) this._timer.unref();
+  }
+
+  stop() {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = null;
+    }
   }
 
   async poll() {

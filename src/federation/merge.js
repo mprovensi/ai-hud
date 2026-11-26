@@ -118,11 +118,15 @@ function mergeSnapshots({ local, localName, list, live, ollamasFor }) {
     for (const p of live) {
       const q = p.snap.quotas && p.snap.quotas[name];
       if (!q || !quotaReset(q)) continue;
-      const same = !quotaReset(best) || Math.abs(quotaReset(q) - quotaReset(best)) < 120e3;
-      if (same && (!best || !quotaReset(best) || !best.at || (q.at || 0) > best.at)) {
+      const bestReset = quotaReset(best);
+      const qReset = quotaReset(q);
+      const sameWindow = !bestReset || Math.abs(qReset - bestReset) < 120e3;
+      const newerWindow = bestReset && qReset > bestReset && (q.at || 0) > (best.at || 0);
+      const healLocalError = !!(best && best.error && !q.error);
+      if (healLocalError || ((sameWindow || newerWindow) && (!best || !bestReset || !best.at || (q.at || 0) > best.at))) {
         best = q;
         if (p.snap.burn && p.snap.burn[name]) bestBurn = p.snap.burn[name];
-      } else if (same && !bestBurn && p.snap.burn && p.snap.burn[name]) {
+      } else if (sameWindow && !bestBurn && p.snap.burn && p.snap.burn[name]) {
         bestBurn = p.snap.burn[name];
       }
     }

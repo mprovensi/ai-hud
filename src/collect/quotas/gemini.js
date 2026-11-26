@@ -75,16 +75,16 @@ function parseAgyUsage(payload) {
   return extraGroups.length ? { plan: 'Antigravity', windows, extraGroups } : { plan: 'Antigravity', windows };
 }
 
-function runAgyUsage(exe, timeoutMs = 30000) {
+function runAgyUsage(exe, timeoutMs = 45000) {
   return new Promise((resolve, reject) => {
-    execFile(exe, ['--print', '/usage', '--output-format', 'json', '--print-timeout', '25s'],
+    execFile(exe, ['--print', '/usage', '--output-format', 'json', '--print-timeout', '35s'],
       { windowsHide: true, cwd: ROOT, timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) {
           const msg = String(stderr || err.message || '').trim().split(/\r?\n/)[0] || 'erro ao executar agy';
-          const e = new Error(msg);
+          const e = new Error(err.killed ? 'tempo esgotado (agy)' : msg);
           e.code = err.code;
-          e.soft = err.killed || /timeout|timed out/i.test(msg);
+          e.soft = !!(err.killed || /timeout|timed out|command failed/i.test(msg));
           return reject(e);
         }
         try { resolve(JSON.parse(stdout)); } catch { reject(new Error('resposta JSON inválida do agy')); }

@@ -35,9 +35,22 @@ function createQuotaTracker({ historyFile, fetchers }) {
     }
   }
 
-  function refreshAll() {
+  let refreshing = null;
+
+  async function refreshAll() {
+    if (refreshing) return refreshing;
     lastRefresh = Date.now();
-    return Promise.all(Object.keys(fetchers).map(refresh));
+    // Executa sequencialmente para evitar pico de RAM/CPU e timeouts simultâneos em VPS com 1 vCPU/1 GB RAM
+    refreshing = (async () => {
+      for (const name of Object.keys(fetchers)) {
+        await refresh(name);
+      }
+    })();
+    try {
+      await refreshing;
+    } finally {
+      refreshing = null;
+    }
   }
 
   return {

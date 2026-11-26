@@ -3,11 +3,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isCwdAllowed, isSafeRelativePath, normalizePath, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
-const { recentCwds } = require('../../collect/capabilities');
+const { isSafeRelativePath, normalizePath, toSafeRelPath, resolveContainedPath, isWithinRoot, isSecretPath } = require('../../core/path-guard');
+const { createCwdAuthorizer } = require('../cwd-auth');
 const { findProjectIcon } = require('../../collect/file-preview');
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
-const { readWorkspaceJson } = require('../../collect/workspace');
 
 const IMAGE_MIMES = {
   '.png': 'image/png',
@@ -22,33 +21,7 @@ const IMAGE_MIMES = {
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
 module.exports = ({ filePreview, fileList, projectGit, projectGitCommit, terminal, ptyManager, pickFolder, openVsCode, peers, collector, dataDir, config, machineName, relay, send, json, text }) => {
-  function checkAuthorizedCwd(cwd, { allowHomeSubdirs = false } = {}) {
-    const home = os.homedir();
-    if (allowHomeSubdirs && !(config && config.strictRemoteCwd) && home && isWithinRoot(home, cwd) && !isSecretPath(cwd)) {
-      return { ok: true };
-    }
-    const knownCwds = recentCwds(collector.current().sessions, (config && config.pinnedProjects) || []);
-    const wsRoots = [];
-    if (dataDir) {
-      try {
-        const ws = readWorkspaceJson(resolveWorkspaceRoot(dataDir, config));
-        for (const m of Object.values(ws.groupMeta || {})) {
-          if (m && m.rootCwd) wsRoots.push(m.rootCwd);
-        }
-        for (const e of (ws.entities || [])) {
-          for (const b of (e.projectBindings || [])) {
-            if (b && b.cwd) wsRoots.push(b.cwd);
-          }
-        }
-      } catch {}
-    }
-    return isCwdAllowed(cwd, {
-      allowedRoots: [...((config && config.allowedRoots) || []), ...wsRoots],
-      knownCwds,
-      home,
-      strict: true,
-    });
-  }
+  const checkAuthorizedCwd = createCwdAuthorizer({ dataDir, config, collector });
 
   return [
     { method: 'GET', path: '/api/fs/preview', handler: async ({ res, url }) => {

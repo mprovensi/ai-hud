@@ -335,10 +335,13 @@ export function CardEditor({
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
   const modalOpenRef = useRef(false);
+  const editRevRef = useRef(0);
+  const boardKeyRef = useRef('');
   baseHashRef.current = baseHash;
   dirtyRef.current = dirty;
   savingRef.current = saving;
   modalOpenRef.current = !!detailModal;
+  boardKeyRef.current = `${entityId}:${filePath}`;
 
   async function load(ignoreDraft = false, showSkeleton = false) {
     const seq = ++loadSeqRef.current;
@@ -588,6 +591,7 @@ export function CardEditor({
   }, [lastAutoDone, entityId, projectCwd, projectMachine]);
 
   function updateCard(next: CardDoc) {
+    editRevRef.current += 1;
     setCard(next);
     setDirty(true);
     try {
@@ -598,22 +602,31 @@ export function CardEditor({
   async function save(cardOverride?: CardDoc, silentToast = false) {
     const targetCard = cardOverride || card;
     if (!targetCard || savingRef.current || offlineFallback) return false;
+    const sentKey = boardKeyRef.current;
+    const sentRev = editRevRef.current;
     savingRef.current = true;
     setSaving(true);
     try {
       const r = hasProjectCwd
         ? await api.saveProjectBoard({ entityId, content: targetCard, baseHash: baseHashRef.current })
         : await api.saveEntityFile({ id: entityId, path: filePath, content: targetCard, baseHash: baseHashRef.current });
+      if (boardKeyRef.current !== sentKey) return true;
       baseHashRef.current = r.hash;
       setBaseHash(r.hash);
-      setDirty(false);
       setConflict(null);
       setPendingExternalReload(false);
-      sessionStorage.removeItem(draftKey);
       if (hasProjectCwd) setStorage('in-project');
-      if (!silentToast) onNotify('Quadro salvo.');
+      // Só limpa dirty e rascunho se nenhuma edição mais nova ocorreu enquanto este save estava em andamento (R13).
+      if (editRevRef.current === sentRev) {
+        setDirty(false);
+        sessionStorage.removeItem(draftKey);
+        if (!silentToast) onNotify('Quadro salvo.');
+      } else if (!silentToast) {
+        onNotify('Versão anterior salva; alterações recentes serão salvas em seguida.');
+      }
       return true;
     } catch (e) {
+      if (boardKeyRef.current !== sentKey) return false;
       const ce = e as ConflictError;
       if (ce.conflict && ce.currentContent) {
         setConflict({ currentContent: ce.currentContent as CardDoc, currentHash: ce.currentHash });

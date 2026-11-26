@@ -10,8 +10,9 @@
   ];
 
   function wsAssetHref(id, rel) {
+    var isHtml = /\.html?$/i.test(String(rel || ''));
     return '/api/workspace/entity/asset?id=' + encodeURIComponent(id) + '&path=' + encodeURIComponent(rel) +
-      (token ? '&t=' + encodeURIComponent(token) : '');
+      (!isHtml && token ? '&t=' + encodeURIComponent(token) : '');
   }
 
   function wsCanFullDesktop() {

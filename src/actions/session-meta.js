@@ -17,7 +17,7 @@ function createSessionMeta(dataDir) {
         .slice(0, keys.length - MAX_ENTRIES)
         .forEach((k) => { delete map[k]; });
     }
-    writeJson(file, map, true);
+    return writeJson(file, map, true);
   }
 
   function get(id) {
@@ -31,6 +31,8 @@ function createSessionMeta(dataDir) {
   function set({ id, pinned, alias, group }) {
     const key = String(id || '').trim();
     if (!key || key.length > 160) return { status: 400, body: 'id da sessão inválido' };
+    const hadPrev = Object.prototype.hasOwnProperty.call(map, key);
+    const prev = hadPrev ? { ...map[key] } : null;
     const cur = { ...(map[key] || {}) };
     if (typeof pinned === 'boolean') cur.pinned = pinned;
     if (typeof alias === 'string') cur.alias = alias.trim().slice(0, 120);
@@ -41,7 +43,11 @@ function createSessionMeta(dataDir) {
     } else {
       map[key] = cur;
     }
-    persist();
+    if (!persist()) {
+      if (hadPrev) map[key] = prev;
+      else delete map[key];
+      return { status: 500, body: 'Falha ao persistir metadados da sessão em disco.' };
+    }
     return { status: 200, body: { ok: true, id: key, meta: map[key] || { pinned: false, alias: '', group: '' } } };
   }
 

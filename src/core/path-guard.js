@@ -17,17 +17,26 @@ const SECRET_PATH_RE = [
   /(^|\/)data\/(config|pending)\.json$/i,
 ];
 
+function isWinAbsolute(s) {
+  return /^[a-zA-Z]:\\/.test(s) || /^\\\\[^\\]+\\[^\\]+/.test(s);
+}
+
 function normalizePath(raw, platform = process.platform) {
   let s = String(raw || '').trim();
-  if (!s) return '';
+  if (!s || /[\x00-\x1f]/.test(s)) return '';
   s = s.replace(/^\\\\\?\\/, '');
   const isWinDrive = /^[a-zA-Z]:/.test(s);
   if (platform === 'win32' && (isWinDrive || s.startsWith('\\\\'))) {
     s = s.replace(/\//g, '\\');
+    // Rejeita caminhos drive-relative (ex.: "C:foo") sem barra após ':'
+    if (isWinDrive && s.length > 2 && s[2] !== '\\') return '';
+    if (isWinDrive && s.length === 2) s += '\\';
+    s = path.win32.normalize(s);
     // Mantém barra final apenas em raiz de unidade (ex.: C:\)
     if (!/^[a-zA-Z]:\\$/.test(s)) s = s.replace(/\\+$/, '');
   } else {
     s = s.replace(/\\/g, '/');
+    s = path.posix.normalize(s);
     if (s !== '/') s = s.replace(/\/+$/, '');
   }
   return s;
@@ -44,12 +53,20 @@ function isWithinRoot(root, candidate, platform = process.platform) {
   const nr = normalizePath(root, platform);
   const nc = normalizePath(candidate, platform);
   if (!nr || !nc) return false;
+  if (platform === 'win32' && (isWinAbsolute(nr) || isWinAbsolute(nc))) {
+    if (!isWinAbsolute(nr) || !isWinAbsolute(nc)) return false;
+    const r = nr.toLowerCase();
+    const c = nc.toLowerCase();
+    if (c === r) return true;
+    const rel = path.win32.relative(r, c);
+    return !!rel && rel !== '..' && !rel.startsWith('..\\') && !path.win32.isAbsolute(rel);
+  }
+  if (!nr.startsWith('/') || !nc.startsWith('/')) return false;
   const r = platform === 'win32' ? nr.toLowerCase() : nr;
   const c = platform === 'win32' ? nc.toLowerCase() : nc;
   if (c === r) return true;
-  const sep = r.includes('\\') ? '\\' : '/';
-  const prefix = r.endsWith(sep) ? r : r + sep;
-  return c.startsWith(prefix);
+  const rel = path.posix.relative(r, c);
+  return !!rel && rel !== '..' && !rel.startsWith('../') && !rel.startsWith('/');
 }
 
 function isSafeRelativePath(raw) {
@@ -98,9 +115,11 @@ function toSafeRelPath(raw, cwd, platform = process.platform) {
 }
 
 function isCwdAllowed(cwd, { allowedRoots = [], knownCwds = [], home = '', strict = false, platform = process.platform } = {}) {
-  const norm = normalizePath(cwd, platform);
+  const rawTrimmed = String(cwd || '').trim();
+  const norm = normalizePath(rawTrimmed, platform);
   if (!strict) return { ok: true };
-  if (!norm) return { ok: true }; // vazio = pasta pessoal padrão
+  if (!rawTrimmed) return { ok: true }; // vazio = pasta pessoal padrão
+  if (!norm) return { ok: false, reason: 'Caminho de pasta inválido.' };
   if (home && samePath(norm, home, platform)) return { ok: true };
   for (const known of knownCwds || []) {
     if (known && samePath(norm, known, platform)) return { ok: true };

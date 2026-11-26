@@ -5,7 +5,7 @@ const { isSafeRelativePath, isWithinRoot, isSecretPath, resolveContainedPath } =
 const { validateCard, defaultCard, slugifyEntity } = require('../../core/workspace-schema');
 const { extractItemsFromMarkdown, mergeImportedItems, toggleMarkdownCheckbox } = require('../../core/doc-parser');
 const { buildSpecTemplate } = require('../../core/egm');
-const { hashContent, writeAtomic, writeAtomicWithBackup } = require('../../infra/workspace-paths');
+const { hashContent, writeAtomic, writeAtomicWithBackup, resolveSafeContainedTarget } = require('../../infra/workspace-paths');
 const { PORTABLE_DIR, PORTABLE_BOARD_REL, listProjectDocs, readProjectDoc, readPortableBoard } = require('../../collect/workspace/project-docs');
 
 const DOC_EXTS = new Set(['.md', '.markdown', '.txt']);
@@ -17,8 +17,20 @@ const MAX_DOC_BYTES = 1024 * 1024;
 function ensurePortableDir(cwd, { now = () => Date.now() } = {}) {
   if (!cwd || !fs.existsSync(cwd)) return null;
   const realRoot = fs.realpathSync(cwd);
-  const wsDir = path.join(realRoot, PORTABLE_DIR);
-  fs.mkdirSync(path.join(wsDir, 'reviews'), { recursive: true });
+  const wsCheck = resolveSafeContainedTarget(realRoot, PORTABLE_DIR);
+  if (!wsCheck.ok) {
+    const err = new Error(wsCheck.error || 'Pasta .ai-workspace atravessa link fora do projeto.');
+    err.status = 403;
+    throw err;
+  }
+  const wsDir = wsCheck.target;
+  const reviewsCheck = resolveSafeContainedTarget(realRoot, path.join(PORTABLE_DIR, 'reviews'));
+  if (!reviewsCheck.ok) {
+    const err = new Error(reviewsCheck.error || 'Pasta reviews atravessa link fora do projeto.');
+    err.status = 403;
+    throw err;
+  }
+  fs.mkdirSync(reviewsCheck.target, { recursive: true });
 
   const innerGi = path.join(wsDir, '.gitignore');
   if (!fs.existsSync(innerGi)) {
@@ -63,8 +75,15 @@ function savePortableBoard({ cwd, content, baseHash = '', now = () => Date.now()
     return { status: e.status || 400, body: e.message };
   }
 
-  const ensured = ensurePortableDir(cwd, { now });
-  const target = path.join(ensured.realRoot, PORTABLE_BOARD_REL);
+  let ensured;
+  try {
+    ensured = ensurePortableDir(cwd, { now });
+  } catch (e) {
+    return { status: e.status || 403, body: e.message || 'Pasta .ai-workspace inválida.' };
+  }
+  const targetCheck = resolveSafeContainedTarget(ensured.realRoot, PORTABLE_BOARD_REL);
+  if (!targetCheck.ok) return { status: 403, body: targetCheck.error };
+  const target = targetCheck.target;
   const serialized = JSON.stringify(obj, null, 2) + '\n';
 
   if (fs.existsSync(target)) {
@@ -82,12 +101,17 @@ function savePortableBoard({ cwd, content, baseHash = '', now = () => Date.now()
     }
   }
 
-  writeAtomicWithBackup({
-    filePath: target,
-    content: serialized,
-    backupDir: path.join(ensured.wsDir, 'backups', 'cards'),
-    tag: 'board.card.json',
-  });
+  try {
+    writeAtomicWithBackup({
+      filePath: target,
+      content: serialized,
+      backupDir: path.join(ensured.wsDir, 'backups', 'cards'),
+      tag: 'board.card.json',
+      rootDir: ensured.realRoot,
+    });
+  } catch (e) {
+    return { status: e.status || 500, body: e.message || 'Erro ao gravar quadro.' };
+  }
 
   return { status: 200, body: { ok: true, storage: 'in-project', path: PORTABLE_BOARD_REL, hash: hashContent(serialized) } };
 }
@@ -104,14 +128,20 @@ function saveProjectDoc({ cwd, relPath, content, baseHash = '', now = () => Date
     return { status: 413, body: 'Documento excede o limite de 1 MB.' };
   }
 
-  const ensured = ensurePortableDir(cwd, { now });
-  const target = resolveContainedPath(ensured.realRoot, cleanRel);
-  if (!target || !isWithinRoot(ensured.realRoot, target)) return { status: 403, body: 'Caminho fora do projeto.' };
+  let ensured;
+  try {
+    ensured = ensurePortableDir(cwd, { now });
+  } catch (e) {
+    return { status: e.status || 403, body: e.message || 'Pasta .ai-workspace inválida.' };
+  }
+  const targetLex = resolveContainedPath(ensured.realRoot, cleanRel);
+  if (!targetLex || !isWithinRoot(ensured.realRoot, targetLex)) return { status: 403, body: 'Caminho fora do projeto.' };
+  const targetCheck = resolveSafeContainedTarget(ensured.realRoot, cleanRel);
+  if (!targetCheck.ok) return { status: 403, body: targetCheck.error || 'Symlink/junction fora do projeto.' };
+  const target = targetCheck.target;
 
   if (fs.existsSync(target)) {
-    const realFile = fs.realpathSync(target);
-    if (!isWithinRoot(ensured.realRoot, realFile)) return { status: 403, body: 'Symlink fora do projeto.' };
-    const currentRaw = fs.readFileSync(realFile, 'utf8');
+    const currentRaw = fs.readFileSync(target, 'utf8');
     const currentHash = hashContent(currentRaw);
     if (baseHash && baseHash !== currentHash) {
       return {
@@ -125,12 +155,17 @@ function saveProjectDoc({ cwd, relPath, content, baseHash = '', now = () => Date
     }
   }
 
-  writeAtomicWithBackup({
-    filePath: target,
-    content: serialized,
-    backupDir: path.join(ensured.wsDir, 'backups', 'docs'),
-    tag: cleanRel.replace(/\//g, '_'),
-  });
+  try {
+    writeAtomicWithBackup({
+      filePath: target,
+      content: serialized,
+      backupDir: path.join(ensured.wsDir, 'backups', 'docs'),
+      tag: cleanRel.replace(/\//g, '_'),
+      rootDir: ensured.realRoot,
+    });
+  } catch (e) {
+    return { status: e.status || 500, body: e.message || 'Erro ao salvar documento.' };
+  }
 
   return { status: 200, body: { ok: true, path: cleanRel, hash: hashContent(serialized) } };
 }
@@ -160,12 +195,17 @@ function createSpecDoc({ cwd, title = '', summary = '', folder = 'docs/specs', n
 
 function saveReviewReport({ cwd, docPath, markdown, now = () => Date.now() }) {
   if (!cwd || !fs.existsSync(cwd)) return { status: 404, body: 'Pasta do projeto não encontrada nesta máquina.' };
-  const ensured = ensurePortableDir(cwd, { now });
+  let ensured;
+  try {
+    ensured = ensurePortableDir(cwd, { now });
+  } catch (e) {
+    return { status: e.status || 403, body: e.message || 'Pasta .ai-workspace inválida.' };
+  }
   const slug = slugifyEntity(path.basename(String(docPath || 'spec'), path.extname(String(docPath || '')))).slice(0, 48);
   const relPath = `${PORTABLE_DIR}/reviews/${slug}.md`;
-  const target = resolveContainedPath(ensured.realRoot, relPath);
-  if (!target || !isWithinRoot(ensured.realRoot, target)) return { status: 403, body: 'Caminho de revisão inválido.' };
-  writeAtomic(target, String(markdown || '').trimEnd() + '\n');
+  const targetCheck = resolveSafeContainedTarget(ensured.realRoot, relPath);
+  if (!targetCheck.ok) return { status: 403, body: targetCheck.error || 'Caminho de revisão inválido.' };
+  writeAtomic(targetCheck.target, String(markdown || '').trimEnd() + '\n');
   return { status: 200, body: { ok: true, reportPath: relPath } };
 }
 

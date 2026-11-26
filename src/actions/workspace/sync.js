@@ -31,9 +31,17 @@ function parsePorcelain(raw) {
 
   for (const line of lines) {
     if (line.startsWith('## ')) {
-      const head = line.slice(3);
-      const bm = /^([^\s.]+)/.exec(head);
-      if (bm && bm[1] !== 'No') branch = bm[1];
+      const head = line.slice(3).trim();
+      const unborn = /^(?:No commits yet on|Initial commit on)\s+(\S+)/.exec(head);
+      if (unborn) {
+        branch = unborn[1];
+      } else if (/^HEAD\s+\(no branch\)/i.test(head)) {
+        branch = '';
+      } else {
+        const refPart = head.split(/\s+/)[0] || '';
+        const localBranch = refPart.split('...')[0];
+        if (localBranch && localBranch !== 'HEAD') branch = localBranch;
+      }
       const am = /ahead (\d+)/.exec(head);
       const dm = /behind (\d+)/.exec(head);
       if (am) ahead = Number(am[1]) || 0;
@@ -166,7 +174,11 @@ function createWorkspaceSync({ dataDir, config, execGit = defaultExecGit, now = 
       let pushed = false;
 
       if (hasRemote) {
-        const branch = pre.branch || 'main';
+        const branch = pre.branch;
+        if (!branch) {
+          lastError = 'Repositório em detached HEAD — faça checkout de uma branch antes de sincronizar.';
+          return { status: 409, body: { ok: false, error: lastError, status: pre } };
+        }
         const fe = await execGit(dir, ['fetch', 'origin'], 20000);
         if (!fe.ok) {
           lastError = fe.stderr.trim() || 'Falha no git fetch origin.';

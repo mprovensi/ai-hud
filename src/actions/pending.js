@@ -6,7 +6,7 @@
 // Mudanças importantes gravam na hora; "ainda estou aqui" (seen) grava em até 5 s.
 const fs = require('fs');
 const path = require('path');
-const { readJson, writeJson } = require('../infra/store');
+const { readJson, writeJsonStrict } = require('../infra/store');
 
 const SECTIONS = ['replies', 'listening', 'permissions'];
 
@@ -19,11 +19,14 @@ function createPendingStore(file) {
 
   const save = () => {
     if (dirty) { clearTimeout(dirty); dirty = null; }
-    writeJson(file, Object.fromEntries(SECTIONS.map((name) => [name, Object.fromEntries(maps[name])])));
+    writeJsonStrict(file, Object.fromEntries(SECTIONS.map((name) => [name, Object.fromEntries(maps[name])])));
   };
   const touch = () => {
     if (dirty) return;
-    dirty = setTimeout(save, 5000);
+    dirty = setTimeout(() => {
+      dirty = null;
+      try { save(); } catch {}
+    }, 5000);
     if (dirty.unref) dirty.unref();
   };
 
@@ -32,8 +35,29 @@ function createPendingStore(file) {
     return {
       get: (k) => map.get(k),
       has: (k) => map.has(k),
-      set(k, v) { map.set(k, v); save(); },
-      delete(k) { if (map.delete(k)) save(); },
+      set(k, v) {
+        const hadPrev = map.has(k);
+        const prev = map.get(k);
+        map.set(k, v);
+        try {
+          save();
+        } catch (err) {
+          if (hadPrev) map.set(k, prev);
+          else map.delete(k);
+          throw err;
+        }
+      },
+      delete(k) {
+        if (!map.has(k)) return;
+        const prev = map.get(k);
+        map.delete(k);
+        try {
+          save();
+        } catch (err) {
+          map.set(k, prev);
+          throw err;
+        }
+      },
       entries: () => map.entries(),
       values: () => map.values(),
       // O objeto guardado mudou só em "seen": grava sem pressa

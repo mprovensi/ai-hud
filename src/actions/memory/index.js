@@ -9,7 +9,9 @@ const {
   EDITABLE_MEMORY_FILES,
   MEMORY_FILES,
   DEFAULT_DREAM_ENGINES,
+  DREAM_BATCH_SIZE,
   selectDeltaSessions,
+  selectDreamBatch,
   buildSessionDigest,
   buildDreamPrompt,
   parseDreamResponse,
@@ -19,7 +21,7 @@ const {
   buildBridgeSnippet,
 } = require('../../core/memory');
 const { redactSecrets } = require('../../core/redact');
-const { resolveWorkspaceRoot, hashContent, writeAtomic, writeAtomicWithBackup } = require('../../infra/workspace-paths');
+const { resolveWorkspaceRoot, hashContent, writeAtomic, writeAtomicWithBackup, resolveSafeContainedTarget } = require('../../infra/workspace-paths');
 const { readWorkspaceJson } = require('../../collect/workspace');
 const { resolveProjectMemoryDir, readDreamState, readProjectMemory, listAllProjectMemories, collectMemorySessions } = require('../../collect/memory');
 const { readProjectGit } = require('../../collect/file-preview');
@@ -171,24 +173,40 @@ function createMemoryActions({
       }
     }
     const clean = file === 'pinned.md' ? String(content || '') : redactSecrets(String(content || '')).text;
-    writeAtomicWithBackup({
-      filePath: target,
-      content: clean,
-      backupDir: path.join(root(), '.ai-workspace', 'backups', 'memory-edits', resolved.slug),
-      tag: file,
-    });
+    const containmentRoot = resolved.mode === 'in-repo' && cwd ? cwd : root();
+    if (containmentRoot && fs.existsSync(containmentRoot)) {
+      const check = resolveSafeContainedTarget(containmentRoot, target);
+      if (!check.ok) return { status: 403, body: check.error || 'Destino de memória fora da raiz autorizada.' };
+    }
+    try {
+      writeAtomicWithBackup({
+        filePath: target,
+        content: clean,
+        backupDir: path.join(root(), '.ai-workspace', 'backups', 'memory-edits', resolved.slug),
+        tag: file,
+        rootDir: containmentRoot && fs.existsSync(containmentRoot) ? containmentRoot : '',
+      });
+    } catch (e) {
+      return { status: e.status || 500, body: e.message || 'Falha ao salvar arquivo de memória.' };
+    }
     return { status: 200, body: { ok: true, file, mode: resolved.mode, hash: hashContent(clean) } };
   }
 
   function installBridges({ project = '', cwd = '', mode = 'in-repo' }) {
     if (!cwd || !fs.existsSync(cwd)) return { status: 400, body: 'Pasta do projeto não encontrada neste PC.' };
     const resolved = resolveProjectMemoryDir({ workspaceRoot: root(), project, cwd, mode });
+    if (resolved.mode === 'in-repo') {
+      const dirCheck = resolveSafeContainedTarget(cwd, '.ai-memory');
+      if (!dirCheck.ok) return { status: 403, body: dirCheck.error || 'Pasta .ai-memory fora do projeto.' };
+    }
     fs.mkdirSync(resolved.dir, { recursive: true });
     const rel = resolved.mode === 'in-repo' ? '.ai-memory' : resolved.dir.replace(/\\/g, '/');
     const snippet = buildBridgeSnippet(rel);
     const updated = [];
     for (const fname of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md']) {
-      const fp = path.join(cwd, fname);
+      const check = resolveSafeContainedTarget(cwd, fname);
+      if (!check.ok) return { status: 403, body: check.error || `Arquivo ${fname} atravessa link fora do projeto.` };
+      const fp = check.target;
       let prev = '';
       try { prev = fs.readFileSync(fp, 'utf8'); } catch {}
       let next;
@@ -257,7 +275,10 @@ function createMemoryActions({
         }
       }
 
-      const digest = buildSessionDigest(delta);
+      // Lote explícito reutilizado no digest, no estado e nas métricas (R11)
+      const batch = selectDreamBatch(delta, DREAM_BATCH_SIZE);
+      const remainingCount = Math.max(0, delta.length - batch.length);
+      const digest = buildSessionDigest(batch, { maxSessions: batch.length });
       const startedAt = now();
       const prompt = buildDreamPrompt({
         project: currentMem.project,
@@ -293,9 +314,28 @@ function createMemoryActions({
             project: currentMem.project,
             engine: picked.engine,
             model: picked.model,
-            sessionsProcessed: delta.length,
+            sessionsProcessed: batch.length,
+            remainingCount,
             durationMs,
             usage,
+            proposed: consolidated,
+          },
+        };
+      }
+
+      // Confere versões atuais em disco antes de publicar para não sobrescrever edição concorrente (R12)
+      const latestMem = readProjectMemory({ workspaceRoot: root(), project: project || resolved.slug, cwd, mode: resolved.mode, sessions });
+      const changedFiles = EDITABLE_MEMORY_FILES.filter(
+        (fname) => (latestMem.hashes && latestMem.hashes[fname]) !== (currentMem.hashes && currentMem.hashes[fname]),
+      );
+      if (changedFiles.length) {
+        return {
+          status: 409,
+          body: {
+            ok: false,
+            conflict: true,
+            error: `Memória alterada durante o Dreaming (${changedFiles.join(', ')}). Nenhuma edição foi sobrescrita; rode novamente para consolidar sobre a versão atual.`,
+            changedFiles,
             proposed: consolidated,
           },
         };
@@ -309,12 +349,12 @@ function createMemoryActions({
       writeAtomic(path.join(resolved.dir, 'current-state.md'), consolidated.currentStateMd);
 
       if (consolidated.decisionsAppend) {
-        const prev = currentMem.files['decisions.md'].trimEnd();
+        const prev = latestMem.files['decisions.md'].trimEnd();
         const header = prev ? `${prev}\n\n` : '# Decisões Arquiteturais\n\n';
         writeAtomic(path.join(resolved.dir, 'decisions.md'), `${header}${consolidated.decisionsAppend}\n`);
       }
       if (consolidated.pitfallsAppend) {
-        const prev = currentMem.files['pitfalls.md'].trimEnd();
+        const prev = latestMem.files['pitfalls.md'].trimEnd();
         const header = prev ? `${prev}\n\n` : '# Armadilhas e Peculiaridades\n\n';
         writeAtomic(path.join(resolved.dir, 'pitfalls.md'), `${header}${consolidated.pitfallsAppend}\n`);
       }
@@ -326,13 +366,13 @@ function createMemoryActions({
         writeAtomic(epPath, `${prevEp}${consolidated.sessionNoteMd}\n`);
       }
 
-      const logLine = `- **${new Date(ts).toISOString()}** · \`${engineLabel}\` · ${delta.length} sessões · ${usageCompact} · ${durSec}s · ${consolidated.summary}`;
-      const prevLog = currentMem.files['dream-log.md'].trimEnd();
+      const logLine = `- **${new Date(ts).toISOString()}** · \`${engineLabel}\` · ${batch.length} sessões · ${usageCompact} · ${durSec}s · ${consolidated.summary}`;
+      const prevLog = latestMem.files['dream-log.md'].trimEnd();
       const nextLog = (prevLog ? `${prevLog}\n` : '# Histórico de Dreaming\n\n') + logLine + '\n';
       writeAtomic(path.join(resolved.dir, 'dream-log.md'), nextLog);
 
       const nextSessions = { ...(dreamState.sessions || {}) };
-      for (const s of delta) {
+      for (const s of batch) {
         nextSessions[s.id] = {
           endMs: Date.parse(s.end) || ts,
           turns: Array.isArray(s.history) ? s.history.length : (s.prompts || 0),
@@ -354,13 +394,14 @@ function createMemoryActions({
         slug: resolved.slug,
         engine: picked.engine,
         model: picked.model || '',
-        sessionsProcessed: delta.length,
+        sessionsProcessed: batch.length,
+        remainingCount,
         durationMs,
         ...usage,
         summary: consolidated.summary,
       });
 
-      log(`[dream${trigger === 'auto' ? '-auto' : ''}] ${currentMem.project} · ${engineLabel} · ${delta.length} sessões · ${usageCompact} · ${durSec}s · ${consolidated.summary}`);
+      log(`[dream${trigger === 'auto' ? '-auto' : ''}] ${currentMem.project} · ${engineLabel} · ${batch.length} sessões${remainingCount ? ` (+${remainingCount} restantes)` : ''} · ${usageCompact} · ${durSec}s · ${consolidated.summary}`);
 
       const body = {
         ok: true,
@@ -370,7 +411,8 @@ function createMemoryActions({
         engine: picked.engine,
         model: picked.model,
         reason: picked.reason,
-        sessionsProcessed: delta.length,
+        sessionsProcessed: batch.length,
+        remainingCount,
         durationMs,
         usage,
         summary: consolidated.summary,

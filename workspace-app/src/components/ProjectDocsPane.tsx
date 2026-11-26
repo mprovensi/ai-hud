@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -47,6 +47,9 @@ export function ProjectDocsPane({ entityId, initialDocPath = '', onNotify, onSen
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState<{ currentContent: string; currentHash: string } | null>(null);
+  const editRevRef = useRef(0);
+  const docKeyRef = useRef('');
+  docKeyRef.current = `${entityId}:${selectedPath}`;
 
   // Nova Spec (EGM Lite)
   const [newSpecOpen, setNewSpecOpen] = useState(false);
@@ -104,6 +107,7 @@ export function ProjectDocsPane({ entityId, initialDocPath = '', onNotify, onSen
       return;
     }
     let alive = true;
+    editRevRef.current += 1;
     setLoadingDoc(true);
     setConflict(null);
     setDirty(false);
@@ -123,15 +127,26 @@ export function ProjectDocsPane({ entityId, initialDocPath = '', onNotify, onSen
 
   async function saveDoc() {
     if (!selectedPath || saving || !dirty) return;
+    const sentKey = docKeyRef.current;
+    const sentRev = editRevRef.current;
+    const sentPath = selectedPath;
+    const sentContent = content;
+    const sentBaseHash = baseHash;
     setSaving(true);
     try {
-      const r = await api.saveProjectDoc({ entityId, path: selectedPath, content, baseHash });
+      const r = await api.saveProjectDoc({ entityId, path: sentPath, content: sentContent, baseHash: sentBaseHash });
+      if (docKeyRef.current !== sentKey) return;
       setBaseHash(r.hash);
-      setDirty(false);
       setConflict(null);
-      onNotify(`Salvo: ${selectedPath}`);
-      loadList(selectedPath);
+      if (editRevRef.current === sentRev) {
+        setDirty(false);
+        onNotify(`Salvo: ${sentPath}`);
+      } else {
+        onNotify(`Salvo: ${sentPath} (alterações mais recentes continuam pendentes).`);
+      }
+      loadList(sentPath);
     } catch (e) {
+      if (docKeyRef.current !== sentKey) return;
       const ce = e as ConflictError;
       if (ce.conflict) {
         setConflict({ currentContent: String(ce.currentContent || ''), currentHash: ce.currentHash });
@@ -140,7 +155,7 @@ export function ProjectDocsPane({ entityId, initialDocPath = '', onNotify, onSen
         onNotify(ce.message, true);
       }
     } finally {
-      setSaving(false);
+      if (docKeyRef.current === sentKey) setSaving(false);
     }
   }
 
@@ -484,7 +499,7 @@ export function ProjectDocsPane({ entityId, initialDocPath = '', onNotify, onSen
                 <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>{selectedPath}</div>
                 <textarea
                   value={content}
-                  onChange={(e) => { setContent(e.target.value); setDirty(true); }}
+                  onChange={(e) => { editRevRef.current += 1; setContent(e.target.value); setDirty(true); }}
                   placeholder="Escreva em Markdown…"
                 />
               </div>

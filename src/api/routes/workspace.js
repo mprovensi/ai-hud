@@ -1,11 +1,9 @@
 // Rotas REST do AI Workspace file-first (/api/workspace/*), incluindo armazenamento portátil em <cwd>/.ai-workspace/,
 // Docs & Specs reais do projeto, importação 0-token e workflow EGM Lite (Goldfish review + estruturação opcional).
 const fs = require('fs');
-const os = require('os');
-const { isCwdAllowed } = require('../../core/path-guard');
+const { createCwdAuthorizer } = require('../cwd-auth');
 const { resolveWorkspaceRoot } = require('../../infra/workspace-paths');
-const { recentCwds } = require('../../collect/capabilities');
-const { readWorkspaceJson, readWorkspaceIndex, findEntity, readEntityFile, readGlobalDoc, resolveEntityAsset } = require('../../collect/workspace');
+const { readWorkspaceIndex, findEntity, readEntityFile, readGlobalDoc, resolveEntityAsset } = require('../../collect/workspace');
 const { listProjectDocs, readProjectDoc, readPortableBoard, readWorkflowUsageLog } = require('../../collect/workspace/project-docs');
 const { readProjectMemory } = require('../../collect/memory');
 const {
@@ -18,29 +16,12 @@ const {
   syncDocCheckbox,
 } = require('../../actions/workspace/project-storage');
 
-const REPORT_CSP = "default-src 'self' data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
+const REPORT_CSP = "default-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'";
 
 module.exports = ({ dataDir, config, collector, peers, machineName, workspace, workspaceSync, workspaceWorkflow, relay, send, json, text }) => {
   const wsRoot = () => resolveWorkspaceRoot(dataDir, config);
-
-  function checkAuthorizedCwd(cwd, isPeerLocal = false) {
-    if (isPeerLocal && !(config && config.strictRemoteCwd)) return { ok: true };
-    const knownCwds = recentCwds((collector && collector.current().sessions) || [], (config && config.pinnedProjects) || []);
-    const wsRoots = [];
-    try {
-      const ws = readWorkspaceJson(wsRoot());
-      for (const m of Object.values(ws.groupMeta || {})) if (m && m.rootCwd) wsRoots.push(m.rootCwd);
-      for (const e of (ws.entities || [])) {
-        for (const b of (e.projectBindings || [])) if (b && b.cwd) wsRoots.push(b.cwd);
-      }
-    } catch {}
-    return isCwdAllowed(cwd, {
-      allowedRoots: [...((config && config.allowedRoots) || []), ...wsRoots],
-      knownCwds,
-      home: os.homedir(),
-      strict: true,
-    });
-  }
+  const authorizeCwd = createCwdAuthorizer({ dataDir, config, collector });
+  const checkAuthorizedCwd = (cwd) => authorizeCwd(cwd);
 
   // Resolve `{ entity, cwd, machine, peer }` a partir de entityId ou (cwd, machine)
   function resolveTarget({ entityId = '', cwd = '', machine = '', isLocalCall = false }) {
@@ -125,17 +106,28 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
 
-    { method: 'GET', path: '/api/workspace/entity/asset', handler: ({ res, url }) => {
+    { method: 'GET', path: '/api/workspace/entity/asset', handler: ({ req, res, url }) => {
       const id = url.searchParams.get('id') || '';
       const rel = url.searchParams.get('path') || '';
       const r = resolveEntityAsset(wsRoot(), id, rel);
       if (r.status !== 200) return text(res, r.status, r.error);
+      // Nunca servir HTML executável com credencial global `?t=` na URL de navegação/iframe (R05).
+      const secDest = String((req && req.headers && req.headers['sec-fetch-dest']) || '').toLowerCase();
+      const accept = String((req && req.headers && req.headers.accept) || '').toLowerCase();
+      const isFetchText = secDest === 'empty' || (req && req.headers && req.headers['x-ai-hud-fetch'] === '1');
+      if (r.isHtml && url.searchParams.has('t') && !isFetchText && (secDest === 'iframe' || secDest === 'document' || accept.includes('text/html'))) {
+        return text(res, 400, 'Relatórios HTML não podem ser abertos com token na URL.');
+      }
       try {
         const buf = fs.readFileSync(r.filePath);
         const headers = r.isHtml
-          ? { 'Content-Security-Policy': REPORT_CSP, 'X-Content-Type-Options': 'nosniff' }
-          : { 'X-Content-Type-Options': 'nosniff' };
-        return send(res, 200, r.contentType, buf, headers);
+          ? {
+            'Content-Security-Policy': REPORT_CSP,
+            'Referrer-Policy': 'no-referrer',
+            'X-Content-Type-Options': 'nosniff',
+          }
+          : { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+        return send(res, 200, isFetchText && r.isHtml ? 'text/plain; charset=utf-8' : r.contentType, buf, headers);
       } catch {
         return text(res, 500, 'Não foi possível ler o asset.');
       }

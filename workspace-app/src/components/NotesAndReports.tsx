@@ -1,9 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Save } from 'lucide-react';
 import { api } from '../api';
 import type { ConflictError } from '../types';
+
+const SRCDOC_CSP = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'";
+
+function injectReportCsp(rawHtml: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${SRCDOC_CSP}">`;
+  if (/<head[^>]*>/i.test(rawHtml)) {
+    return rawHtml.replace(/<head[^>]*>/i, (m) => `${m}${meta}`);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8">${meta}</head><body>${rawHtml}</body></html>`;
+}
 
 interface Props {
   mode: 'entity' | 'global';
@@ -17,23 +27,44 @@ interface Props {
 
 export function NotesAndReports({ mode, entityId, filePath, viewer = 'markdown', area, docName, onNotify }: Props) {
   const [content, setContent] = useState('');
+  const [htmlSrcDoc, setHtmlSrcDoc] = useState('');
   const [baseHash, setBaseHash] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [conflict, setConflict] = useState<{ currentContent: string; currentHash: string } | null>(null);
 
+  const editRevRef = useRef(0);
+  const docKey = `${mode}:${entityId || ''}:${filePath || ''}:${area || ''}:${docName || ''}:${viewer}`;
+  const docKeyRef = useRef(docKey);
+  docKeyRef.current = docKey;
+
   const readOnly = mode === 'global' && area === 'handoffs';
 
   useEffect(() => {
-    if (viewer === 'html') {
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
+    editRevRef.current += 1;
     setLoading(true);
     setConflict(null);
     setDirty(false);
+    if (viewer === 'html') {
+      setHtmlSrcDoc('');
+      if (!entityId || !filePath) {
+        setLoading(false);
+        return;
+      }
+      (async () => {
+        try {
+          const rawHtml = await api.getEntityAssetHtml(entityId, filePath);
+          if (!cancelled) setHtmlSrcDoc(injectReportCsp(rawHtml));
+        } catch (e) {
+          if (!cancelled) onNotify((e as Error).message, true);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
     (async () => {
       try {
         const res = mode === 'entity'
@@ -54,16 +85,27 @@ export function NotesAndReports({ mode, entityId, filePath, viewer = 'markdown',
 
   async function save() {
     if (readOnly || saving || !dirty) return;
+    const sentKey = docKeyRef.current;
+    const sentRev = editRevRef.current;
+    const sentContent = content;
+    const sentBaseHash = baseHash;
     setSaving(true);
     try {
       const res = mode === 'entity'
-        ? await api.saveEntityFile({ id: entityId!, path: filePath!, content, baseHash })
-        : await api.saveGlobalDoc({ area: area!, name: docName!, content, baseHash });
+        ? await api.saveEntityFile({ id: entityId!, path: filePath!, content: sentContent, baseHash: sentBaseHash })
+        : await api.saveGlobalDoc({ area: area!, name: docName!, content: sentContent, baseHash: sentBaseHash });
+      if (docKeyRef.current !== sentKey) return;
       setBaseHash(res.hash);
-      setDirty(false);
-      setConflict(null);
-      onNotify('Documento salvo.');
+      if (editRevRef.current === sentRev) {
+        setDirty(false);
+        setConflict(null);
+        onNotify('Documento salvo.');
+      } else {
+        setConflict(null);
+        onNotify('Versão anterior salva; alterações recentes continuam pendentes.');
+      }
     } catch (e) {
+      if (docKeyRef.current !== sentKey) return;
       const ce = e as ConflictError;
       if (ce.conflict) {
         setConflict({ currentContent: String(ce.currentContent || ''), currentHash: ce.currentHash });
@@ -72,7 +114,7 @@ export function NotesAndReports({ mode, entityId, filePath, viewer = 'markdown',
         onNotify(ce.message, true);
       }
     } finally {
-      setSaving(false);
+      if (docKeyRef.current === sentKey) setSaving(false);
     }
   }
 
@@ -93,12 +135,17 @@ export function NotesAndReports({ mode, entityId, filePath, viewer = 'markdown',
         <div className="toolbar">
           <span className="badge">Relatório HTML isolado (sandbox)</span>
         </div>
-        <iframe
-          className="report-frame"
-          sandbox="allow-scripts"
-          src={api.entityAssetUrl(entityId, filePath)}
-          title={filePath}
-        />
+        {loading ? (
+          <div className="empty">Carregando relatório…</div>
+        ) : (
+          <iframe
+            className="report-frame"
+            sandbox="allow-scripts"
+            referrerPolicy="no-referrer"
+            srcDoc={htmlSrcDoc}
+            title={filePath}
+          />
+        )}
       </div>
     );
   }
@@ -156,7 +203,7 @@ export function NotesAndReports({ mode, entityId, filePath, viewer = 'markdown',
           <div className="split-pane">
             <textarea
               value={content}
-              onChange={(e) => { setContent(e.target.value); setDirty(true); }}
+              onChange={(e) => { editRevRef.current += 1; setContent(e.target.value); setDirty(true); }}
               placeholder="Escreva em Markdown…"
             />
           </div>

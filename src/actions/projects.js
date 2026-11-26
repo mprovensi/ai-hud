@@ -16,11 +16,16 @@ function createProjectPins({ config, saveConfig }) {
         return { status: 400, body: 'pasta não existe neste PC' };
       }
     }
-    const list = Array.isArray(config.pinnedProjects) ? config.pinnedProjects.slice() : [];
+    const prev = Array.isArray(config.pinnedProjects) ? config.pinnedProjects.slice() : undefined;
+    const list = prev ? prev.slice() : [];
     const filtered = list.filter((p) => !samePath(p, norm));
     if (want) filtered.unshift(norm);
     config.pinnedProjects = filtered.slice(0, MAX_PINS);
-    saveConfig();
+    if (saveConfig() === false) {
+      if (prev === undefined) delete config.pinnedProjects;
+      else config.pinnedProjects = prev;
+      return { status: 500, body: 'Falha ao salvar configuração de projetos fixados em disco.' };
+    }
     return { status: 200, body: { ok: true, pinned: config.pinnedProjects } };
   };
 }

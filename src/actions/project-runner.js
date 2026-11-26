@@ -6,6 +6,7 @@ const path = require('path');
 const { spawn, execFile } = require('child_process');
 const { normalizePath, isWithinRoot, resolveContainedPath } = require('../core/path-guard');
 const { redactSecrets } = require('../core/redact');
+const { resolveSafeContainedTarget } = require('../infra/workspace-paths');
 const { readProjectRunConfig, normalizeRunConfig } = require('../collect/workspace/project-run');
 const { ensurePortableDir } = require('./workspace/project-storage');
 
@@ -90,7 +91,7 @@ function killTree(child, platform = process.platform) {
   } catch {}
 }
 
-function createProjectRunner({ config = {}, platform = process.platform, log = () => {} } = {}) {
+function createProjectRunner({ config = {}, platform = process.platform, log = () => {}, spawnFn = spawn } = {}) {
   const runs = new Map();
 
   function getConfig(cwd) {
@@ -277,6 +278,21 @@ function createProjectRunner({ config = {}, platform = process.platform, log = (
       return { status: 400, body: 'Nenhum perfil de execução configurado para este projeto. Clique na engrenagem para adicionar um comando.' };
     }
 
+    // Valida TODAS as subpastas do perfil antes de encerrar/lançar qualquer processo (R10)
+    const prepared = [];
+    for (const pr of profile.processes) {
+      let procCwd = realRoot;
+      if (pr.cwd) {
+        const sub = resolveContainedPath(realRoot, pr.cwd);
+        const safeSub = sub ? resolveSafeContainedTarget(realRoot, pr.cwd) : { ok: false };
+        if (!sub || !isWithinRoot(realRoot, sub) || !safeSub.ok || !fs.existsSync(safeSub.target)) {
+          return { status: 400, body: `Subpasta "${pr.cwd}" não encontrada para "${pr.name}".` };
+        }
+        procCwd = safeSub.target;
+      }
+      prepared.push({ pr, procCwd });
+    }
+
     // Encerra execução anterior do mesmo projeto antes de subir a nova
     stop({ cwd: realRoot });
 
@@ -289,17 +305,10 @@ function createProjectRunner({ config = {}, platform = process.platform, log = (
       startedAt: Date.now(),
       processes: new Map(),
     };
+    // Registra a execução ANTES de iniciar processos filhos para garantir visibilidade e stopAll() (R10)
+    runs.set(key, run);
 
-    for (const pr of profile.processes) {
-      let procCwd = realRoot;
-      if (pr.cwd) {
-        const sub = resolveContainedPath(realRoot, pr.cwd);
-        if (!sub || !isWithinRoot(realRoot, sub) || !fs.existsSync(sub)) {
-          return { status: 400, body: `Subpasta "${pr.cwd}" não encontrada para "${pr.name}".` };
-        }
-        procCwd = sub;
-      }
-
+    for (const { pr, procCwd } of prepared) {
       const isWin = platform === 'win32';
       const spawnOpts = {
         cwd: procCwd,
@@ -332,8 +341,10 @@ function createProjectRunner({ config = {}, platform = process.platform, log = (
         child: null,
       };
 
+      run.processes.set(entry.id, entry);
+
       try {
-        const child = spawn(pr.cmd, [], spawnOpts);
+        const child = spawnFn(pr.cmd, [], spawnOpts);
         entry.child = child;
         entry.pid = child.pid || 0;
 
@@ -355,16 +366,16 @@ function createProjectRunner({ config = {}, platform = process.platform, log = (
           entry.child = null;
         });
       } catch (e) {
+        // Falha síncrona de spawn: marca este entry como encerrado e desfaz lançamentos parciais (R10)
         entry.status = 'exited';
         entry.exitCode = 1;
         entry.endedAt = Date.now();
-        appendLog(entry, `Falha ao lançar processo: ${e.message}`, 'err');
+        stop({ cwd: realRoot });
+        runs.delete(key);
+        return { status: 500, body: `Falha ao lançar "${pr.name}": ${e.message || e}` };
       }
-
-      run.processes.set(entry.id, entry);
     }
 
-    runs.set(key, run);
     log(`[run] iniciado "${profile.name}" em ${realRoot}`);
     return { status: 200, body: serializeRun(run) };
   }

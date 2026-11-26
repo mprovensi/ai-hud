@@ -26,6 +26,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { api, withToken } from './api';
+import { evaluateStageAdvance } from './egmAdvance';
 import { CardEditor } from './components/CardEditor';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { FilesAndGit } from './components/FilesAndGit';
@@ -212,17 +213,27 @@ export function App() {
     if ((runningCardExec.seenWorking || finishedAfterStart) && (s.state === 'waiting' || s.state === 'idle')) {
       const exec = runningCardExec;
       setRunningCardExec(null);
-      const failedReply = typeof s.lastReply === 'string' && /^\s*⚠/.test(s.lastReply);
-      if (failedReply || !exec.nextStatus) return;
+      if (!exec.nextStatus) return;
 
       (async () => {
         try {
           const detail = await api.getSession(exec.sessionId).catch(() => null);
-          if (detail && detail.testRun && detail.testRun.ok === false) return;
           const b = await api.getProjectBoard(exec.entityId);
           if (!b.content || b.offlineFallback) return;
           const target = b.content.items.find((it) => it.id === exec.itemId);
           if (!target || (target.status || 'idea') !== exec.currentStatus) return;
+
+          const gate = evaluateStageAdvance({
+            currentStatus: exec.currentStatus,
+            nextStatus: exec.nextStatus,
+            detail,
+            target,
+          });
+          if (!gate.ok) {
+            notify(`"${exec.title}" mantido na etapa atual: ${gate.reason}`);
+            return;
+          }
+
           const nextCard = {
             ...b.content,
             items: b.content.items.map((it) => (

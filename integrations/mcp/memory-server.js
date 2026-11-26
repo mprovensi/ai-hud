@@ -228,11 +228,27 @@ function readBoardCompact({ cwd = '', status = '', includeArchived = false } = {
   return { cwd: r.root, title: board.title || path.basename(r.root), counts, total: visible.length, archivedCount, items };
 }
 
+function validateMcpDocRef(raw) {
+  const s = String(raw || '').trim();
+  if (!s || s.length > 400 || /[\x00-\x1f]/.test(s)) return { ok: false, error: 'docRef inválido.' };
+  const [rawPath, anchor = ''] = s.split('#');
+  const cleanPath = rawPath.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!cleanPath || /^[a-zA-Z]:/.test(cleanPath)) return { ok: false, error: 'docRef deve ser caminho relativo ao projeto.' };
+  const parts = cleanPath.split('/');
+  for (const p of parts) {
+    if (!p || p === '.' || p === '..') return { ok: false, error: 'docRef contém segmento inválido.' };
+  }
+  if (anchor && !/^L\d+$/i.test(anchor.trim())) {
+    return { ok: false, error: 'Âncora de docRef inválida (use #L<linha>).' };
+  }
+  return { ok: true, value: anchor ? `${cleanPath}#${anchor.trim()}` : cleanPath };
+}
+
 function updateBoardStatus({ cwd = '', updates = [], syncDocs = true } = {}) {
   const r = resolveBoardFile(cwd);
   if (r.error) return r;
   if (!fs.existsSync(r.boardFile)) return { error: `Quadro não encontrado em ${r.boardFile}.` };
-  if (!Array.isArray(updates) || !updates.length) return { error: 'Informe ao menos um item em updates: [{ id, status, note? }].' };
+  if (!Array.isArray(updates) || !updates.length) return { error: 'Informe ao menos um item em updates: [{ id, status, note?, docRef? }].' };
 
   let board;
   try { board = JSON.parse(fs.readFileSync(r.boardFile, 'utf8')); } catch {
@@ -248,15 +264,34 @@ function updateBoardStatus({ cwd = '', updates = [], syncDocs = true } = {}) {
     if (idx < 0) { notFound.push(u.id); continue; }
     const cur = items[idx];
     const prevStatus = cur.status || 'idea';
+    let nextDocRef = cur.docRef;
+    if (u.docRef !== undefined && u.docRef !== null && String(u.docRef).trim() !== '') {
+      const checked = validateMcpDocRef(u.docRef);
+      if (!checked.ok) return { error: `Item "${u.id}": ${checked.error}` };
+      nextDocRef = checked.value;
+    }
     const nextBody = u.note
       ? `${String(cur.body || '').trimEnd()}${cur.body ? '\n\n' : ''}- ${String(u.note).trim()}`
       : cur.body;
-    items[idx] = { ...cur, status: u.status, updatedAt: Date.now(), ...(nextBody !== undefined ? { body: nextBody } : {}) };
+    items[idx] = {
+      ...cur,
+      status: u.status,
+      updatedAt: Date.now(),
+      ...(nextBody !== undefined ? { body: nextBody } : {}),
+      ...(nextDocRef ? { docRef: nextDocRef } : {}),
+    };
     let docSynced = false;
-    if (syncDocs !== false && cur.docRef && (prevStatus === 'done') !== (u.status === 'done')) {
-      docSynced = syncMarkdownCheckboxStandalone(r.root, cur.docRef, cur.title, u.status === 'done');
+    if (syncDocs !== false && nextDocRef && (prevStatus === 'done') !== (u.status === 'done')) {
+      docSynced = syncMarkdownCheckboxStandalone(r.root, nextDocRef, cur.title, u.status === 'done');
     }
-    applied.push({ id: cur.id, title: cur.title, from: prevStatus, to: u.status, docSynced });
+    applied.push({
+      id: cur.id,
+      title: cur.title,
+      from: prevStatus,
+      to: u.status,
+      ...(nextDocRef ? { docRef: nextDocRef } : {}),
+      docSynced,
+    });
   }
 
   if (applied.length) {
@@ -360,6 +395,7 @@ const TOOLS = [
               id: { type: 'string' },
               status: { type: 'string', enum: ['idea', 'spec', 'in-progress', 'review', 'done'] },
               note: { type: 'string', description: 'Observação curta opcional adicionada ao corpo do card' },
+              docRef: { type: 'string', description: 'Caminho relativo opcional de spec/plano/doc (ex.: docs/specs/minha-spec.md ou docs/plano.md#L12)' },
             },
             required: ['id', 'status'],
           },

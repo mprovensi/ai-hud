@@ -181,7 +181,21 @@ function createWebAuthn({ dataDir, config, now = () => Date.now() }) {
   }
 
   function saveStore(data) {
-    writeJson(file, data, true);
+    if (!writeJson(file, data, true)) {
+      throw new Error('Falha ao persistir credenciais WebAuthn em disco.');
+    }
+  }
+
+  const revocationListeners = new Set();
+  function emitRevoked(sessionId, credId = null) {
+    for (const fn of revocationListeners) {
+      try { fn({ sessionId, credId }); } catch {}
+    }
+  }
+  function onSessionRevoked(fn) {
+    if (typeof fn !== 'function') return () => {};
+    revocationListeners.add(fn);
+    return () => revocationListeners.delete(fn);
   }
 
   function pruneChallenges() {
@@ -195,7 +209,10 @@ function createWebAuthn({ dataDir, config, now = () => Date.now() }) {
     const t = now();
     const limit = Math.max(timeoutMs, MIN_SERVER_GRACE_MS);
     for (const [k, s] of sessions.entries()) {
-      if (t - s.lastSeen >= limit) sessions.delete(k);
+      if (t - s.lastSeen >= limit) {
+        sessions.delete(k);
+        emitRevoked(k, s.credId);
+      }
     }
   }
 
@@ -225,6 +242,7 @@ function createWebAuthn({ dataDir, config, now = () => Date.now() }) {
     const limit = Math.max(timeoutMs, MIN_SERVER_GRACE_MS);
     if (t - s.lastSeen >= limit) {
       sessions.delete(sessionId);
+      emitRevoked(sessionId, s.credId);
       return false;
     }
     s.lastSeen = t;
@@ -232,7 +250,10 @@ function createWebAuthn({ dataDir, config, now = () => Date.now() }) {
   }
 
   function revokeSession(sessionId) {
-    if (sessionId) sessions.delete(sessionId);
+    if (!sessionId) return;
+    const s = sessions.get(sessionId);
+    sessions.delete(sessionId);
+    emitRevoked(sessionId, s ? s.credId : null);
   }
 
   function cookieFlags(isHttps) {
@@ -427,7 +448,10 @@ function createWebAuthn({ dataDir, config, now = () => Date.now() }) {
     }
     revokeSession(cookies.hud_bio);
     for (const [sid, s] of sessions.entries()) {
-      if (targetId && s.credId === targetId) sessions.delete(sid);
+      if (targetId && s.credId === targetId) {
+        sessions.delete(sid);
+        emitRevoked(sid, s.credId);
+      }
     }
     return { removed: !!targetId, remaining: store.credentials.length, isHttps: ctx.isHttps };
   }
@@ -453,6 +477,7 @@ function createWebAuthn({ dataDir, config, now = () => Date.now() }) {
     createSession,
     validateSession,
     revokeSession,
+    onSessionRevoked,
     sessionCookies,
     lockCookies,
     disableCookies,

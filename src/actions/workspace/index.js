@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { isSafeRelativePath, isWithinRoot, isSecretPath, resolveContainedPath } = require('../../core/path-guard');
 const { slugifyEntity, validateCard, validateWorkspaceIndex, defaultCard } = require('../../core/workspace-schema');
-const { resolveWorkspaceRoot, hashContent, writeAtomicWithBackup } = require('../../infra/workspace-paths');
+const { resolveWorkspaceRoot, hashContent, writeAtomicWithBackup, resolveSafeContainedTarget } = require('../../infra/workspace-paths');
 const { readWorkspaceJson, findEntity, resolveEntityRoot } = require('../../collect/workspace');
 const { readPortableBoard } = require('../../collect/workspace/project-docs');
 const { savePortableBoard } = require('./project-storage');
@@ -125,8 +125,11 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     const entityRoot = resolveEntityRoot(wsRoot, entity);
     if (!entityRoot) return { status: 400, body: 'Pasta da entidade inválida.' };
     if (!isSafeRelativePath(relPath) || isSecretPath(relPath)) return { status: 400, body: 'Caminho de arquivo inválido.' };
-    const target = resolveContainedPath(entityRoot, relPath);
-    if (!target || !isWithinRoot(entityRoot, target)) return { status: 403, body: 'Caminho fora da entidade.' };
+    const targetLex = resolveContainedPath(entityRoot, relPath);
+    if (!targetLex || !isWithinRoot(entityRoot, targetLex)) return { status: 403, body: 'Caminho fora da entidade.' };
+    const targetCheck = resolveSafeContainedTarget(entityRoot, relPath);
+    if (!targetCheck.ok) return { status: 403, body: targetCheck.error || 'Caminho fora da entidade.' };
+    const target = targetCheck.target;
 
     const isCard = relPath.toLowerCase().endsWith('.card.json');
     let serialized = '';
@@ -163,12 +166,17 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       }
     }
 
-    writeAtomicWithBackup({
-      filePath: target,
-      content: serialized,
-      backupDir: backupsDir(isCard ? 'cards' : 'notes'),
-      tag: `${entityId}_${relPath}`,
-    });
+    try {
+      writeAtomicWithBackup({
+        filePath: target,
+        content: serialized,
+        backupDir: backupsDir(isCard ? 'cards' : 'notes'),
+        tag: `${entityId}_${relPath}`,
+        rootDir: entityRoot,
+      });
+    } catch (e) {
+      return { status: e.status || 500, body: e.message || 'Erro ao gravar arquivo da entidade.' };
+    }
 
     // Atualiza data `updated` no índice
     const index = readWorkspaceJson(wsRoot);
@@ -188,9 +196,13 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
       return { status: 400, body: 'Nome de arquivo inválido.' };
     }
     const wsRoot = root();
+    fs.mkdirSync(wsRoot, { recursive: true });
     const baseDir = path.join(wsRoot, area);
-    const target = resolveContainedPath(baseDir, cleanName);
-    if (!target || !isWithinRoot(baseDir, target)) return { status: 403, body: 'Caminho fora da área permitida.' };
+    const targetLex = resolveContainedPath(baseDir, cleanName);
+    if (!targetLex || !isWithinRoot(baseDir, targetLex)) return { status: 403, body: 'Caminho fora da área permitida.' };
+    const targetCheck = resolveSafeContainedTarget(wsRoot, path.join(area, cleanName));
+    if (!targetCheck.ok) return { status: 403, body: targetCheck.error || 'Caminho fora da área permitida.' };
+    const target = targetCheck.target;
     const serialized = String(content == null ? '' : content);
     if (Buffer.byteLength(serialized, 'utf8') > MAX_DOC_BYTES) {
       return { status: 413, body: 'Documento excede o limite de 1 MB.' };
@@ -210,12 +222,17 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
         };
       }
     }
-    writeAtomicWithBackup({
-      filePath: target,
-      content: serialized,
-      backupDir: backupsDir(area),
-      tag: `${area}_${cleanName}`,
-    });
+    try {
+      writeAtomicWithBackup({
+        filePath: target,
+        content: serialized,
+        backupDir: backupsDir(area),
+        tag: `${area}_${cleanName}`,
+        rootDir: wsRoot,
+      });
+    } catch (e) {
+      return { status: e.status || 500, body: e.message || 'Erro ao gravar documento.' };
+    }
     return { status: 200, body: { ok: true, hash: hashContent(serialized) } };
   }
 
@@ -241,11 +258,13 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     const stamp = Date.now().toString(36).slice(-5);
     const safeFile = `${base}-${stamp}${ext}`;
     const rel = `media/${safeFile}`;
-    const target = resolveContainedPath(entityRoot, rel);
-    if (!target || !isWithinRoot(entityRoot, target)) return { status: 403, body: 'Caminho de mídia inválido.' };
+    const targetLex = resolveContainedPath(entityRoot, rel);
+    if (!targetLex || !isWithinRoot(entityRoot, targetLex)) return { status: 403, body: 'Caminho de mídia inválido.' };
+    const targetCheck = resolveSafeContainedTarget(entityRoot, rel);
+    if (!targetCheck.ok) return { status: 403, body: targetCheck.error || 'Caminho de mídia inválido.' };
 
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, buf);
+    fs.mkdirSync(path.dirname(targetCheck.target), { recursive: true });
+    fs.writeFileSync(targetCheck.target, buf);
     return { status: 200, body: { ok: true, path: rel, size: buf.length } };
   }
 

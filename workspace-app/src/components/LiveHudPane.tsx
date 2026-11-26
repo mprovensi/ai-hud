@@ -192,11 +192,33 @@ export function LiveHudPane({
   // Modo do PTY quando em aba Terminal: CLI nativa da sessão (resume) ou Shell na pasta
   const [ptySubMode, setPtySubMode] = useState<'resume' | 'shell'>('resume');
 
-  // Auto-scroll ref (Conversation)
+  // Auto-scroll ref (Conversation) & guarda contra respostas atrasadas de sessão anterior (R08)
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const stickBottomRef = useRef(true);
   const prevMsgCountRef = useRef(0);
   const prevProjectIdRef = useRef<string | undefined>(projectId);
+  const selectedIdRef = useRef<string>(selectedId);
+  const selectionGenRef = useRef<number>(0);
+
+  // Atualiza identidade/geração da seleção e limpa detail obsoleto ao trocar de sessão
+  if (selectedIdRef.current !== selectedId) {
+    selectedIdRef.current = selectedId;
+    selectionGenRef.current += 1;
+  }
+
+  const activeDetail = detail && detail.id === selectedId ? detail : null;
+
+  function fetchSessionDetail(targetId: string, expectedGen?: number) {
+    if (!targetId) return Promise.resolve();
+    const gen = expectedGen ?? selectionGenRef.current;
+    return api.getSession(targetId)
+      .then((d) => {
+        if (selectedIdRef.current !== targetId || selectionGenRef.current !== gen) return;
+        if (d && d.id && d.id !== targetId) return;
+        setDetail(d);
+      })
+      .catch(() => {});
+  }
 
   // Item 4: Ao clicar em um projeto na barra esquerda, já alterna a lista de sessões para as do projeto;
   // ao voltar para a tela inicial (sem projeto), volta para "Todas".
@@ -238,22 +260,20 @@ export function LiveHudPane({
       prevMsgCountRef.current = 0;
       return;
     }
+    setDetail((prev) => (prev && prev.id === selectedId ? prev : null));
     stickBottomRef.current = true;
-    let alive = true;
-    api.getSession(selectedId)
-      .then((d) => { if (alive) setDetail(d); })
-      .catch(() => {});
-    return () => { alive = false; };
+    const gen = selectionGenRef.current;
+    fetchSessionDetail(selectedId, gen);
   }, [selectedId, snapshot?.version]);
 
   const messages = useMemo(() => {
-    if (!detail) return [];
-    if (detail.history && detail.history.length) return detail.history;
+    if (!activeDetail) return [];
+    if (activeDetail.history && activeDetail.history.length) return activeDetail.history;
     const out: { role: 'user' | 'assistant'; content: string; at?: number; tools?: string[] }[] = [];
-    if (detail.lastPrompt) out.push({ role: 'user', content: detail.lastPrompt });
-    if (detail.lastReply) out.push({ role: 'assistant', content: detail.lastReply });
+    if (activeDetail.lastPrompt) out.push({ role: 'user', content: activeDetail.lastPrompt });
+    if (activeDetail.lastReply) out.push({ role: 'assistant', content: activeDetail.lastReply });
     return out;
-  }, [detail]);
+  }, [activeDetail]);
 
   const sessionOutgoing = useMemo(
     () => outgoing.filter((m) => m.sessionId === selectedId),
@@ -288,12 +308,13 @@ export function LiveHudPane({
   const hasAwaitingDelivery = sessionOutgoing.some((m) => m.status === 'sent');
   useEffect(() => {
     if (!selectedId || viewMode !== 'conversation') return;
-    if (!hasAwaitingDelivery && detail?.state !== 'working') return;
+    if (!hasAwaitingDelivery && activeDetail?.state !== 'working') return;
+    const gen = selectionGenRef.current;
     const timer = window.setInterval(() => {
-      api.getSession(selectedId).then(setDetail).catch(() => {});
+      fetchSessionDetail(selectedId, gen);
     }, 1800);
     return () => window.clearInterval(timer);
-  }, [selectedId, viewMode, hasAwaitingDelivery, detail?.state]);
+  }, [selectedId, viewMode, hasAwaitingDelivery, activeDetail?.state]);
 
   // Limpa anexos pendentes ao trocar de sessão
   useEffect(() => {
@@ -345,10 +366,11 @@ export function LiveHudPane({
   }
 
   function attachImageFiles(fileList: File[]) {
-    if (!detail || !fileList.length) return;
+    if (!activeDetail || !fileList.length) return;
     const imgs = fileList.filter((f) => f && (f.type.startsWith('image/') || IMAGE_PATH_RE.test(f.name)));
     if (!imgs.length) return;
-    const sessionId = detail.id;
+    const sessionId = activeDetail.id;
+    const gen = selectionGenRef.current;
     imgs.slice(0, 8).forEach((file, idx) => {
       const attId = `att-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
       const fallbackName = file.name && file.name !== 'image.png'
@@ -356,6 +378,7 @@ export function LiveHudPane({
         : `colada-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.png`;
       const rd = new FileReader();
       rd.onload = async () => {
+        if (selectedIdRef.current !== sessionId || selectionGenRef.current !== gen) return;
         const dataUrl = String(rd.result || '');
         setPendingImgs((prev) => [...prev, { id: attId, name: fallbackName, previewUrl: dataUrl, uploading: true }]);
         try {
@@ -364,10 +387,12 @@ export function LiveHudPane({
             fileName: fallbackName,
             base64Data: dataUrl,
           });
+          if (selectedIdRef.current !== sessionId || selectionGenRef.current !== gen) return;
           setPendingImgs((prev) =>
             prev.map((item) => (item.id === attId ? { ...item, name: r.name, path: r.path, uploading: false } : item)),
           );
         } catch (err) {
+          if (selectedIdRef.current !== sessionId || selectionGenRef.current !== gen) return;
           const msg = (err as Error).message || 'Falha no upload';
           setPendingImgs((prev) =>
             prev.map((item) => (item.id === attId ? { ...item, uploading: false, error: msg } : item)),
@@ -383,11 +408,14 @@ export function LiveHudPane({
   const uploadingImgs = pendingImgs.some((p) => p.uploading);
 
   async function dispatchOutgoing(entry: OutgoingMsg) {
-    if (!detail) return;
+    if (!activeDetail || activeDetail.id !== entry.sessionId) return;
+    const gen = selectionGenRef.current;
+    const targetKey = activeDetail.key || '';
+    const targetTool = activeDetail.tool;
     setSending(true);
     stickBottomRef.current = true;
     try {
-      await api.replySession({ id: entry.sessionId, key: detail.key || '', tool: detail.tool, text: entry.promptSent });
+      await api.replySession({ id: entry.sessionId, key: targetKey, tool: targetTool, text: entry.promptSent });
       if (pendingCardExec && onCardExecAttached) {
         onCardExecAttached(entry.sessionId);
       }
@@ -395,9 +423,9 @@ export function LiveHudPane({
         prev.map((m) => (m.localId === entry.localId ? { ...m, status: 'sent', error: undefined } : m)),
       );
       onPollNow();
-      api.getSession(entry.sessionId).then(setDetail).catch(() => {});
+      fetchSessionDetail(entry.sessionId, gen);
       window.setTimeout(() => {
-        api.getSession(entry.sessionId).then(setDetail).catch(() => {});
+        fetchSessionDetail(entry.sessionId, gen);
       }, 750);
     } catch (e) {
       const msg = (e as Error).message || 'Falha ao enviar';
@@ -411,14 +439,14 @@ export function LiveHudPane({
   }
 
   async function sendReply() {
-    if (!detail || sending || uploadingImgs) return;
+    if (!activeDetail || sending || uploadingImgs) return;
     const cleanText = replyText.trim();
     if (!cleanText && !readyImgs.length) return;
     const imgLines = readyImgs.map((img) => `[Imagem anexada: ${img.path}]`);
     const promptSent = [...imgLines, ...(cleanText ? [cleanText] : [])].join('\n');
     const entry: OutgoingMsg = {
       localId: `out-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      sessionId: detail.id,
+      sessionId: activeDetail.id,
       text: cleanText,
       promptSent,
       images: readyImgs.map((img) => ({ name: img.name, path: img.path!, previewUrl: img.previewUrl })),
@@ -433,6 +461,7 @@ export function LiveHudPane({
   }
 
   async function retryOutgoing(entry: OutgoingMsg) {
+    if (!activeDetail || activeDetail.id !== entry.sessionId) return;
     setOutgoing((prev) =>
       prev.map((m) => (m.localId === entry.localId ? { ...m, status: 'sending', error: undefined, sentAt: Date.now() } : m)),
     );
@@ -440,10 +469,11 @@ export function LiveHudPane({
   }
 
   async function doHandoff() {
-    if (!detail || sending) return;
+    if (!activeDetail || sending) return;
+    const targetId = activeDetail.id;
     setSending(true);
     try {
-      const r = await api.handoff({ id: detail.id, targetTool: handoffTool, note: handoffNote });
+      const r = await api.handoff({ id: targetId, targetTool: handoffTool, note: handoffNote });
       setHandoffOpen(false);
       setHandoffNote('');
       onNotify(`Handoff criado para ${r.tool}!`);
@@ -559,24 +589,26 @@ export function LiveHudPane({
             ))
           )}
         </div>
-      ) : !detail ? (
+      ) : !activeDetail ? (
         <div className="empty">Carregando sessão…</div>
       ) : (
         <div className="hud-chat-wrap">
           {/* Action / metadata sub-bar */}
           <div className="hud-chat-bar">
-            <span className={`badge ${detail.state}`}>{detail.state}</span>
-            <span className="badge" style={{ gap: 5 }}><ToolIcon tool={detail.tool} size={11} /> {detail.tool}</span>
-            {detail.machine && <span className="badge">{detail.machine}</span>}
-            {!!detail.contextWindow && detail.contextWindow > 0 && (
-              <span className="badge">ctx {Math.round(((detail.context || 0) / detail.contextWindow) * 100)}%</span>
+            <span className={`badge ${activeDetail.state}`}>{activeDetail.state}</span>
+            <span className="badge" style={{ gap: 5 }}><ToolIcon tool={activeDetail.tool} size={11} /> {activeDetail.tool}</span>
+            {activeDetail.machine && <span className="badge">{activeDetail.machine}</span>}
+            {!!activeDetail.contextWindow && activeDetail.contextWindow > 0 && (
+              <span className="badge">ctx {Math.round(((activeDetail.context || 0) / activeDetail.contextWindow) * 100)}%</span>
             )}
             <div style={{ flex: 1 }} />
-            {detail.canStop && (
+            {activeDetail.canStop && (
               <button
                 className="btn btn-sm btn-danger"
                 onClick={async () => {
-                  try { const r = await api.stopTurn(detail.id); onNotify(r.message, !r.ok); onPollNow(); }
+                  const targetId = activeDetail.id;
+                  if (selectedIdRef.current !== targetId) return;
+                  try { const r = await api.stopTurn(targetId); onNotify(r.message, !r.ok); onPollNow(); }
                   catch (e) { onNotify((e as Error).message, true); }
                 }}
               >
@@ -585,29 +617,31 @@ export function LiveHudPane({
             )}
             <button
               className="btn btn-sm btn-icon"
-              title={detail.pinned ? 'Desfixar sessão' : 'Fixar sessão no topo'}
+              title={activeDetail.pinned ? 'Desfixar sessão' : 'Fixar sessão no topo'}
               onClick={async () => {
+                const targetId = activeDetail.id;
+                if (selectedIdRef.current !== targetId) return;
                 try {
-                  const next = !detail.pinned;
-                  await api.setSessionMeta({ id: detail.id, pinned: next });
-                  setDetail({ ...detail, pinned: next });
+                  const next = !activeDetail.pinned;
+                  await api.setSessionMeta({ id: targetId, pinned: next });
+                  setDetail((cur) => (cur && cur.id === targetId ? { ...cur, pinned: next } : cur));
                   onPollNow();
                   onNotify(next ? 'Sessão fixada.' : 'Sessão desfixada.');
                 } catch (e) { onNotify((e as Error).message, true); }
               }}
             >
-              <Star size={12} fill={detail.pinned ? '#e5c063' : 'none'} color={detail.pinned ? '#e5c063' : 'currentColor'} />
+              <Star size={12} fill={activeDetail.pinned ? '#e5c063' : 'none'} color={activeDetail.pinned ? '#e5c063' : 'currentColor'} />
             </button>
             <button className="btn btn-sm" onClick={() => setHandoffOpen(!handoffOpen)} title="Resumir e continuar em outra sessão/IA">
               <GitFork size={12} /> Handoff
             </button>
-            {detail.lastReply && (
+            {activeDetail.lastReply && (
               <button
                 className="btn btn-sm btn-icon"
                 title="Ouvir última resposta (TTS local)"
                 onClick={async () => {
                   try {
-                    const r = await api.speakText(detail.lastReply || '');
+                    const r = await api.speakText(activeDetail.lastReply || '');
                     const audio = new Audio(`data:${r.contentType || 'audio/wav'};base64,${r.audioBase64}`);
                     await audio.play();
                   } catch (e) {
@@ -648,22 +682,25 @@ export function LiveHudPane({
                   stickBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
                 }}
               >
-                {detail.permission && (
+                {activeDetail.permission && (
                   <div className="conflict-box" style={{ marginBottom: 10 }}>
                     <h4 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <ShieldAlert size={14} /> Permissão · {detail.permission.tool}
+                      <ShieldAlert size={14} /> Permissão · {activeDetail.permission.tool}
                     </h4>
-                    {detail.permission.summary && (
+                    {activeDetail.permission.summary && (
                       <pre className="mono" style={{ fontSize: 11.5, margin: '6px 0 8px', whiteSpace: 'pre-wrap' }}>
-                        {detail.permission.summary}
+                        {activeDetail.permission.summary}
                       </pre>
                     )}
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button
                         className="btn btn-sm btn-primary"
                         onClick={async () => {
+                          const targetId = activeDetail.id;
+                          const permId = activeDetail.permission?.id;
+                          if (!permId || selectedIdRef.current !== targetId) return;
                           try {
-                            await api.decidePermission({ id: detail.permission!.id, decision: 'allow', session: detail.id });
+                            await api.decidePermission({ id: permId, decision: 'allow', session: targetId });
                             onNotify('Permissão concedida.');
                             onPollNow();
                           } catch (e) { onNotify((e as Error).message, true); }
@@ -674,8 +711,11 @@ export function LiveHudPane({
                       <button
                         className="btn btn-sm btn-danger"
                         onClick={async () => {
+                          const targetId = activeDetail.id;
+                          const permId = activeDetail.permission?.id;
+                          if (!permId || selectedIdRef.current !== targetId) return;
                           try {
-                            await api.decidePermission({ id: detail.permission!.id, decision: 'deny', session: detail.id });
+                            await api.decidePermission({ id: permId, decision: 'deny', session: targetId });
                             onNotify('Permissão negada.');
                             onPollNow();
                           } catch (e) { onNotify((e as Error).message, true); }
@@ -709,8 +749,8 @@ export function LiveHudPane({
                                 {userParsed.paths.length > 0 && (
                                   <div className="msg-user-imgs">
                                     {userParsed.paths.map((imgPath, pi) => {
-                                      const imgSrc = api.sessionImageUrl(detail.id, imgPath, false);
-                                      const dlSrc = api.sessionImageUrl(detail.id, imgPath, true);
+                                      const imgSrc = api.sessionImageUrl(activeDetail.id, imgPath, false);
+                                      const dlSrc = api.sessionImageUrl(activeDetail.id, imgPath, true);
                                       const name = imageFileName(imgPath);
                                       return (
                                         <div key={`${pi}-${imgPath}`} className="msg-user-img-wrap">
@@ -759,8 +799,8 @@ export function LiveHudPane({
                                       img: ({ src, alt }) => {
                                         const raw = String(src || '');
                                         const isLocal = isLocalImageHref(raw);
-                                        const resolvedSrc = isLocal ? api.sessionImageUrl(detail.id, raw, false) : raw;
-                                        const dlSrc = isLocal ? api.sessionImageUrl(detail.id, raw, true) : raw;
+                                        const resolvedSrc = isLocal ? api.sessionImageUrl(activeDetail.id, raw, false) : raw;
+                                        const dlSrc = isLocal ? api.sessionImageUrl(activeDetail.id, raw, true) : raw;
                                         const name = imageFileName(raw);
                                         return (
                                           <span className="chat-img-card">
@@ -790,8 +830,8 @@ export function LiveHudPane({
                                       a: ({ href, children }) => {
                                         const raw = String(href || '');
                                         if (isLocalImageHref(raw)) {
-                                          const imgSrc = api.sessionImageUrl(detail.id, raw, false);
-                                          const dlSrc = api.sessionImageUrl(detail.id, raw, true);
+                                          const imgSrc = api.sessionImageUrl(activeDetail.id, raw, false);
+                                          const dlSrc = api.sessionImageUrl(activeDetail.id, raw, true);
                                           const name = imageFileName(raw);
                                           return (
                                             <span className="chat-img-card">
@@ -903,12 +943,12 @@ export function LiveHudPane({
                       ))}
                     </>
                   )}
-                  {(detail.state === 'working' || hasAwaitingDelivery) && (
+                  {(activeDetail.state === 'working' || hasAwaitingDelivery) && (
                     <div className="msg ai msg-typing">
                       <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
                       <span>
-                        {detail.state === 'working'
-                          ? (detail.lastTool ? `executando ${detail.lastTool}…` : 'pensando…')
+                        {activeDetail.state === 'working'
+                          ? (activeDetail.lastTool ? `executando ${activeDetail.lastTool}…` : 'pensando…')
                           : 'entregando à sessão…'}
                       </span>
                     </div>
@@ -997,7 +1037,7 @@ export function LiveHudPane({
                       e.target.style.height = 'auto';
                       e.target.style.height = `${Math.min(180, Math.max(36, e.target.scrollHeight))}px`;
                       if (v.startsWith('/') && !skills.length) {
-                        api.getSkills(detail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
+                        api.getSkills(activeDetail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
                       }
                     }}
                     onPaste={(e) => {
@@ -1052,7 +1092,7 @@ export function LiveHudPane({
                         onClick={() => {
                           if (!replyText.startsWith('/')) setReplyText('/');
                           if (!skills.length) {
-                            api.getSkills(detail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
+                            api.getSkills(activeDetail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
                           }
                         }}
                       >
@@ -1079,25 +1119,25 @@ export function LiveHudPane({
               <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', background: '#101217', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 <div className="seg">
                   <button className={ptySubMode === 'resume' ? 'on' : ''} onClick={() => setPtySubMode('resume')}>
-                    CLI {detail.tool}
+                    CLI {activeDetail.tool}
                   </button>
                   <button className={ptySubMode === 'shell' ? 'on' : ''} onClick={() => setPtySubMode('shell')}>
                     Shell
                   </button>
                 </div>
                 <span className="mono ell" style={{ fontSize: 11, color: 'var(--muted)', flex: 1 }}>
-                  {detail.cwd || binding?.cwd || '(sem cwd)'}
+                  {activeDetail.cwd || binding?.cwd || '(sem cwd)'}
                 </span>
               </div>
-              {detail.cwd || binding?.cwd ? (
+              {activeDetail.cwd || binding?.cwd ? (
                 <XtermPty
-                  ptyKey={`sess:${detail.id}:${ptySubMode}`}
-                  cwd={detail.cwd || binding?.cwd || ''}
-                  machine={detail.machine || binding?.machine}
+                  ptyKey={`sess:${activeDetail.id}:${ptySubMode}`}
+                  cwd={activeDetail.cwd || binding?.cwd || ''}
+                  machine={activeDetail.machine || binding?.machine}
                   mode={ptySubMode}
-                  tool={detail.tool}
-                  sessionId={detail.id}
-                  model={detail.models?.[0] || ''}
+                  tool={activeDetail.tool}
+                  sessionId={activeDetail.id}
+                  model={activeDetail.models?.[0] || ''}
                   minHeight={260}
                 />
               ) : (

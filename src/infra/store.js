@@ -9,13 +9,25 @@ function readJson(file, fallback) {
   } catch { return fallback; }
 }
 
-function writeJson(file, value, pretty = false) {
+function writeJsonStrict(file, value, pretty = false) {
   const tmp = `${file}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify(value, null, pretty ? 2 : 0));
     fs.renameSync(tmp, file);
+  } catch (err) {
+    try { if (fs.existsSync(tmp) && fs.lstatSync(tmp).isFile()) fs.unlinkSync(tmp); } catch {}
+    const out = new Error(`Falha ao gravar ${file}: ${err && err.message ? err.message : err}`);
+    out.status = 500;
+    out.code = (err && err.code) || 'EWRITEJSON';
+    throw out;
+  }
+}
+
+function writeJson(file, value, pretty = false) {
+  try {
+    writeJsonStrict(file, value, pretty);
     return true;
   } catch { return false; }
 }
 
-module.exports = { readJson, writeJson };
+module.exports = { readJson, writeJson, writeJsonStrict };

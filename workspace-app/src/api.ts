@@ -232,8 +232,21 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  entityAssetUrl: (id: string, relPath: string) =>
-    withToken(`/api/workspace/entity/asset?id=${encodeURIComponent(id)}&path=${encodeURIComponent(relPath)}`),
+  entityAssetUrl: (id: string, relPath: string) => {
+    const base = `/api/workspace/entity/asset?id=${encodeURIComponent(id)}&path=${encodeURIComponent(relPath)}`;
+    return /\.html?$/i.test(relPath) ? base : withToken(base);
+  },
+
+  getEntityAssetHtml: async (id: string, relPath: string): Promise<string> => {
+    const url = `/api/workspace/entity/asset?id=${encodeURIComponent(id)}&path=${encodeURIComponent(relPath)}`;
+    const res = await fetch(withToken(url), {
+      credentials: 'same-origin',
+      headers: { 'X-AI-HUD-Fetch': '1', Accept: 'text/plain' },
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+    return text;
+  },
 
   getGlobalDoc: (area: string, name: string) =>
     apiFetch<{ ok: boolean; area: string; name: string; content: string; hash: string }>(

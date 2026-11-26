@@ -62,8 +62,17 @@ function clip(text, max) {
   return s.slice(0, max - 1).trimEnd() + '…';
 }
 
-function buildSessionDigest(sessions, { maxSessions = 12, maxTurnsPerSession = 8 } = {}) {
-  const picked = (sessions || []).slice(-maxSessions);
+const DREAM_BATCH_SIZE = 12;
+
+function selectDreamBatch(sessions, maxSessions = DREAM_BATCH_SIZE) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  const limit = Math.max(1, Number(maxSessions) || DREAM_BATCH_SIZE);
+  // Processa em ordem cronológica (mais antigas primeiro) para nunca descartar sessões acima do lote (R11)
+  return list.slice(0, limit);
+}
+
+function buildSessionDigest(sessions, { maxSessions = DREAM_BATCH_SIZE, maxTurnsPerSession = 8 } = {}) {
+  const picked = selectDreamBatch(sessions, maxSessions);
   const blocks = [];
   for (const s of picked) {
     const day = (s.end || s.start || '').slice(0, 10) || 'sem-data';
@@ -339,10 +348,12 @@ module.exports = {
   MEMORY_FILES,
   EDITABLE_MEMORY_FILES,
   DEFAULT_DREAM_ENGINES,
+  DREAM_BATCH_SIZE,
   projectSlug,
   enforceLineCap,
   sessionMatchesProject,
   selectDeltaSessions,
+  selectDreamBatch,
   buildSessionDigest,
   buildDreamPrompt,
   parseDreamResponse,

@@ -18,7 +18,7 @@ const {
 
 const REPORT_CSP = "default-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'";
 
-module.exports = ({ dataDir, config, collector, peers, machineName, workspace, workspaceSync, workspaceWorkflow, relay, send, json, text }) => {
+module.exports = ({ dataDir, config, collector, peers, machineName, workspace, workspaceSync, workspacePeerSync, workspaceWorkflow, relay, send, json, text }) => {
   const wsRoot = () => resolveWorkspaceRoot(dataDir, config);
   const authorizeCwd = createCwdAuthorizer({ dataDir, config, collector });
   const checkAuthorizedCwd = (cwd) => authorizeCwd(cwd);
@@ -62,6 +62,45 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
         message: body.message || '',
       });
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    // ---- Sincronização bidirecional peer-to-peer (VPS Principal <-> Local) ----
+
+    { method: 'GET', path: '/api/workspace/peer-sync', handler: ({ res }) => {
+      if (!workspacePeerSync) return text(res, 501, 'Peer-sync indisponível.');
+      json(res, workspacePeerSync.status());
+    } },
+
+    { method: 'POST', path: '/api/workspace/peer-sync', json: true, maxBytes: 16 * 1024, handler: async ({ res, body }) => {
+      if (!workspacePeerSync) return text(res, 501, 'Peer-sync indisponível.');
+      const r = await workspacePeerSync.syncNow({
+        peerName: body.peer || '',
+        force: !!body.force,
+      });
+      return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
+    } },
+
+    { method: 'GET', path: '/api/workspace/peer-sync/manifest', handler: ({ res }) => {
+      if (!workspacePeerSync) return text(res, 501, 'Peer-sync indisponível.');
+      json(res, workspacePeerSync.manifest());
+    } },
+
+    { method: 'GET', path: '/api/workspace/peer-sync/file', handler: ({ res, url }) => {
+      if (!workspacePeerSync) return text(res, 501, 'Peer-sync indisponível.');
+      const rel = url.searchParams.get('path') || '';
+      const r = workspacePeerSync.readFile(rel);
+      return r.status !== 200 ? text(res, r.status, r.error) : json(res, r.body);
+    } },
+
+    { method: 'PUT', path: '/api/workspace/peer-sync/file', json: true, maxBytes: 15 * 1024 * 1024, handler: ({ res, body }) => {
+      if (!workspacePeerSync) return text(res, 501, 'Peer-sync indisponível.');
+      const r = workspacePeerSync.writeFile({
+        relPath: body.path || '',
+        contentBase64: body.contentBase64,
+        mtimeMs: body.mtimeMs || 0,
+        baseSha256: body.baseSha256 || '',
+      });
+      return r.status !== 200 ? json(res, { ok: false, error: r.error, ...(r.currentSha256 ? { currentSha256: r.currentSha256 } : {}) }, r.status) : json(res, r.body);
     } },
 
     { method: 'POST', path: '/api/workspace/entity', json: true, maxBytes: 128 * 1024, handler: ({ res, body }) => {

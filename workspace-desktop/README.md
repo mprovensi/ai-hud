@@ -6,8 +6,8 @@ Shell desktop nativo leve para Windows (WebView2 já presente no sistema, sem em
 - **Bandeja do sistema (System Tray):** recolhe ao fechar e reabre instantaneamente com clique no ícone.
 - **Multi-janela:** janela principal (`AI Workspace` em `/workspace`) + 2ª janela independente (`AI HUD — Sessões` em `/`) pelo menu da bandeja.
 - **Instância única + estado da janela:** reabrir o app foca a janela existente e restaura posição/tamanho.
-- **Auto-start do servidor local:** se `127.0.0.1:8787` não estiver de pé, inicia `node server.js` em segundo plano e encerra ao sair pelo menu da bandeja.
-- **Modo VPS direto (opcional):** defina `AI_HUD_URL=https://<seu-hub-tailscale>/?t=<token>` para abrir direto o Hub 24/7 da VPS Oracle sem subir o servidor local.
+- **VPS Principal + Fallback Local automático:** se um peer em `data/config.json` tiver `"primary": true` (ou `AI_HUD_URL` estiver definido), o app testa a VPS ao abrir e usa ela como fonte principal. Se a VPS estiver fora do ar, cai automaticamente para o servidor local (`127.0.0.1:8787`) e, quando a VPS voltar, dispara o peer-sync bidirecional (`/api/workspace/peer-sync`) e reconecta na VPS.
+- **Auto-start do servidor local:** mantém `node server.js` rodando em segundo plano (necessário para federação local, fallback offline e sincronização automática VPS ↔ Local) e encerra ao sair pelo menu da bandeja.
 
 ## Como compilar no Windows
 

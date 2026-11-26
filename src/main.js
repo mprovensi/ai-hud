@@ -44,6 +44,7 @@ const { createPermissions } = require('./actions/permissions');
 const { createFocus } = require('./actions/focus');
 const { createClose } = require('./actions/close');
 const { Peers } = require('./federation/peers');
+const { createWorkspacePeerSync } = require('./federation/workspace-peer-sync');
 const { createSend } = require('./api/utils');
 const { createStatic } = require('./api/static');
 const { createRoutes } = require('./api/routes');
@@ -162,6 +163,7 @@ function createApp({
   const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });
   const workspaceSync = createWorkspaceSync({ dataDir, config, log });
+  const workspacePeerSync = createWorkspacePeerSync({ dataDir, config, peers, machineName, log });
   const workspaceWorkflow = createWorkspaceWorkflow({
     dataDir, config, quotas, ollama, claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel, log,
   });
@@ -191,7 +193,7 @@ function createApp({
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspaceWorkflow, memory, mcp, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspacePeerSync, workspaceWorkflow, memory, mcp, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });
@@ -209,6 +211,7 @@ function createApp({
     try { if (fx && fx.stop) fx.stop(); } catch {}
     try { if (memory && memory.stopScheduler) memory.stopScheduler(); } catch {}
     try { if (workspaceSync && workspaceSync.stopAutoSync) workspaceSync.stopAutoSync(); } catch {}
+    try { if (workspacePeerSync && workspacePeerSync.stopAutoSync) workspacePeerSync.stopAutoSync(); } catch {}
     try { if (sources && sources.stop) sources.stop(); } catch {}
     try { if (ollama && ollama.stop) ollama.stop(); } catch {}
     try { if (capabilities && capabilities.stop) capabilities.stop(); } catch {}
@@ -234,7 +237,11 @@ function createApp({
     fx.start();
     memory.startScheduler();
     workspaceSync.startAutoSync();
-    peers.start(() => collector.poke());
+    workspacePeerSync.startAutoSync();
+    peers.start((peer) => {
+      collector.poke();
+      if (peer && peer.name && !peer.error) workspacePeerSync.notifyPeerOnline(peer.name);
+    });
     quotas.refreshAll().then(() => collector.poke());
     // Com alguma sessão trabalhando, lê a cada 1 min (o gráfico da janela de 5h fica mais detalhado)
     quotaTimer = setInterval(() => {

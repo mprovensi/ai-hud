@@ -47,7 +47,7 @@ class Peers {
     const query = p.version ? `?local=1&desde=${encodeURIComponent(p.version)}&espera=${WAIT_S}` : '?local=1';
     return this.poll(p, query).then((changed) => {
       if (this._stopped) return;
-      if (changed) onUpdate();
+      if (changed) onUpdate(p);
       this.schedule(() => this.follow(p, onUpdate), p.version && !p.error ? 0 : POLL_MS);
     });
   }

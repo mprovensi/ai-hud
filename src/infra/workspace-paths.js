@@ -106,7 +106,8 @@ function resolveSafeContainedTarget(rootDir, targetPath) {
 function writeAtomic(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`;
-  fs.writeFileSync(tmp, content, 'utf8');
+  if (Buffer.isBuffer(content)) fs.writeFileSync(tmp, content);
+  else fs.writeFileSync(tmp, content, 'utf8');
   fs.renameSync(tmp, filePath);
 }
 

@@ -75,7 +75,7 @@ echo "==> Escrevendo /etc/ipsec.conf (IKEv2 PSK + AES-256 / SHA-256 / MODP-2048 
 cat >/etc/ipsec.conf <<EOF
 config setup
   charondebug="ike 1, knl 1, cfg 0"
-  uniqueids=replace
+  uniqueids=no
 
 conn ai-hud-ipad
   auto=add
@@ -84,9 +84,8 @@ conn ai-hud-ipad
   keyexchange=ikev2
   fragmentation=yes
   forceencaps=yes
-  mobike=no
   dpdaction=clear
-  dpddelay=60s
+  dpddelay=300s
   rekey=no
   ike=aes256-sha256-modp2048,aes256-sha1-modp2048!
   esp=aes256-sha256,aes256-sha1!
@@ -154,7 +153,7 @@ cat >"${OUT_FILE}" <<EOF
         <key>DeadPeerDetectionRate</key>
         <string>Medium</string>
         <key>DisableMOBIKE</key>
-        <integer>1</integer>
+        <integer>0</integer>
         <key>DisableRedirect</key>
         <integer>0</integer>
         <key>EnablePFS</key>

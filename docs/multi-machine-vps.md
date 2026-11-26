@@ -127,13 +127,10 @@ sudo bash platform/linux/ikev2-ipad-setup.sh --host <IP_PUBLICO_OU_DOMINIO_DA_VP
   2. No iPad, desligue a VPN e **ative/desative o Modo Avião** (ou desligue o Wi-Fi por ~10s) para limpar a interface `utun` travada do iOS 9.3.5 e forçar uma nova porta NAT no roteador. Se ainda persistir, reinicie o iPad.
   3. Religue a VPN **AI HUD (VPS Oracle)** e recarregue `http://10.10.10.1:8787`.
   4. *(Fallback na Wi-Fi de casa)*: com a VPN desligada, acesse diretamente o IP LAN do notebook/desktop federado (`http://<IP_LAN_DO_PC>:8787`).
-- **Atenção — NÃO usar `iptables -t mangle ... -j TCPMSS`:**
+- **Atenção — NÃO usar `iptables -t mangle ... -j TCPMSS` nem `mobike=no` na VPS:**
   - Não adicione regras `TCPMSS` nas chains `INPUT`/`OUTPUT` da tabela `mangle` para `10.10.10.0/24`; isso interfere no checksum/handshake TCP sobre XFRM/ESP-in-UDP e trava todas as conexões em `SYN-RECV`.
+  - Não adicione `mobike=no` em `/etc/ipsec.conf` enquanto o perfil `.mobileconfig` instalado no iPad estiver com `DisableMOBIKE=0`; no iOS 9.3.5 isso permite o primeiro request e logo em seguida trava novas conexões em `SYN-RECV`.
   - A interface `ens3` da Oracle Cloud usa `mtu 9000` normalmente; se algum ambiente realmente precisar reduzir MTU do túnel, configure `mtu = 1360` nativamente em `/etc/strongswan.d/charon/kernel-netlink.conf` (sem mangle).
-- **Prevenção aplicada em `/etc/ipsec.conf` (e em `platform/linux/ikev2-ipad-setup.sh`):**
-  - `uniqueids=replace` (substitui imediatamente IKE_SA anterior do mesmo `rightid=ipad` ao reconectar).
-  - `mobike=no` (evita migração MOBIKE instável no iOS 9.3.5 após troca/queda de Wi-Fi).
-  - `dpdaction=clear` + `dpddelay=60s` (derruba sessões zumbis em ~1 min em vez de manter keepalive por 5+ min na porta NAT antiga).
 
 ### Timeouts nas cotas do Codex ou Gemini na VPS (1 vCPU / ~1 GB RAM)
 - **Causa:** rodar `claude`, `codex app-server` e `agy --print /usage` em paralelo estoura CPU/swap em instâncias pequenas, gerando `tempo esgotado` / falha de comando.

@@ -109,3 +109,47 @@ sudo bash platform/linux/ikev2-ipad-setup.sh --host <IP_PUBLICO_OU_DOMINIO_DA_VP
 3. Ative a VPN **AI HUD (VPS Oracle)** em **Ajustes → VPN** (split-tunnel: só `10.10.10.1` passa pela VPN; a internet normal do iPad continua direta pela Wi-Fi).
 4. Abra no Safari do iPad: **`http://10.10.10.1:8787`**, informe o PIN da VPS e toque em **Adicionar à Tela de Início**.
 5. Depois de validar, ative **Conectar Sob Demanda** na VPN do iPad para reconectar automaticamente.
+
+---
+
+## 4. Troubleshooting (VPS Oracle, VPN IKEv2 no iPad e Cotas)
+
+### iPad conecta na VPN, mas o Safari exibe *"não pode abrir a página porque o servidor parou de responder"*
+- **Sintoma na VPS:**
+  - `sudo ipsec statusall` mostra o túnel `ESTABLISHED`, mas `bytes_o` é múltiplo exato de `60` bytes (apenas retransmissões de TCP `SYN-ACK`) e `bytes_i` cresce sem requisições HTTP chegando no Node (`journalctl --user -u ai-hud` não mostra `10.10.10.2`).
+  - `ss -tan | grep 10.10.10` mostra conexões presas em `SYN-RECV`.
+  - Mesmo desligando e religando a VPN no iPad, o roteador reutiliza a mesma porta NAT UDP mantida viva pelos keepalives do strongSwan e o iOS 9.3.5 ignora os pacotes ESP de retorno.
+- **Solução:**
+  1. Na VPS, reinicie o strongSwan para encerrar a sessão antiga e cessar os keepalives na porta NAT presa:
+     ```bash
+     sudo systemctl restart strongswan-starter
+     ```
+  2. No iPad, desligue a VPN e **ative/desative o Modo Avião** (ou desligue o Wi-Fi por ~10s) para limpar a interface `utun` travada do iOS 9.3.5 e forçar uma nova porta NAT no roteador. Se ainda persistir, reinicie o iPad.
+  3. Religue a VPN **AI HUD (VPS Oracle)** e recarregue `http://10.10.10.1:8787`.
+  4. *(Fallback na Wi-Fi de casa)*: com a VPN desligada, acesse diretamente o IP LAN do notebook/desktop federado (`http://<IP_LAN_DO_PC>:8787`).
+- **Atenção — NÃO usar `iptables -t mangle ... -j TCPMSS`:**
+  - Não adicione regras `TCPMSS` nas chains `INPUT`/`OUTPUT` da tabela `mangle` para `10.10.10.0/24`; isso interfere no checksum/handshake TCP sobre XFRM/ESP-in-UDP e trava todas as conexões em `SYN-RECV`.
+  - A interface `ens3` da Oracle Cloud usa `mtu 9000` normalmente; se algum ambiente realmente precisar reduzir MTU do túnel, configure `mtu = 1360` nativamente em `/etc/strongswan.d/charon/kernel-netlink.conf` (sem mangle).
+
+### Timeouts nas cotas do Codex ou Gemini na VPS (1 vCPU / ~1 GB RAM)
+- **Causa:** rodar `claude`, `codex app-server` e `agy --print /usage` em paralelo estoura CPU/swap em instâncias pequenas, gerando `tempo esgotado` / falha de comando.
+- **Comportamento já corrigido no código:**
+  - `src/collect/quotas/tracker.js` executa os coletores de cota **sequencialmente** com trava de concorrência (`refreshing`).
+  - `src/collect/quotas/gemini.js` usa timeout estendido (`45s` / `--print-timeout 35s`) e erro transitório (`soft = true`) para preservar a última leitura válida.
+  - `src/federation/merge.js` prioriza cota saudável vinda de peers (`MateusNote`/Desktop) sobre uma cota local com erro.
+
+### Comandos rápidos de diagnóstico na VPS
+```bash
+# 1. Ver estado do túnel IKEv2 e contadores de tráfego (bytes_i e bytes_o devem crescer livremente)
+sudo ipsec statusall
+
+# 2. Ver requisições chegando do iPad no AI HUD
+journalctl --user -u ai-hud --since "10 min ago" --no-pager | grep 10.10.10.2
+
+# 3. Ver se há handshakes TCP travados em SYN-RECV
+ss -tan | grep 10.10.10
+
+# 4. Conferir regras do firewall (INPUT deve liberar UDP 500/4500 e TCP 8787 via ipsec; mangle sem TCPMSS)
+sudo iptables -S INPUT | grep -E "8787|4500|500|10\.10\.10"
+sudo iptables -t mangle -S
+```

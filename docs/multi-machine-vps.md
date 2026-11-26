@@ -115,22 +115,23 @@ sudo bash platform/linux/ikev2-ipad-setup.sh --host <IP_PUBLICO_OU_DOMINIO_DA_VP
 ## 4. Troubleshooting (VPS Oracle, VPN IKEv2 no iPad e Cotas)
 
 ### iPad conecta na VPN, mas o Safari exibe *"não pode abrir a página porque o servidor parou de responder"*
-- **Sintoma na VPS:**
-  - `sudo ipsec statusall` mostra o túnel `ESTABLISHED`, mas `bytes_o` é múltiplo exato de `60` bytes (apenas retransmissões de TCP `SYN-ACK`) e `bytes_i` cresce sem requisições HTTP chegando no Node (`journalctl --user -u ai-hud` não mostra `10.10.10.2`).
-  - `ss -tan | grep 10.10.10` mostra conexões presas em `SYN-RECV`.
-  - Mesmo desligando e religando a VPN no iPad, o roteador reutiliza a mesma porta NAT UDP mantida viva pelos keepalives do strongSwan e o iOS 9.3.5 ignora os pacotes ESP de retorno.
-- **Solução:**
-  1. Na VPS, reinicie o strongSwan para encerrar a sessão antiga e cessar os keepalives na porta NAT presa:
+- **Causa raiz comprovada:**
+  1. O kernel Linux (`esp4.c`) envia pacotes **ESP-in-UDP (`UDP 4500`)** não-fragmentados com **checksum UDP `0x0000`** (permitido pela RFC 3948 em IPv4). Roteadores domésticos/CGNAT frequentemente descartam pacotes `UDP 4500` com `csum=0x0000` assim que o fluxo entra no hardware NAT/fastpath — travando todos os handshakes TCP (`SYN-ACK` de 60 bytes) em `SYN-RECV`.
+  2. Além disso, a NIC `ens3` da Oracle Cloud tem `mtu 9000`; sem `mtu = 1360` no `kernel-netlink.conf` do strongSwan, pacotes grandes (~1492 bytes) sofrem blackhole em links PPPoE.
+- **Correção definitiva aplicada na VPS (e em `platform/linux/ikev2-ipad-setup.sh`):**
+  1. Serviço `ai-hud-vpn-csum.service` (`/usr/local/sbin/ai-hud-vpn-csum.sh`) aplica um filtro `tc` nativo no kernel (`flower ip_proto udp src_port 4500 ip_flags nofrag` → `pedit` offset 26 `0x0001` → `action csum udp`), recalculando um checksum UDP válido na saída da `ens3` em velocidade de kernel.
+  2. `/etc/strongswan.d/charon/kernel-netlink.conf` define `mtu = 1360` nativamente na tabela 220 do strongSwan.
+- **Se precisar diagnosticar/recuperar:**
+  1. Confirme que o serviço de checksum está ativo e contando pacotes:
      ```bash
-     sudo systemctl restart strongswan-starter
+     systemctl is-active ai-hud-vpn-csum.service
+     sudo tc -s filter show dev ens3 egress
      ```
-  2. No iPad, desligue a VPN e **ative/desative o Modo Avião** (ou desligue o Wi-Fi por ~10s) para limpar a interface `utun` travada do iOS 9.3.5 e forçar uma nova porta NAT no roteador. Se ainda persistir, reinicie o iPad.
-  3. Religue a VPN **AI HUD (VPS Oracle)** e recarregue `http://10.10.10.1:8787`.
-  4. *(Fallback na Wi-Fi de casa)*: com a VPN desligada, acesse diretamente o IP LAN do notebook/desktop federado (`http://<IP_LAN_DO_PC>:8787`).
+  2. Se a sessão do iPad ficar presa após troca de rede, reinicie o strongSwan (`sudo systemctl restart strongswan-starter`) e ligue/desligue a VPN (ou Modo Avião) no iPad.
+  3. *(Fallback na Wi-Fi de casa)*: com a VPN desligada, acesse diretamente o IP LAN do notebook/desktop federado (`http://<IP_LAN_DO_PC>:8787`).
 - **Atenção — NÃO usar `iptables -t mangle ... -j TCPMSS` nem `mobike=no` na VPS:**
-  - Não adicione regras `TCPMSS` nas chains `INPUT`/`OUTPUT` da tabela `mangle` para `10.10.10.0/24`; isso interfere no checksum/handshake TCP sobre XFRM/ESP-in-UDP e trava todas as conexões em `SYN-RECV`.
-  - Não adicione `mobike=no` em `/etc/ipsec.conf` enquanto o perfil `.mobileconfig` instalado no iPad estiver com `DisableMOBIKE=0`; no iOS 9.3.5 isso permite o primeiro request e logo em seguida trava novas conexões em `SYN-RECV`.
-  - A interface `ens3` da Oracle Cloud usa `mtu 9000` normalmente; se algum ambiente realmente precisar reduzir MTU do túnel, configure `mtu = 1360` nativamente em `/etc/strongswan.d/charon/kernel-netlink.conf` (sem mangle).
+  - Não adicione regras `TCPMSS` nas chains `INPUT`/`OUTPUT` da tabela `mangle` para `10.10.10.0/24`; use `mtu = 1360` nativo em `/etc/strongswan.d/charon/kernel-netlink.conf`.
+  - Não adicione `mobike=no` em `/etc/ipsec.conf` enquanto o perfil `.mobileconfig` instalado no iPad estiver com `DisableMOBIKE=0`.
 
 ### Timeouts nas cotas do Codex ou Gemini na VPS (1 vCPU / ~1 GB RAM)
 - **Causa:** rodar `claude`, `codex app-server` e `agy --print /usage` em paralelo estoura CPU/swap em instâncias pequenas, gerando `tempo esgotado` / falha de comando.

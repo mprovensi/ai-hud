@@ -71,6 +71,55 @@ EOF
 systemctl daemon-reload
 systemctl enable --now ai-hud-vpn-ip.service
 
+echo "==> Configurando preenchimento de checksum UDP 4500 no kernel (evita descarte de ESP-in-UDP com csum=0)..."
+cat >/usr/local/sbin/ai-hud-vpn-csum.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+DEV="$(ip -4 route show default | awk '{print $5; exit}')"
+if [[ -z "${DEV}" ]]; then
+  echo "No default IPv4 interface found" >&2
+  exit 1
+fi
+tc qdisc replace dev "${DEV}" clsact
+tc filter del dev "${DEV}" egress prio 10 2>/dev/null || true
+tc filter add dev "${DEV}" egress protocol ip prio 10 handle 1 flower \
+  ip_proto udp src_port 4500 ip_flags nofrag \
+  action pedit ex munge offset 26 u16 set 0x0001 pipe \
+  action csum udp
+EOF
+chmod 755 /usr/local/sbin/ai-hud-vpn-csum.sh
+
+cat >/etc/systemd/system/ai-hud-vpn-csum.service <<EOF
+[Unit]
+Description=Fix ESP-in-UDP (UDP 4500) zero checksum via kernel tc pedit+csum
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/ai-hud-vpn-csum.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now ai-hud-vpn-csum.service
+
+echo "==> Configurando MTU nativo (1360) nas rotas do strongSwan..."
+cat >/etc/strongswan.d/charon/kernel-netlink.conf <<'EOF'
+kernel-netlink {
+    load = yes
+    mtu = 1360
+    spdh_thresh {
+        ipv4 {
+        }
+        ipv6 {
+        }
+    }
+}
+EOF
+
 echo "==> Escrevendo /etc/ipsec.conf (IKEv2 PSK + AES-256 / SHA-256 / MODP-2048 para iOS 9.3.5)..."
 cat >/etc/ipsec.conf <<EOF
 config setup

@@ -317,10 +317,11 @@ export function LiveHudPane({
     return () => window.clearInterval(timer);
   }, [selectedId, viewMode, hasAwaitingDelivery, activeDetail?.state]);
 
-  // Limpa anexos pendentes ao trocar de sessão
+  // Limpa anexos e cache de skills ao trocar de sessão
   useEffect(() => {
     setPendingImgs([]);
     setDragOver(false);
+    setSkills([]);
   }, [selectedId]);
 
   // Rola automaticamente para a mensagem mais recente ao abrir sessão, enviar ou receber novas mensagens
@@ -1051,7 +1052,9 @@ export function LiveHudPane({
                       e.target.style.height = 'auto';
                       e.target.style.height = `${Math.min(180, Math.max(36, e.target.scrollHeight))}px`;
                       if (v.startsWith('/') && !skills.length) {
-                        api.getSkills(activeDetail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
+                        api.getSkills(activeDetail.cwd || '', activeDetail.machine || '', activeDetail.tool || '')
+                          .then((r) => setSkills(r.skills || []))
+                          .catch(() => {});
                       }
                     }}
                     onPaste={(e) => {
@@ -1106,7 +1109,9 @@ export function LiveHudPane({
                         onClick={() => {
                           if (!replyText.startsWith('/')) setReplyText('/');
                           if (!skills.length) {
-                            api.getSkills(activeDetail.cwd || '').then((r) => setSkills(r.skills || [])).catch(() => {});
+                            api.getSkills(activeDetail.cwd || '', activeDetail.machine || '', activeDetail.tool || '')
+                              .then((r) => setSkills(r.skills || []))
+                              .catch(() => {});
                           }
                         }}
                       >

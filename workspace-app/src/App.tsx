@@ -43,6 +43,7 @@ const CardEditor = lazy(() => import('./components/CardEditor').then((m) => ({ d
 const FilesAndGit = lazy(() => import('./components/FilesAndGit').then((m) => ({ default: m.FilesAndGit })));
 const MemoryPanel = lazy(() => import('./components/MemoryPanel').then((m) => ({ default: m.MemoryPanel })));
 const McpPane = lazy(() => import('./components/McpPane').then((m) => ({ default: m.McpPane })));
+const SkillsPane = lazy(() => import('./components/SkillsPane').then((m) => ({ default: m.SkillsPane })));
 const NewProjectDrawer = lazy(() => import('./components/NewProjectDrawer').then((m) => ({ default: m.NewProjectDrawer })));
 const NewSessionDrawer = lazy(() => import('./components/NewSessionDrawer').then((m) => ({ default: m.NewSessionDrawer })));
 const NotesAndReports = lazy(() => import('./components/NotesAndReports').then((m) => ({ default: m.NotesAndReports })));
@@ -54,6 +55,7 @@ type Selection =
   | { kind: 'entity'; id: string }
   | { kind: 'doc'; area: 'context' | 'knowledge' | 'skills' | 'handoffs'; name: string }
   | { kind: 'mcp' }
+  | { kind: 'skills-manager' }
   | null;
 
 type EntityTab = 'step' | 'docs' | 'memory' | 'files' | 'terminal';
@@ -633,6 +635,7 @@ export function App() {
       { id: 'act-new', group: 'Ação', label: 'Criar novo projeto no Workspace', run: () => openNewModal('') },
       { id: 'act-grp', group: 'Ação', label: 'Criar workspace (ex.: TRT, Jogos)', run: openNewGroup },
       { id: 'act-mcp', group: 'Navegação', label: 'MCPs Compartilhados (Claude · Codex · Antigravity)', run: () => setSelection({ kind: 'mcp' }) },
+      { id: 'act-skills', group: 'Navegação', label: 'Skills & Plugins Compartilhados (TRT18 · Claude · Codex · Antigravity)', run: () => setSelection({ kind: 'skills-manager' }) },
       { id: 'act-hud', group: 'Navegação', label: 'Abrir AI HUD Clássico (/)', run: () => { window.location.href = withToken('/'); } },
     ];
     for (const e of ws?.entities || []) {
@@ -950,6 +953,13 @@ export function App() {
               <Plug size={13} color={selection?.kind === 'mcp' ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
               <span className="ell">MCPs Compartilhados</span>
             </button>
+            <button
+              className={`sb-item ${selection?.kind === 'skills-manager' ? 'active' : ''}`}
+              onClick={() => setSelection({ kind: 'skills-manager' })}
+            >
+              <Sparkles size={13} color={selection?.kind === 'skills-manager' ? 'var(--accent)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+              <span className="ell">Skills & Plugins</span>
+            </button>
 
             {([
               ['context', 'Contexto Global', BookOpen],
@@ -1174,6 +1184,26 @@ export function App() {
               <div className="stage-content">
                 <Suspense fallback={<div className="empty">Carregando catálogo MCP…</div>}>
                   <McpPane snap={snap} onNotify={notify} />
+                </Suspense>
+              </div>
+            </>
+          ) : selection?.kind === 'skills-manager' ? (
+            <>
+              <div className="stage-head">
+                <div className="stage-title-row">
+                  <button className="btn btn-sm btn-icon" onClick={() => setSelection(null)} aria-label="Voltar" title="Voltar">
+                    <ArrowLeft size={14} />
+                  </button>
+                  <Sparkles size={22} color="var(--accent)" />
+                  <div>
+                    <h1 className="stage-title">Skills & Plugins</h1>
+                    <p className="stage-desc">Compartilhe skills e plugins entre Claude Code, Codex CLI e Antigravity via link</p>
+                  </div>
+                </div>
+              </div>
+              <div className="stage-content">
+                <Suspense fallback={<div className="empty">Carregando catálogo de skills e plugins…</div>}>
+                  <SkillsPane snap={snap} onNotify={notify} />
                 </Suspense>
               </div>
             </>

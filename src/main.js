@@ -39,6 +39,7 @@ const { createOpenVsCode } = require('./actions/open-vscode');
 const { commitProjectGit } = require('./actions/project-git-commit');
 const { createProjectRunner } = require('./actions/project-runner');
 const { createMcpActions } = require('./actions/mcp');
+const { createSkillsActions } = require('./actions/skills');
 const { attachWsPty } = require('./api/ws-pty');
 const { createRunning } = require('./actions/running');
 const { compareSessions } = require('./core/session');
@@ -191,11 +192,12 @@ function createApp({
   const openVsCode = createOpenVsCode();
   const projectRunner = createProjectRunner({ config, log });
   const mcp = createMcpActions({ dataDir, config, machineName, log });
+  const skills = createSkillsActions({ dataDir, config, machineName, log });
 
   // api
   const routes = createRoutes({
     send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
-    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspacePeerSync, workspaceWorkflow, memory, mcp, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
+    reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspacePeerSync, workspaceWorkflow, memory, mcp, skills, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });
   const serveStatic = createStatic({ webDir, webAssets, workspaceDistDir, send, brands, dataDir });

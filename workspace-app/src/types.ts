@@ -446,3 +446,58 @@ export interface McpStatusResponse {
   servers: McpServerItem[];
   unmanaged: { id: string; transport: 'stdio' | 'http'; command?: string; url?: string; foundIn: McpTarget[] }[];
 }
+
+export type SkillTargetState = 'linked' | 'native' | 'plugin' | 'missing' | 'conflict' | 'other-link' | 'broken';
+
+export interface SkillTargetInfo {
+  status: SkillTargetState;
+  linked: boolean;
+  native: boolean;
+  path: string;
+}
+
+export interface SkillCatalogItem {
+  id: string;
+  name: string;
+  cmd: string;
+  description: string;
+  origin: string;
+  originKind: 'plugin' | 'workspace' | 'claude' | 'codex' | 'antigravity';
+  plugin: string;
+  sourceDir: string;
+  skillFile: string;
+  targets: Record<McpTarget, SkillTargetInfo>;
+}
+
+export interface PluginCatalogItem {
+  id: string;
+  name: string;
+  marketplace: string;
+  enabled: boolean;
+  description: string;
+  author: string;
+  activePath: string;
+  sourcePath: string;
+  sourceVersion: string;
+  cachePath: string;
+  cacheVersion: string;
+  outdated: boolean;
+  canUpdateCache: boolean;
+  agents: { name: string; path: string }[];
+  skills: {
+    name: string;
+    cmd: string;
+    description: string;
+    sourceDir: string;
+    targets: Record<McpTarget, SkillTargetInfo> | null;
+  }[];
+}
+
+export interface SkillsCatalogResponse {
+  ok: boolean;
+  machine: string;
+  cliDirs: Record<McpTarget, string>;
+  workspaceRoots: { group: string; rootCwd: string }[];
+  plugins: PluginCatalogItem[];
+  skills: SkillCatalogItem[];
+}

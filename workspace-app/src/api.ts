@@ -108,10 +108,16 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getSkills: (cwd = '') =>
-    apiFetch<{ skills: { cmd: string; name: string; description: string; prompt?: string; source: string }[] }>(
-      `/api/skills${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''}`,
-    ),
+  getSkills: (cwd = '', machine = '', tool = '') => {
+    const q = new URLSearchParams();
+    if (cwd) q.set('cwd', cwd);
+    if (machine) q.set('machine', machine);
+    if (tool) q.set('tool', tool);
+    const qs = q.toString();
+    return apiFetch<{ skills: { cmd: string; name: string; description: string; prompt?: string; source: string; crossAi?: boolean }[] }>(
+      `/api/skills${qs ? `?${qs}` : ''}`,
+    );
+  },
 
   speakText: (text: string) =>
     apiFetch<{ ok: boolean; contentType: string; engine: string; audioBase64: string }>('/api/voice/speak?format=json', {
@@ -524,6 +530,40 @@ export const api = {
 
   syncMcpToClis: (body: { machine?: string; targets?: import('./types').McpTarget[]; projectCwd?: string } = {}) =>
     apiFetch<{ ok: boolean; results?: Record<string, { ok: boolean; count?: number; error?: string }>; status: import('./types').McpStatusResponse }>('/api/mcp/sync', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getSkillsCatalog: (machine = '') =>
+    apiFetch<import('./types').SkillsCatalogResponse>(
+      `/api/skills/catalog${machine ? `?machine=${encodeURIComponent(machine)}` : ''}`,
+    ),
+
+  shareSkill: (body: {
+    machine?: string;
+    sourceDir: string;
+    name: string;
+    targets: Partial<Record<import('./types').McpTarget, boolean>>;
+  }) =>
+    apiFetch<{ ok: boolean; skill: string; catalog: import('./types').SkillsCatalogResponse }>('/api/skills/share', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  batchShareSkills: (body: {
+    machine?: string;
+    origin?: string;
+    pluginId?: string;
+    targets: import('./types').McpTarget[];
+    enable?: boolean;
+  }) =>
+    apiFetch<{ ok: boolean; count: number; catalog: import('./types').SkillsCatalogResponse }>('/api/skills/batch-share', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateClaudePluginCache: (body: { machine?: string; pluginId: string }) =>
+    apiFetch<{ ok: boolean; pluginId: string; version: string; catalog: import('./types').SkillsCatalogResponse }>('/api/skills/plugin-update', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

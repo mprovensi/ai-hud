@@ -13,32 +13,112 @@
     <link rel="apple-touch-startup-image" href="/workspace/icon-512.png" />
     <link rel="icon" type="image/png" href="/workspace/favicon.png" />
     <style>
+      html, body { margin: 0; padding: 0; background: #0e0f12; color: #eceef4; }
       #wsSplash {
         position: fixed; inset: 0; z-index: 9999;
-        background: radial-gradient(circle at 50% 28%, rgba(95, 184, 164, .12), transparent 60%), #0e0f12;
-        color: #eceef4; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: #0e0f12; color: #eceef4;
+        display: flex; flex-direction: column;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        transition: opacity .26s ease;
+        transition: opacity .28s ease;
       }
       #wsSplash.hide { opacity: 0; pointer-events: none; }
-      #wsSplash .sp-logo {
-        width: 72px; height: 72px; border-radius: 16px; margin-bottom: 14px;
-        box-shadow: 0 10px 28px rgba(95, 184, 164, .22);
+      #wsSplash * { box-sizing: border-box; }
+      .sp-shimmer {
+        background: linear-gradient(90deg, rgba(255,255,255,.035) 25%, rgba(95,184,164,.10) 50%, rgba(255,255,255,.035) 75%);
+        background-size: 200% 100%;
+        animation: spShimmer 1.45s ease-in-out infinite;
+        border-radius: 7px;
       }
-      #wsSplash .sp-title { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
-      #wsSplash .sp-sub { font-size: 12.5px; color: #8c94a6; margin-top: 6px; }
-      #wsSplash .sp-track {
-        width: 156px; height: 4px; border-radius: 999px; margin-top: 18px;
-        background: rgba(255, 255, 255, .08); overflow: hidden; position: relative;
+      @keyframes spShimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
       }
-      #wsSplash .sp-bar {
-        position: absolute; top: 0; left: -45%; width: 45%; height: 100%; border-radius: 999px;
-        background: linear-gradient(90deg, #e08a66, #5fb8a4, #b39ddb);
-        animation: wsSpSlide 1.2s ease-in-out infinite;
+      .sp-topbar {
+        height: 48px; flex-shrink: 0;
+        display: flex; align-items: center; gap: 12px; padding: 0 14px;
+        border-bottom: 1px solid rgba(255,255,255,.07);
+        background: #12141a;
       }
-      @keyframes wsSpSlide { 0% { left: -45%; } 100% { left: 105%; } }
+      .sp-brand {
+        display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;
+        color: #f2f5fa; letter-spacing: -.01em;
+      }
+      .sp-brand img { width: 20px; height: 20px; border-radius: 5px; }
+      .sp-body {
+        flex: 1; min-height: 0; display: flex;
+      }
+      .sp-side {
+        width: 244px; flex-shrink: 0; padding: 12px;
+        border-right: 1px solid rgba(255,255,255,.07);
+        background: #101218;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .sp-main {
+        flex: 1; min-width: 0; padding: 22px 26px;
+        display: flex; flex-direction: column; gap: 16px;
+      }
+      .sp-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;
+      }
+      .sp-card {
+        height: 112px; padding: 14px; border-radius: 11px;
+        border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02);
+        display: flex; flex-direction: column; gap: 9px;
+      }
+      .sp-right {
+        width: 340px; flex-shrink: 0; padding: 12px 14px;
+        border-left: 1px solid rgba(255,255,255,.07);
+        background: #101218;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .sp-sess {
+        height: 76px; padding: 11px; border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02);
+        display: flex; flex-direction: column; gap: 7px;
+      }
+      @media (max-width: 960px) { .sp-right { display: none; } }
+      @media (max-width: 680px) { .sp-side { display: none; } }
+
+      /* Cartão flutuante de progresso real */
+      #wsBootToast {
+        position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+        width: min(390px, calc(100vw - 32px));
+        padding: 12px 16px 13px; border-radius: 12px;
+        background: rgba(18, 21, 28, 0.94);
+        border: 1px solid rgba(95, 184, 164, 0.34);
+        box-shadow: 0 14px 38px rgba(0, 0, 0, 0.55), 0 0 24px rgba(95, 184, 164, 0.12);
+        backdrop-filter: blur(10px);
+      }
+      .sp-toast-row {
+        display: flex; align-items: center; gap: 9px; margin-bottom: 9px;
+      }
+      .sp-toast-dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        background: #5fb8a4; box-shadow: 0 0 10px rgba(95,184,164,.9);
+        animation: spPulse 1.2s ease-in-out infinite;
+      }
+      @keyframes spPulse {
+        0%, 100% { opacity: .55; transform: scale(.92); }
+        50% { opacity: 1; transform: scale(1.1); }
+      }
+      #wsBootText {
+        flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; color: #e8ecf4;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #wsBootPct {
+        font-size: 11.5px; font-weight: 700; color: #5fb8a4; font-variant-numeric: tabular-nums;
+      }
+      .sp-track {
+        width: 100%; height: 4px; border-radius: 999px;
+        background: rgba(255,255,255,.08); overflow: hidden;
+      }
+      #wsBootBar {
+        height: 100%; width: 22%; border-radius: 999px;
+        background: linear-gradient(90deg, #5fb8a4, #7ce0c8, #e5c063);
+        transition: width .32s cubic-bezier(.22,1,.36,1);
+      }
     </style>
-    <script type="module" crossorigin src="/workspace/assets/index-Dwn3DNVg.js"></script>
+    <script type="module" crossorigin src="/workspace/assets/index-bg7nHqST.js"></script>
     <link rel="modulepreload" crossorigin href="/workspace/assets/react-vendor-PY8vvcCh.js">
     <link rel="modulepreload" crossorigin href="/workspace/assets/icons-vendor-BynZCEid.js">
     <link rel="modulepreload" crossorigin href="/workspace/assets/vendor-DEz4Oh-x.js">
@@ -46,12 +126,120 @@
     <link rel="stylesheet" crossorigin href="/workspace/assets/index-x8RPVKVk.css">
   </head>
   <body>
-    <div id="wsSplash" aria-hidden="true">
-      <img class="sp-logo" src="/workspace/icon-192.png" alt="" width="72" height="72" />
-      <div class="sp-title">AI Workspace</div>
-      <div class="sp-sub">Carregando projetos e sessões…</div>
-      <div class="sp-track"><div class="sp-bar"></div></div>
+    <div id="wsSplash" aria-busy="true" aria-label="Carregando AI Workspace">
+      <div class="sp-topbar">
+        <div class="sp-brand">
+          <img src="/workspace/favicon.png" alt="" width="20" height="20" />
+          <span>AI Workspace</span>
+        </div>
+        <div class="sp-shimmer" style="width:190px;height:28px;margin-left:10px"></div>
+        <div style="flex:1"></div>
+        <div class="sp-shimmer" style="width:86px;height:24px;border-radius:999px"></div>
+        <div class="sp-shimmer" style="width:86px;height:24px;border-radius:999px"></div>
+        <div class="sp-shimmer" style="width:86px;height:24px;border-radius:999px"></div>
+      </div>
+      <div class="sp-body">
+        <div class="sp-side">
+          <div class="sp-shimmer" style="height:30px;width:100%"></div>
+          <div class="sp-shimmer" style="height:24px;width:82%;margin-top:6px"></div>
+          <div class="sp-shimmer" style="height:24px;width:74%"></div>
+          <div class="sp-shimmer" style="height:24px;width:88%"></div>
+          <div class="sp-shimmer" style="height:24px;width:68%"></div>
+          <div class="sp-shimmer" style="height:24px;width:79%"></div>
+        </div>
+        <div class="sp-main">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="sp-shimmer" style="width:36px;height:36px;border-radius:10px"></div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+              <div class="sp-shimmer" style="height:18px;width:210px"></div>
+              <div class="sp-shimmer" style="height:12px;width:310px;max-width:75%"></div>
+            </div>
+          </div>
+          <div class="sp-grid">
+            <div class="sp-card">
+              <div class="sp-shimmer" style="height:15px;width:62%"></div>
+              <div class="sp-shimmer" style="height:11px;width:88%"></div>
+              <div class="sp-shimmer" style="height:11px;width:45%;margin-top:auto"></div>
+            </div>
+            <div class="sp-card">
+              <div class="sp-shimmer" style="height:15px;width:54%"></div>
+              <div class="sp-shimmer" style="height:11px;width:80%"></div>
+              <div class="sp-shimmer" style="height:11px;width:50%;margin-top:auto"></div>
+            </div>
+            <div class="sp-card">
+              <div class="sp-shimmer" style="height:15px;width:70%"></div>
+              <div class="sp-shimmer" style="height:11px;width:76%"></div>
+              <div class="sp-shimmer" style="height:11px;width:40%;margin-top:auto"></div>
+            </div>
+            <div class="sp-card">
+              <div class="sp-shimmer" style="height:15px;width:58%"></div>
+              <div class="sp-shimmer" style="height:11px;width:84%"></div>
+              <div class="sp-shimmer" style="height:11px;width:48%;margin-top:auto"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sp-right">
+          <div class="sp-shimmer" style="height:26px;width:55%"></div>
+          <div class="sp-sess">
+            <div class="sp-shimmer" style="height:13px;width:68%"></div>
+            <div class="sp-shimmer" style="height:11px;width:90%"></div>
+            <div class="sp-shimmer" style="height:10px;width:46%"></div>
+          </div>
+          <div class="sp-sess">
+            <div class="sp-shimmer" style="height:13px;width:58%"></div>
+            <div class="sp-shimmer" style="height:11px;width:84%"></div>
+            <div class="sp-shimmer" style="height:10px;width:42%"></div>
+          </div>
+          <div class="sp-sess">
+            <div class="sp-shimmer" style="height:13px;width:72%"></div>
+            <div class="sp-shimmer" style="height:11px;width:88%"></div>
+            <div class="sp-shimmer" style="height:10px;width:52%"></div>
+          </div>
+        </div>
+      </div>
+      <div id="wsBootToast">
+        <div class="sp-toast-row">
+          <span class="sp-toast-dot"></span>
+          <span id="wsBootText">Carregando interface do AI Workspace…</span>
+          <span id="wsBootPct">22%</span>
+        </div>
+        <div class="sp-track"><div id="wsBootBar"></div></div>
+      </div>
     </div>
+    <script>
+      (function () {
+        var done = false;
+        window.__wsBootProgress = function (pct, text) {
+          if (done) return;
+          var p = Math.max(5, Math.min(100, Number(pct) || 22));
+          var bar = document.getElementById('wsBootBar');
+          var pt = document.getElementById('wsBootPct');
+          var st = document.getElementById('wsBootText');
+          if (bar) bar.style.width = p + '%';
+          if (pt) pt.textContent = Math.round(p) + '%';
+          if (st && text) st.textContent = text;
+        };
+        window.__wsBootDone = function () {
+          if (done) return;
+          done = true;
+          var bar = document.getElementById('wsBootBar');
+          var pt = document.getElementById('wsBootPct');
+          var st = document.getElementById('wsBootText');
+          if (bar) bar.style.width = '100%';
+          if (pt) pt.textContent = '100%';
+          if (st) st.textContent = 'Pronto!';
+          var el = document.getElementById('wsSplash');
+          if (el) {
+            setTimeout(function () {
+              el.classList.add('hide');
+              setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+            }, 90);
+          }
+        };
+        // Segurança: nunca fica preso mesmo sem resposta do servidor
+        setTimeout(function () { if (!done && window.__wsBootDone) window.__wsBootDone(); }, 7000);
+      })();
+    </script>
     <div id="root"></div>
   </body>
 </html>

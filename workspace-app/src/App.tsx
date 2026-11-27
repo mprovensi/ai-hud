@@ -330,6 +330,28 @@ export function App() {
     return () => window.clearInterval(id);
   }, [loadWorkspace, loadSyncStatus]);
 
+  // Atualiza o skeleton inicial com progresso real até workspaces e sessões estarem prontos
+  useEffect(() => {
+    if (ws && snap) {
+      window.__wsBootDone?.();
+      return;
+    }
+    if (!online) {
+      window.__wsBootDone?.();
+      return;
+    }
+    if (ws && !snap) {
+      window.__wsBootProgress?.(86, 'Conectando sessões e cotas ao vivo…');
+      const t = window.setTimeout(() => window.__wsBootDone?.(), 950);
+      return () => window.clearTimeout(t);
+    }
+    if (!ws && snap) {
+      window.__wsBootProgress?.(82, 'Carregando estrutura de workspaces…');
+      return;
+    }
+    window.__wsBootProgress?.(62, 'Carregando workspaces e projetos…');
+  }, [ws, snap, online]);
+
   // Long-polling do snapshot ao vivo do AI HUD
   const versionRef = useRef<string | undefined>(undefined);
   const pollNowRef = useRef<() => void>(() => {});

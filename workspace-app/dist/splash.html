@@ -14,49 +14,168 @@
   }
   .wrap {
     width: 100%; height: 100%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: radial-gradient(circle at 50% 25%, rgba(95, 184, 164, 0.14), rgba(14, 15, 18, 0) 64%),
-                linear-gradient(180deg, #12141a 0%, #0b0c10 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; flex-direction: column; justify-content: space-between;
+    background: radial-gradient(circle at 50% 15%, rgba(95, 184, 164, 0.16), rgba(14, 15, 18, 0) 60%),
+                linear-gradient(180deg, #13161d 0%, #0b0d12 100%);
+    border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 14px;
-    padding: 28px 24px;
+    padding: 24px 26px 22px;
+  }
+  .top {
+    display: flex; align-items: center; gap: 14px;
   }
   .logo {
-    width: 72px; height: 72px; border-radius: 16px; margin-bottom: 16px;
-    box-shadow: 0 10px 28px rgba(95, 184, 164, 0.26);
-    animation: pulseLogo 1.8s ease-in-out infinite;
+    width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
+    box-shadow: 0 8px 24px rgba(95, 184, 164, 0.28);
+    animation: pulseLogo 2s ease-in-out infinite;
   }
   @keyframes pulseLogo {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.03); }
   }
+  .head-txt { flex: 1; min-width: 0; }
   .title {
-    font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: #f2f5fa;
+    font-size: 19px; font-weight: 700; letter-spacing: -0.02em; color: #f2f5fa;
   }
   .sub {
-    margin-top: 6px; font-size: 12.5px; color: #8c94a6;
+    margin-top: 3px; font-size: 12.5px; color: #9aa3b5;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .pct {
+    font-size: 12px; font-weight: 700; color: #5fb8a4;
+    font-variant-numeric: tabular-nums;
+    background: rgba(95, 184, 164, 0.12);
+    border: 1px solid rgba(95, 184, 164, 0.30);
+    padding: 3px 8px; border-radius: 999px;
+  }
+  /* Mini skeleton preview da estrutura 3 colunas */
+  .skel-preview {
+    margin: 14px 0;
+    display: grid; grid-template-columns: 78px 1fr 94px; gap: 8px;
+    height: 76px; padding: 8px; border-radius: 10px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .sk-col { display: flex; flex-direction: column; gap: 6px; }
+  .sk {
+    border-radius: 5px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(95,184,164,0.12) 50%, rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .steps {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    margin-bottom: 12px;
+  }
+  .step {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10.5px; color: #6f778a;
+    padding: 4px 7px; border-radius: 7px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.22s ease;
+    white-space: nowrap; overflow: hidden;
+  }
+  .step .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    background: #444b5c;
+  }
+  .step.active {
+    color: #eceef4;
+    background: rgba(95, 184, 164, 0.12);
+    border-color: rgba(95, 184, 164, 0.38);
+  }
+  .step.active .dot {
+    background: #5fb8a4;
+    box-shadow: 0 0 8px rgba(95, 184, 164, 0.85);
+  }
+  .step.done {
+    color: #9ed9cb;
+    border-color: rgba(95, 184, 164, 0.22);
+  }
+  .step.done .dot { background: #5fb8a4; }
   .track {
-    margin-top: 22px; width: 170px; height: 4px; border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08); overflow: hidden; position: relative;
+    width: 100%; height: 5px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07); overflow: hidden; position: relative;
   }
   .fill {
-    position: absolute; top: 0; left: -45%; width: 45%; height: 100%; border-radius: 999px;
-    background: linear-gradient(90deg, #e08a66, #5fb8a4, #b39ddb);
-    animation: slide 1.25s ease-in-out infinite;
+    height: 100%; width: 12%; border-radius: 999px;
+    background: linear-gradient(90deg, #5fb8a4, #7ce0c8, #e5c063);
+    transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
   }
-  @keyframes slide {
-    0% { left: -45%; }
-    100% { left: 105%; }
+  .fill::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+    animation: sweep 1.2s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
   }
 </style>
 </head>
 <body>
   <div class="wrap" data-tauri-drag-region>
-    <img class="logo" src="icon-192.png" alt="AI Workspace" width="72" height="72" />
-    <div class="title">AI Workspace</div>
-    <div class="sub">Conectando ao Hub e sincronizando projetos…</div>
-    <div class="track"><div class="fill"></div></div>
+    <div class="top" data-tauri-drag-region>
+      <img class="logo" src="icon-192.png" alt="AI Workspace" width="56" height="56" />
+      <div class="head-txt">
+        <div class="title">AI Workspace</div>
+        <div class="sub" id="statusText">Inicializando aplicativo…</div>
+      </div>
+      <div class="pct" id="pctText">10%</div>
+    </div>
+
+    <div class="skel-preview" aria-hidden="true">
+      <div class="sk-col">
+        <div class="sk" style="height:10px;width:85%"></div>
+        <div class="sk" style="height:10px;width:68%"></div>
+        <div class="sk" style="height:10px;width:76%"></div>
+        <div class="sk" style="height:10px;width:60%"></div>
+      </div>
+      <div class="sk-col">
+        <div class="sk" style="height:13px;width:48%"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:1">
+          <div class="sk" style="height:100%"></div>
+          <div class="sk" style="height:100%"></div>
+        </div>
+      </div>
+      <div class="sk-col">
+        <div class="sk" style="height:12px;width:70%"></div>
+        <div class="sk" style="flex:1"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="steps" id="stepsRow">
+        <div class="step active" data-step="0"><span class="dot"></span><span>Local</span></div>
+        <div class="step" data-step="1"><span class="dot"></span><span>Hub VPS</span></div>
+        <div class="step" data-step="2"><span class="dot"></span><span>Interface</span></div>
+        <div class="step" data-step="3"><span class="dot"></span><span>Dados</span></div>
+      </div>
+      <div class="track"><div class="fill" id="progressBar"></div></div>
+    </div>
   </div>
+  <script>
+    window.__setBootProgress = function (pct, text, stepIdx) {
+      var p = Math.max(5, Math.min(100, Number(pct) || 10));
+      var bar = document.getElementById('progressBar');
+      var pt = document.getElementById('pctText');
+      var st = document.getElementById('statusText');
+      if (bar) bar.style.width = p + '%';
+      if (pt) pt.textContent = Math.round(p) + '%';
+      if (st && text) st.textContent = text;
+      var items = document.querySelectorAll('#stepsRow .step');
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.remove('active', 'done');
+        if (i < stepIdx) items[i].classList.add('done');
+        else if (i === stepIdx) items[i].classList.add('active');
+      }
+    };
+  </script>
 </body>
 </html>

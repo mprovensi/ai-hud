@@ -12,6 +12,7 @@ use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::PageLoadEvent;
+use tauri::window::Color;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 #[cfg(target_os = "windows")]
@@ -346,6 +347,7 @@ fn open_or_focus_window(app: &AppHandle, label: &str, title: &str, url_str: &str
     if let Ok(url) = Url::parse(url_str) {
         let _ = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
             .title(title)
+            .background_color(APP_BG)
             .inner_size(w, h)
             .min_inner_size(840.0, 560.0)
             .center()
@@ -388,6 +390,19 @@ fn open_in_browser(url: &str) {
     }
 }
 
+const APP_BG: Color = Color(14, 15, 18, 255);
+
+fn update_splash_progress(app: &AppHandle, pct: u8, text: &str, step_idx: u8) {
+    if let Some(sp) = app.get_webview_window("splash") {
+        let escaped = text.replace('\\', "\\\\").replace('\'', "\\'");
+        let js = format!(
+            "if(window.__setBootProgress){{window.__setBootProgress({}, '{}', {});}}",
+            pct, escaped, step_idx
+        );
+        let _ = sp.eval(&js);
+    }
+}
+
 fn close_splash_and_show_workspace(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("workspace") {
         let _ = win.show();
@@ -408,13 +423,21 @@ fn open_workspace_with_splash(app: &AppHandle, title: &str, url_str: &str) {
         let app_for_load = app.clone();
         let _ = WebviewWindowBuilder::new(app, "workspace", WebviewUrl::External(url))
             .title(title)
+            .background_color(APP_BG)
             .inner_size(1360.0, 860.0)
             .min_inner_size(840.0, 560.0)
             .center()
             .visible(false)
             .on_page_load(move |_window, payload| {
                 if matches!(payload.event(), PageLoadEvent::Finished) {
-                    close_splash_and_show_workspace(&app_for_load);
+                    let app_done = app_for_load.clone();
+                    update_splash_progress(&app_done, 96, "Preparando projetos e sessões ao vivo…", 3);
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_millis(220));
+                        update_splash_progress(&app_done, 100, "Pronto!", 4);
+                        thread::sleep(Duration::from_millis(120));
+                        close_splash_and_show_workspace(&app_done);
+                    });
                 }
             })
             .build();
@@ -464,38 +487,57 @@ fn main() {
             }
         })
         .setup(move |app| {
-            // 1. Splash screen nativo instantâneo (sem borda, centralizado, embutido no executável)
+            // 1. Splash screen nativo instantâneo (sem borda, centralizado, com skeleton + progresso real)
             let _ = WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
                 .title("AI Workspace")
-                .inner_size(420.0, 270.0)
+                .background_color(APP_BG)
+                .inner_size(460.0, 295.0)
                 .resizable(false)
                 .decorations(false)
                 .always_on_top(true)
                 .center()
                 .build();
 
-            // 2. Boot assíncrono: inicia servidor local, testa VPS principal e carrega janela principal em segundo plano
+            // 2. Boot assíncrono: reporta cada etapa em tempo real no splash enquanto sobe servidor e conecta ao Hub
             {
                 let app_boot = app.handle().clone();
                 let rt_boot = runtime_setup.clone();
                 let managed_child = managed_child_boot.clone();
                 let root_dir = root_boot.clone();
                 thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(120));
+                    update_splash_progress(&app_boot, 18, "Verificando servidor local…", 0);
                     let spawned = ensure_local_server(root_dir.as_deref(), rt_boot.local_port);
                     if let Ok(mut g) = managed_child.lock() {
                         *g = spawned;
                     }
+
                     let mode = match rt_boot.primary {
-                        Some(ref p) if is_endpoint_reachable(&p.probe_url) => ActiveMode::Primary,
-                        _ => ActiveMode::Local,
+                        Some(ref p) => {
+                            let msg = format!("Conectando ao Hub ({})…", p.label);
+                            update_splash_progress(&app_boot, 45, &msg, 1);
+                            if is_endpoint_reachable(&p.probe_url) {
+                                ActiveMode::Primary
+                            } else {
+                                ActiveMode::Local
+                            }
+                        }
+                        None => ActiveMode::Local,
                     };
                     rt_boot.set_mode(mode, false);
                     let (_, target) = rt_boot.active_target();
+                    let load_msg = if mode == ActiveMode::Primary {
+                        format!("Carregando interface de {}…", target.label)
+                    } else {
+                        "VPS indisponível — carregando modo Local…".to_string()
+                    };
+                    update_splash_progress(&app_boot, 72, &load_msg, 2);
+
                     let title = window_title("AI Workspace", &target.label);
                     open_workspace_with_splash(&app_boot, &title, &target.workspace);
 
                     // Fallback de segurança: garante que o splash feche mesmo se o WebView demorar
-                    thread::sleep(Duration::from_secs(6));
+                    thread::sleep(Duration::from_secs(10));
                     close_splash_and_show_workspace(&app_boot);
                 });
             }

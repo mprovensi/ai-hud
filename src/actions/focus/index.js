@@ -27,22 +27,7 @@ function createFocus({ terminal = createTerminalFocus(), platform = process.plat
   (err, out) => resolve(String(out || '').trim().startsWith('ok'))));
   const openUri = (uri) => new Promise((resolve) => exec('explorer.exe', [uri], { windowsHide: true }, () => resolve()));
 
-  return async function focusSession(s, opts = {}) {
-    // Trazer janelas para frente usa PowerShell/Win32 (focus.ps1): só no Windows por enquanto
-    if (platform !== 'win32') return { ok: false, message: 'Abrir no PC ainda só funciona em PCs com Windows.' };
-    if (opts && opts.workspaceUrl) {
-      const exe = typeof desktopExe === 'string' ? desktopExe : findDesktopExe();
-      const label = opts.projectTitle ? `"${opts.projectTitle}"` : 'projeto';
-      if (exe) {
-        try {
-          const child = spawnFn(exe, ['--open-url', opts.workspaceUrl], { detached: true, stdio: 'ignore', windowsHide: false });
-          if (child && typeof child.unref === 'function') child.unref();
-          return { ok: true, message: `Sessão aberta no AI Workspace (${label}).` };
-        } catch {}
-      }
-      await openUri(opts.workspaceUrl);
-      return { ok: true, message: `Sessão aberta no AI Workspace (${label}).` };
-    }
+  async function tryNativeFocus(s) {
     if (s.where === 'terminal' || s.where === 'ollama-run' || s.where === 'antigravity-cli' || s.where === 'gemini-cli') {
       const result = await terminal(s);
       if (result.ok && result.host === 'vscode') {
@@ -81,6 +66,29 @@ function createFocus({ terminal = createTerminalFocus(), platform = process.plat
     await wait(500);
     await openUri(plan.uri);
     return { ok: true, message: 'Sessão aberta no VS Code.' };
+  }
+
+  return async function focusSession(s, opts = {}) {
+    // Trazer janelas para frente usa PowerShell/Win32 (focus.ps1): só no Windows por enquanto
+    if (platform !== 'win32') return { ok: false, message: 'Abrir no PC ainda só funciona em PCs com Windows.' };
+    // 1. Primeiro tenta focar a sessão na CLI/terminal/app nativo (comportamento original)
+    const native = await tryNativeFocus(s);
+    if (native && native.ok) return native;
+    // 2. Fallback: se não encontrou janela nativa aberta e a sessão pertence a um projeto do AI Workspace, abre lá
+    if (opts && opts.workspaceUrl) {
+      const exe = typeof desktopExe === 'string' ? desktopExe : findDesktopExe();
+      const label = opts.projectTitle ? `"${opts.projectTitle}"` : 'projeto';
+      if (exe) {
+        try {
+          const child = spawnFn(exe, ['--open-url', opts.workspaceUrl], { detached: true, stdio: 'ignore', windowsHide: false });
+          if (child && typeof child.unref === 'function') child.unref();
+          return { ok: true, message: `Sessão aberta no AI Workspace (${label}).` };
+        } catch {}
+      }
+      await openUri(opts.workspaceUrl);
+      return { ok: true, message: `Sessão aberta no AI Workspace (${label}).` };
+    }
+    return native;
   };
 }
 

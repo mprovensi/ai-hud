@@ -114,8 +114,10 @@ test('POST /api/focus abre projeto + sessão vinculados direto no AI Workspace D
   }));
 
   const spawnedCalls = [];
+  let nativeOk = false;
   const fakeFocus = createFocus({
     platform: 'win32',
+    terminal: async () => (nativeOk ? { ok: true, message: 'Terminal em foco.' } : { ok: false, message: 'Nenhum terminal aberto.' }),
     desktopExe: 'C:\\Fake\\ai-hud-desktop.exe',
     spawnFn: (exe, args) => {
       spawnedCalls.push({ exe, args });
@@ -160,7 +162,16 @@ test('POST /api/focus abre projeto + sessão vinculados direto no AI Workspace D
     assert.equal(created.status, 200);
     const entityId = created.json.entity.id;
 
-    // 2. Chama POST /api/focus na sessão vinculada -> deve abrir AI Workspace Desktop com ?project=&session=
+    // 2a. Quando o terminal/CLI nativo ESTÁ aberto, prioriza o nativo e não abre o Workspace
+    nativeOk = true;
+    const frNative = await reqJson(baseUrl, token, 'POST', '/api/focus', { id: sessId });
+    assert.equal(frNative.status, 200);
+    assert.equal(frNative.json.ok, true);
+    assert.equal(frNative.json.message, 'Terminal em foco.');
+    assert.equal(spawnedCalls.length, 0);
+
+    // 2b. Quando NÃO há janela nativa aberta, faz fallback para o AI Workspace Desktop com ?project=&session=
+    nativeOk = false;
     const fr = await reqJson(baseUrl, token, 'POST', '/api/focus', { id: sessId });
     assert.equal(fr.status, 200);
     assert.equal(fr.json.ok, true);

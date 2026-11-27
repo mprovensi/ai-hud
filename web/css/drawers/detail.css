@@ -1,8 +1,12 @@
 /* Abas da gaveta (Conversa | Detalhes) e botão compacto Abrir no PC */
-.dstate { font-size: .85em; margin-bottom: 10px; }
-.dstate .badge { margin: 0 8px 0 0; }
-.pcmini { margin-left: 8px; padding: .3em .75em; border-radius: 10px; background: #26304d; border: 1px solid #3b4a7a;
-  color: #d0dcff; font-size: .86em; font-weight: 700; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.dstate { font-size: .84em; margin-bottom: 10px; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-items: center; align-items: center; }
+.dstate .badge { margin: 2px 6px 2px 0; }
+.dstate-meta { margin: 2px 6px 2px 0; min-width: 4.5em; }
+.dstate-acts { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 2px 0; }
+.pcmini { margin: 2px 0 2px 6px; padding: .28em .65em; border-radius: 9px; background: #22293d; border: 1px solid #354166;
+  color: #d0dcff; font-size: .82em; font-weight: 700; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; min-height: 32px; }
+.pcmini:first-child { margin-left: 0; }
+.pcmini.pcico { width: 32px; min-width: 32px; padding: 0; text-align: center; font-size: .88em; }
 .pcmini:active { background: #2f3b60; }
 .pcmini.on { background: #223b34; border-color: #4a8c7a; color: #bfe8db; }
 .assume-btn { background: #223b34; border-color: #4a8c7a; color: #bfe8db; }
@@ -10,8 +14,16 @@
 .pcmini:disabled { opacity: .6; }
 .stopmini { background: #432828; border-color: #824040; color: #f5b4b4; }
 .stopmini:active { background: #593333; }
-.ctxwarn { margin-bottom: 10px; padding: 8px 11px; border-radius: 10px; background: #2d2618; border: 1px solid #6b5629;
-  color: #f0d799; font-size: .82em; line-height: 1.35; }
+.ctxwarn { margin-bottom: 10px; padding: 7px 9px 7px 11px; border-radius: 10px; background: #2d2618; border: 1px solid #6b5629;
+  color: #f0d799; font-size: .8em; line-height: 1.35; -webkit-align-items: center; align-items: center; }
+.ctxwarn-x { margin-left: 6px; width: 26px; height: 26px; min-width: 26px; padding: 0; border-radius: 50%;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(240,215,153,.28); color: #e6cf96;
+  font-size: .82em; line-height: 1; text-align: center; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.ctxwarn-x:active { background: rgba(255,255,255,.14); }
+.dtech-btn { display: block; width: 100%; text-align: left; margin-top: 10px; padding: 6px 2px 2px;
+  border: 0; border-top: 1px solid #2b2b28; background: transparent; color: #8d8d87; font-size: .78em; font-weight: 600; }
+.dtech-btn:active { color: #d8d8d0; }
+.dtech-body { margin-top: 8px; }
 .handoff-box { border-color: #4a6b62; background: #18211f !important; }
 .handoff-box h2 { color: #bfe8db; }
 .handoff-box .hsub { font-size: .78em; color: #a7bab4; margin-bottom: 10px; line-height: 1.4; }
@@ -147,8 +159,29 @@
   background: #1c2230; border: 1px solid #32405e; color: #dbe6ff; font-size: .82em; white-space: nowrap; min-height: 34px; }
 .schip:last-child { margin-right: 0; }
 .schip:active { background: #263147; }
-.rcomposer { background: #171a21; border: 1px solid #2e3444; border-radius: 18px; padding: 9px 11px 8px; }
+.rcomposer { position: relative; background: #171a21; border: 1px solid #2e3444; border-radius: 18px; padding: 9px 11px 8px; }
 .rcomposer:focus-within { border-color: #5fb8a4; }
+/* Seletor customizado de IA no padrão visual do AI HUD (sem chrome nativo de <select> no Safari/iPad) */
+.rai-wrap { position: relative; display: inline-block; margin-left: 5px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.rai-btn { height: 32px; padding: 0 10px; border-radius: 99px; background: #1e2330; border: 1px solid #323a4f;
+  color: #d8e0f0; font-size: .74em; font-weight: 700; white-space: nowrap; display: -webkit-inline-flex; display: inline-flex;
+  -webkit-align-items: center; align-items: center; }
+.rai-btn:active { background: #262d3f; }
+.rai-btn.switching { background: #1d352f; border-color: #5fb8a4; color: #c7efe4; }
+.rai-chev { margin-left: 5px; opacity: .75; font-size: .85em; }
+.rai-menu { display: none; position: absolute; left: 0; bottom: 38px; min-width: 168px; z-index: 25;
+  background: #171a22; border: 1px solid #343d52; border-radius: 12px; padding: 5px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.55); }
+.rai-menu.open { display: block; }
+.rai-head { font-size: .68em; text-transform: uppercase; letter-spacing: .04em; color: #8791a6;
+  padding: 4px 8px 5px; font-weight: 700; }
+.rai-opt { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%;
+  text-align: left; padding: 8px 9px; border-radius: 8px; background: transparent; border: 0;
+  color: #dce2ee; font-size: .78em; font-weight: 600; min-height: 36px; }
+.rai-opt:active { background: #242a3a; }
+.rai-opt.sel { background: #1e3530; color: #bfe8db; }
+.rai-opt .rai-tag { margin-left: auto; font-size: .82em; color: #8d96aa; font-weight: 400; }
+.rai-opt.sel .rai-tag { color: #7ed4be; font-weight: 700; }
 .rform textarea { display: block; width: 100%; font: inherit; font-size: 16px; line-height: 1.45; color: #eef0f5;
   background: transparent; border: 0; border-radius: 0; padding: 3px 2px 6px; resize: none; -webkit-appearance: none; outline: none; }
 .rbar { -webkit-align-items: center; align-items: center; padding-top: 2px; }

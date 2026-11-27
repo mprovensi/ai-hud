@@ -30,6 +30,7 @@
     return !d.machine && list.length === 1 ? list[0] : null;
   }
   var detailTab = 'convo', detailSessionId = '', detailFocusedId = '', qState = null;
+  var dismissedCtx = {}, dismissedQuota = {}, techDetailsOpen = false;
   var handoffUi = { open: false, tool: '', note: '', busy: false };
   var filePrev = { open: false, path: '', mode: 'diff', loading: false, error: '', data: null };
   var memUi = { open: false, loading: false, busy: false, error: '', data: null };
@@ -506,11 +507,12 @@
       : '<span class="badge closed">encerrada ' + when(d.end) + '</span>';
     html += sessHead(d);
     var places = { vscode: 'VS Code', terminal: 'terminal', 'claude-desktop': 'app Claude', 'codex-desktop': 'app Codex', antigravity: 'Antigravity', 'antigravity-cli': 'terminal', 'gemini-cli': 'terminal', 'ollama-app': 'app Ollama', 'ollama-run': 'terminal' };
-    html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
+    html += '<div class="dstate row">' + st + '<span class="muted grow ell dstate-meta">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
+      '<div class="dstate-acts">' +
       (d.tool === 'Gemini' && d.where === 'antigravity' ? '<button type="button" class="pcmini assume-btn" id="assumeHud" title="Assumir esta conversa no celular/iPad agora via Handoff para o agy CLI">📱 Assumir</button>' : '') +
-      (d.tool !== 'Ollama' ? '<button type="button" class="pcmini" id="openHandoffTop" title="Continuar esta sessão em outra IA (ex.: Gemini → Codex) a partir do ponto de parada">↪ Trocar IA</button>' : '') +
-      '<button type="button" class="pcmini" id="copySessLink" title="Copiar link direto desta sessão no AI Workspace">🔗</button>' +
-      (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ' ou AI Workspace)">🖥 Abrir no PC</button>' : '') + '</div>';
+      (d.tool !== 'Ollama' ? '<button type="button" class="pcmini" id="openHandoffTop" title="Continuar esta sessão em outra IA (ex.: Gemini → Codex)">↪ Trocar IA</button>' : '') +
+      '<button type="button" class="pcmini pcico" id="copySessLink" aria-label="Copiar link" title="Copiar link direto desta sessão no AI Workspace">🔗</button>' +
+      (d.canFocus !== false && places[d.where] ? '<button type="button" class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ' ou AI Workspace)">🖥 PC</button>' : '') + '</div></div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
     var isPermQuestion = d.permission && d.question && d.question.mode === 'permission';
@@ -528,17 +530,19 @@
 
     // ---- Aba Conversa ----
     html += '<div class="dtab-pane' + (onConvo ? ' active' : '') + '" id="paneConvo">';
-    if (d.quotaSuggestion && d.quotaSuggestion.suggestedTool && !handoffUi.open) {
+    if (d.quotaSuggestion && d.quotaSuggestion.suggestedTool && !handoffUi.open && !dismissedQuota[d.id]) {
       var qs = d.quotaSuggestion;
       html += '<div class="row ctxwarn qwarn"><span class="grow">⚠ Cota de <b>' + esc(qs.currentTool) + '</b>' +
         (qs.currentUsed != null ? ' (' + qs.currentUsed + '%)' : ' no limite') +
         ' · <b>' + esc(qs.suggestedTool) + '</b>' +
         (qs.suggestedUsed != null ? ' (' + qs.suggestedUsed + '%)' : '') + ' livre</span>' +
-        '<button type="button" class="pcmini" id="quotaAssumeNow" data-qt="' + esc(qs.suggestedTool) + '">↪ Assumir agora</button></div>';
+        '<button type="button" class="pcmini" id="quotaAssumeNow" data-qt="' + esc(qs.suggestedTool) + '">↪ Assumir</button>' +
+        '<button type="button" class="ctxwarn-x" id="dismissQuotaWarn" aria-label="Fechar aviso" title="Dispensar aviso">✕</button></div>';
     }
-    if (pct >= 75 && d.tool !== 'Ollama' && !handoffUi.open) {
-      html += '<div class="row ctxwarn"><span class="grow">Contexto em <b>' + pct + '%</b> — recomenda-se Handoff para manter qualidade</span>' +
-        '<button type="button" class="pcmini" id="openHandoffBanner">↪ Handoff</button></div>';
+    if (pct >= 75 && d.tool !== 'Ollama' && !handoffUi.open && !dismissedCtx[d.id]) {
+      html += '<div class="row ctxwarn"><span class="grow">Contexto em <b>' + pct + '%</b> — recomendado fazer Handoff</span>' +
+        '<button type="button" class="pcmini" id="openHandoffBanner">↪ Handoff</button>' +
+        '<button type="button" class="ctxwarn-x" id="dismissCtxWarn" aria-label="Fechar aviso" title="Dispensar aviso">✕</button></div>';
     }
     if (handoffUi.open && onConvo) html += renderHandoffPanel(d);
     if (d.testRun && !d.testRun.ok) {
@@ -548,11 +552,8 @@
     }
     html += renderConversation(d);
     html += questionCard(d);
-    if (d.subagents > 0 || d.canStop) {
-      var parts = [];
-      if (d.subagents > 0) parts.push('🤖 ' + d.subagents + (d.subagents === 1 ? ' subagente' : ' subagentes') + (d.subTokens ? ' · ' + k(d.subTokens) + ' tokens' : ''));
-      if (d.canStop) parts.push('⚙ processo em execução no HUD');
-      html += '<div class="substrip">' + esc(parts.join(' · ')) + '</div>';
+    if (d.subagents > 0) {
+      html += '<div class="substrip">' + esc('🤖 ' + d.subagents + (d.subagents === 1 ? ' subagente' : ' subagentes') + (d.subTokens ? ' · ' + k(d.subTokens) + ' tokens' : '')) + '</div>';
     }
     // ollama run no terminal e sessões legadas sem UUID: sem resposta direta pelo HUD
     var canReply = d.tool !== 'Antigravity' && d.where !== 'ollama-run' && (d.tool !== 'Gemini' || /(?:^|:)[0-9a-f-]{36}$/.test(String(d.id || '')));
@@ -562,22 +563,27 @@
     }
     html += '</div>';
 
-    // ---- Aba Detalhes ----
+    // ---- Aba Detalhes (enxuta: essencial visível, métricas técnicas recolhidas) ----
     html += '<div class="dtab-pane' + (!onConvo ? ' active' : '') + '" id="paneDetails">';
     html += '<div class="panel">';
-    if (d.lastPrompt) html += '<h2>' + (d.where === 'ollama-run' && !d.lastReply ? 'Último comando no histórico compartilhado' : 'Seu último pedido') + '</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
+    if (d.where === 'ollama-run' && !d.lastReply && d.lastPrompt) {
+      html += '<h2>Último comando</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
+    }
     if (d.tool === 'Ollama') {
       html += ollamaMore(d);
     } else {
       html += '<div class="stats">' +
-        stat(k(d.input + d.output + d.cacheWrite), 'tokens novos') + stat(k(d.output), 'saída') +
-        stat(k(d.cacheRead), 'lidos do cache') + stat(k(d.cacheWrite), 'gravados no cache') +
-        stat(d.context ? k(d.context) + (pct ? ' <small class="muted">' + pct + '%</small>' : '') : '—', 'contexto atual') +
-        stat(d.prompts, 'pedidos seus') + stat(d.toolCalls, 'ferramentas usadas') +
-        stat(d.subagents ? d.subagents + ' <small class="muted">' + k(d.subTokens) + '</small>' : '0', 'subagentes') +
-        '</div>' + (pct ? '<div class="ctx" style="margin-bottom:12px"><div class="fill" style="width:' + Math.min(100, pct) + '%;background:' + levelFill(pct) + '"></div></div>' : '');
+        stat(d.context ? k(d.context) + (pct ? ' <small class="muted">' + pct + '%</small>' : '') : '—', 'contexto') +
+        stat(k(d.input + d.output + d.cacheWrite), 'tokens novos') +
+        stat(d.prompts, 'pedidos') +
+        (d.subagents > 0 ? stat(d.subagents + (d.subTokens ? ' <small class="muted">' + k(d.subTokens) + '</small>' : ''), 'subagentes') : stat(d.toolCalls, 'ferramentas usadas')) +
+        '</div>' + (pct ? '<div class="ctx" style="margin-bottom:10px"><div class="fill" style="width:' + Math.min(100, pct) + '%;background:' + levelFill(pct) + '"></div></div>' : '');
+      var origins = { 'gemini-cli': 'Gemini CLI', antigravity: 'Antigravity', 'antigravity-cli': 'Antigravity CLI' };
+      html += '<div class="dl"><span>Modelo</span><span>' + esc(d.models.join(', ') || '—') + '</span></div>';
+      if (origins[d.where]) html += '<div class="dl"><span>Origem</span><span>' + esc(origins[d.where]) + '</span></div>';
+      if (d.cwd) html += '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
       if (d.files && d.files.length) {
-        html += '<h2>Arquivos modificados · ' + d.files.length + '</h2>';
+        html += '<h2 style="margin-top:12px">Arquivos modificados · ' + d.files.length + '</h2>';
         for (var f = 0; f < d.files.length; f++) {
           var fp = d.files[f][0], fSel = filePrev.open && filePrev.path === fp;
           html += '<button type="button" class="dl file-row' + (fSel ? ' on' : '') + '" data-fp="' + esc(fp) + '" title="' + esc(fp) + '">' +
@@ -585,40 +591,44 @@
         }
         html += renderFilePreviewBox();
       }
-      if (d.tools.length) {
-        html += '<h2' + (d.files && d.files.length ? ' style="margin-top:12px"' : '') + '>Ferramentas mais usadas</h2>';
-        for (var t = 0; t < d.tools.length; t++) {
-          html += '<div class="dl" style="border:0;padding-bottom:0"><span>' + esc(d.tools[t][0]) + '</span><span>' + d.tools[t][1] + '</span></div>' +
-            '<div class="hbar"><div style="width:' + (d.tools[t][1] / d.tools[0][1] * 100) + '%"></div></div>';
+      if ((d.tools && d.tools.length) || (d.turns && d.turns.length)) {
+        html += '<button type="button" class="dtech-btn" id="toggleTechDetails">' + (techDetailsOpen ? '▾ Ocultar detalhes técnicos' : '▸ Detalhes técnicos (cache, ferramentas, chamadas)') + '</button>';
+        if (techDetailsOpen) {
+          html += '<div class="dtech-body">';
+          html += '<div class="dl"><span>Saída / Cache lido / gravado</span><span>' + k(d.output) + ' / ' + k(d.cacheRead) + ' / ' + k(d.cacheWrite) + '</span></div>';
+          if (d.tools.length) {
+            html += '<h2 style="margin-top:10px">Ferramentas mais usadas</h2>';
+            for (var t = 0; t < d.tools.length; t++) {
+              html += '<div class="dl" style="border:0;padding-bottom:0"><span>' + esc(d.tools[t][0]) + '</span><span>' + d.tools[t][1] + '</span></div>' +
+                '<div class="hbar"><div style="width:' + (d.tools[t][1] / d.tools[0][1] * 100) + '%"></div></div>';
+            }
+          }
+          if (d.turns.length) {
+            html += '<h2 style="margin-top:10px">Últimas chamadas</h2>';
+            for (var j = 0; j < d.turns.length; j++) {
+              html += '<div class="dl"><span>' + hm(d.turns[j].t) + '</span><span>' + k(d.turns[j].fresh) + ' novos · ' + k(d.turns[j].cacheRead) + ' cache</span></div>';
+            }
+          }
+          html += '</div>';
         }
       }
-      if (d.turns.length) {
-        html += '<h2 style="margin-top:12px">Últimas chamadas</h2>';
-        for (var j = 0; j < d.turns.length; j++) {
-          html += '<div class="dl"><span>' + hm(d.turns[j].t) + '</span><span>' + k(d.turns[j].fresh) + ' novos · ' + k(d.turns[j].cacheRead) + ' cache</span></div>';
-        }
-      }
-      var origins = { 'gemini-cli': 'Gemini CLI', antigravity: 'Antigravity', 'antigravity-cli': 'Antigravity CLI' };
-      if (origins[d.where]) html += '<div class="dl" style="margin-top:12px"><span>Origem</span><span>' + esc(origins[d.where]) + '</span></div>';
-      html += '<div class="dl"' + (origins[d.where] ? '' : ' style="margin-top:12px"') + '><span>Modelo</span><span>' + esc(d.models.join(', ') || '—') + '</span></div>' +
-        '<div class="path" style="margin-top:8px">' + esc(d.cwd) + '</div>';
     }
     html += '</div>';
     // Organizar sessão: fixar no topo, apelido e grupo (salvo no Hub em data/session-meta.json)
     html += '<div class="panel smeta-box"><h2>Organizar sessão</h2>' +
       '<div class="row smeta-row">' +
       '<button type="button" class="pinbtn' + (d.pinned ? ' on' : '') + '" id="sessPinBtn" title="' + (d.pinned ? 'Desfixar sessão' : 'Fixar sessão no topo') + '">' + (d.pinned ? '★' : '☆') + '</button>' +
-      '<input type="text" class="nsel grow" id="sessAliasIn" placeholder="Apelido da sessão (opcional)…" value="' + esc(d.alias || '') + '">' +
+      '<input type="text" class="nsel grow" id="sessAliasIn" placeholder="Apelido da sessão…" value="' + esc(d.alias || '') + '">' +
       '</div><div class="row smeta-row">' +
-      '<input type="text" class="nsel grow" id="sessGroupIn" placeholder="Grupo (ex.: AI HUD, Infra)…" value="' + esc(d.group || '') + '">' +
+      '<input type="text" class="nsel grow" id="sessGroupIn" placeholder="Grupo…" value="' + esc(d.group || '') + '">' +
       '<button type="button" class="pcmini" id="sessMetaSave">Salvar</button></div></div>';
     html += renderMemoryBox();
     if (!memUi.open) {
-      html += '<button type="button" class="pcaction" id="openMem">🧠 Memória compartilhada <small>(ver / 🌙 Dream)</small></button>';
+      html += '<button type="button" class="pcaction" id="openMem">🧠 Memória compartilhada</button>';
     }
     if (handoffUi.open && !onConvo) html += renderHandoffPanel(d);
     if (!handoffUi.open) {
-      html += '<button type="button" class="pcaction" id="openHandoff">↪ Handoff <small>(Resumir e continuar / trocar IA)</small></button>';
+      html += '<button type="button" class="pcaction" id="openHandoff">↪ Handoff / Trocar IA</button>';
     }
     // Encerrar fica na aba Detalhes, longe dos botões de uso frequente (para todas as IAs ativas)
     if (d.state !== 'closed') {
@@ -793,6 +803,18 @@
       handoffUi.tool = handoffUi.tool || defaultHandoffTarget(d.tool);
       renderDetail(d);
     }
+    if ($('dismissCtxWarn')) $('dismissCtxWarn').onclick = function () {
+      dismissedCtx[d.id] = true;
+      renderDetail(d);
+    };
+    if ($('dismissQuotaWarn')) $('dismissQuotaWarn').onclick = function () {
+      dismissedQuota[d.id] = true;
+      renderDetail(d);
+    };
+    if ($('toggleTechDetails')) $('toggleTechDetails').onclick = function () {
+      techDetailsOpen = !techDetailsOpen;
+      renderDetail(d);
+    };
     if ($('quotaAssumeNow')) $('quotaAssumeNow').onclick = function () {
       var target = this.getAttribute('data-qt') || 'Codex';
       var b = this, beforeIds = snapshotKnownIds();

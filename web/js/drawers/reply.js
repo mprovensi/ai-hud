@@ -1,6 +1,12 @@
   // ---- Resposta rápida (hook-stop.js entrega à sessão parada) ----------------
   var QUICK = ['Sim', 'Continue', 'Sim, implemente', 'Resuma', 'Não, pare aqui', 'Faça o commit', 'Rode os testes', 'Explique melhor'];
   var chipsOpen = false;
+  var replyAiChoice = {};
+  var replyAiOpen = false;
+
+  function shortAiLabel(t) {
+    return t === 'Claude Code' ? 'Claude' : t === 'Antigravity' ? 'Gemini' : t;
+  }
 
   function replyIcon(name) {
     if (typeof icon === 'function' && typeof ICONS !== 'undefined' && ICONS[name]) return icon(name);
@@ -39,6 +45,25 @@
     }
     html += '<div class="chips' + (chipsOpen ? ' open' : '') + '" id="quickChips">';
     for (i = 0; i < QUICK.length; i++) html += '<button type="button" class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
+    var curNorm = d.tool === 'Antigravity' ? 'Gemini' : d.tool;
+    var pickedTool = replyAiChoice[d.id] || curNorm;
+    var isSwitchingAi = pickedTool !== curNorm;
+    var aiOpts = ['Claude Code', 'Codex', 'Gemini', 'Ollama'];
+    var aiPickerHtml = '';
+    if (d.tool !== 'Ollama') {
+      aiPickerHtml = '<div class="rai-wrap" id="replyAiWrap">' +
+        '<button type="button" class="rai-btn' + (isSwitchingAi ? ' switching' : '') + '" id="replyAiBtn" aria-expanded="' + (replyAiOpen ? 'true' : 'false') + '" title="Trocar IA mantendo a mesma conversa">' +
+        (isSwitchingAi ? '↪ ' : '') + esc(shortAiLabel(pickedTool)) + '<span class="rai-chev">▾</span></button>' +
+        '<div class="rai-menu' + (replyAiOpen ? ' open' : '') + '" id="replyAiMenu">' +
+        '<div class="rai-head">IA da próxima resposta</div>';
+      for (i = 0; i < aiOpts.length; i++) {
+        var optT = aiOpts[i], isSelOpt = optT === pickedTool, isCurOpt = optT === curNorm;
+        aiPickerHtml += '<button type="button" class="rai-opt' + (isSelOpt ? ' sel' : '') + '" data-rait="' + esc(optT) + '">' +
+          '<span>' + esc(optT) + '</span>' +
+          '<span class="rai-tag">' + (isSelOpt ? '✓' : (isCurOpt ? 'atual' : '')) + '</span></button>';
+      }
+      aiPickerHtml += '</div></div>';
+    }
     return html + '</div><div class="slash-pop" id="slashPop" style="display:none"></div>' +
       '<div class="rcomposer">' +
         '<div class="rform"><textarea id="replyText" rows="2" placeholder="Escreva, digite / ou fale uma resposta…"></textarea></div>' +
@@ -49,12 +74,7 @@
             : (snap && snap.voiceStt ? '<input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" style="display:none"><button type="button" class="rtool mic" id="voiceSttBtn" aria-label="Ditar via Whisper local" title="Ditar via Whisper local">' + replyIcon('mic') + '</button>' : '')) +
           '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
             (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button>' +
-          (d.tool !== 'Ollama' ? '<select id="replyAiSel" class="rai-sel" aria-label="Trocar IA na próxima resposta" title="Trocar IA mantendo a mesma conversa">' +
-            '<option value="' + esc(d.tool === 'Antigravity' ? 'Gemini' : d.tool) + '" selected>' + esc(d.tool === 'Claude Code' ? 'Claude' : d.tool) + '</option>' +
-            (d.tool !== 'Claude Code' ? '<option value="Claude Code">↪ Claude</option>' : '') +
-            (d.tool !== 'Codex' ? '<option value="Codex">↪ Codex</option>' : '') +
-            (d.tool !== 'Gemini' && d.tool !== 'Antigravity' ? '<option value="Gemini">↪ Gemini</option>' : '') +
-            '<option value="Ollama">↪ Ollama</option></select>' : '') +
+          aiPickerHtml +
           '<span class="grow"></span>' +
           (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">na fila</span>') +
           '<button type="button" class="send" id="sendReply" aria-label="Enviar resposta" title="Enviar" disabled>' + replyIcon('arrowUp') + '</button>' +
@@ -157,14 +177,54 @@
         syncReplySendState();
       };
     }
+    if ($('replyAiBtn') && $('replyAiMenu')) {
+      $('replyAiBtn').onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        replyAiOpen = !replyAiOpen;
+        this.setAttribute('aria-expanded', replyAiOpen ? 'true' : 'false');
+        $('replyAiMenu').className = 'rai-menu' + (replyAiOpen ? ' open' : '');
+      };
+      var aiBtns = $('replyAiMenu').getElementsByTagName('button');
+      for (var aiIdx = 0; aiIdx < aiBtns.length; aiIdx++) {
+        aiBtns[aiIdx].onclick = function (ev) {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          var picked = this.getAttribute('data-rait') || '';
+          var curN = d.tool === 'Antigravity' ? 'Gemini' : d.tool;
+          if (!picked || picked === curN) delete replyAiChoice[d.id];
+          else replyAiChoice[d.id] = picked;
+          replyAiOpen = false;
+          var btn = $('replyAiBtn'), menu = $('replyAiMenu');
+          var activeT = replyAiChoice[d.id] || curN;
+          var sw = activeT !== curN;
+          if (btn) {
+            btn.className = 'rai-btn' + (sw ? ' switching' : '');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.innerHTML = (sw ? '↪ ' : '') + esc(shortAiLabel(activeT)) + '<span class="rai-chev">▾</span>';
+          }
+          if (menu) {
+            menu.className = 'rai-menu';
+            var allO = menu.getElementsByTagName('button');
+            for (var oi = 0; oi < allO.length; oi++) {
+              var ot = allO[oi].getAttribute('data-rait') || '';
+              var isSel = ot === activeT;
+              allO[oi].className = 'rai-opt' + (isSel ? ' sel' : '');
+              var tags = allO[oi].getElementsByTagName('span');
+              if (tags.length > 1) tags[1].innerHTML = isSel ? '✓' : (ot === curN ? 'atual' : '');
+            }
+          }
+          if (sw) flash('Próxima resposta será assumida por ' + activeT + '.');
+        };
+      }
+    }
     $('sendReply').onclick = function () {
       var text = $('replyText').value.replace(/^\s+|\s+$/g, '');
       if (!text) return;
-      var sel = $('replyAiSel');
       var curNorm = d.tool === 'Antigravity' ? 'Gemini' : d.tool;
-      var chosenTool = sel ? sel.value : curNorm;
+      var chosenTool = replyAiChoice[d.id] || curNorm;
       if (chosenTool && chosenTool !== curNorm) {
         stopMic();
+        replyAiOpen = false;
+        delete replyAiChoice[d.id];
         var btn = $('sendReply'), beforeIds = snapshotKnownIds();
         if (btn) btn.disabled = true;
         request('POST', '/api/handoff', function (err, r) {

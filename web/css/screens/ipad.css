@@ -61,8 +61,9 @@
   #overlay .dtitle { font-size: 1.15em; }
   #overlay .dtop { margin-bottom: 4px; }
   #overlay .dtop .dsub { font-size: .78em; margin: 1px 0 0; }
-  #overlay .dstate { font-size: .76em; margin-bottom: 6px; }
-  #overlay .pcmini { font-size: .86em; padding: .36em 1.25em; min-width: 10.5em; min-height: 44px; text-align: center; }
+  #overlay .dstate { font-size: .74em; margin-bottom: 6px; }
+  #overlay .pcmini { font-size: .78em; padding: .28em .72em; min-width: 0; min-height: 36px; text-align: center; margin-left: 6px; }
+  #overlay .pcmini.pcico { width: 36px; min-width: 36px; padding: 0; }
   #overlay .dtabs { margin-bottom: 8px; padding: 2px; }
   #overlay .dtab { font-size: .78em; padding: .3em .5em; min-height: 36px; }
   #overlay .convpanel { padding: 8px 12px; margin-bottom: 8px; }

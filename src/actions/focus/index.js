@@ -1,23 +1,48 @@
 // Abrir no PC, parte 2: executa. Foca a janela da sessão (platform/windows/focus.ps1) e, no VS Code, abre a
 // aba da sessão pelo link da extensão. O link vai para a última janela ativa: só é enviado depois de focar
 // a janela certa. Sessões no terminal usam terminal.js (Windows Terminal, console ou terminal do VS Code).
+const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { ROOT } = require('../../infra/paths');
 const { createTerminalFocus } = require('./terminal');
 const { focusPlan, winPath, noPipe, base } = require('./plan');
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function createFocus({ terminal = createTerminalFocus(), platform = process.platform, exec = execFile } = {}) {
+function findDesktopExe(env = process.env) {
+  const candidates = [
+    env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'AI Workspace', 'ai-hud-desktop.exe') : '',
+    path.join(ROOT, 'workspace-desktop', 'target', 'release', 'ai-hud-desktop.exe'),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try { if (fs.statSync(p).isFile()) return p; } catch {}
+  }
+  return '';
+}
+
+function createFocus({ terminal = createTerminalFocus(), platform = process.platform, exec = execFile, spawnFn = spawn, desktopExe = null } = {}) {
   const focusWindow = (plan) => new Promise((resolve) => exec('powershell', ['-NoProfile', '-File', path.join(ROOT, 'platform', 'windows', 'focus.ps1'), '-Process', plan.process,
     '-Include', plan.include, '-Exclude', plan.exclude, ...(plan.unique ? ['-Unique'] : [])], { windowsHide: true, timeout: 20e3 },
   (err, out) => resolve(String(out || '').trim().startsWith('ok'))));
   const openUri = (uri) => new Promise((resolve) => exec('explorer.exe', [uri], { windowsHide: true }, () => resolve()));
 
-  return async function focusSession(s) {
+  return async function focusSession(s, opts = {}) {
     // Trazer janelas para frente usa PowerShell/Win32 (focus.ps1): só no Windows por enquanto
     if (platform !== 'win32') return { ok: false, message: 'Abrir no PC ainda só funciona em PCs com Windows.' };
+    if (opts && opts.workspaceUrl) {
+      const exe = typeof desktopExe === 'string' ? desktopExe : findDesktopExe();
+      const label = opts.projectTitle ? `"${opts.projectTitle}"` : 'projeto';
+      if (exe) {
+        try {
+          const child = spawnFn(exe, ['--open-url', opts.workspaceUrl], { detached: true, stdio: 'ignore', windowsHide: false });
+          if (child && typeof child.unref === 'function') child.unref();
+          return { ok: true, message: `Sessão aberta no AI Workspace (${label}).` };
+        } catch {}
+      }
+      await openUri(opts.workspaceUrl);
+      return { ok: true, message: `Sessão aberta no AI Workspace (${label}).` };
+    }
     if (s.where === 'terminal' || s.where === 'ollama-run' || s.where === 'antigravity-cli' || s.where === 'gemini-cli') {
       const result = await terminal(s);
       if (result.ok && result.host === 'vscode') {

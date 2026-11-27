@@ -509,7 +509,8 @@
     html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
       (d.tool === 'Gemini' && d.where === 'antigravity' ? '<button type="button" class="pcmini assume-btn" id="assumeHud" title="Assumir esta conversa no celular/iPad agora via Handoff para o agy CLI">📱 Assumir</button>' : '') +
       (d.tool !== 'Ollama' ? '<button type="button" class="pcmini" id="openHandoffTop" title="Continuar esta sessão em outra IA (ex.: Gemini → Codex) a partir do ponto de parada">↪ Trocar IA</button>' : '') +
-      (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ')">🖥 Abrir no PC</button>' : '') + '</div>';
+      '<button type="button" class="pcmini" id="copySessLink" title="Copiar link direto desta sessão no AI Workspace">🔗</button>' +
+      (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ' ou AI Workspace)">🖥 Abrir no PC</button>' : '') + '</div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
     var isPermQuestion = d.permission && d.question && d.question.mode === 'permission';
@@ -758,6 +759,19 @@
           beforeIds: beforeIds,
         });
       }, { id: d.id, targetTool: 'Gemini', note: typed });
+    };
+    if ($('copySessLink')) $('copySessLink').onclick = function () {
+      var origin = location.origin || (location.protocol + '//' + location.host);
+      var url = origin + '/workspace?session=' + encodeURIComponent(d.id);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () {
+          flash('Link da sessão copiado!', true);
+        }, function () {
+          window.prompt('Copie o link da sessão:', url);
+        });
+      } else {
+        window.prompt('Copie o link da sessão:', url);
+      }
     };
     if ($('focusPc')) $('focusPc').onclick = function () {
       var b = this;

@@ -14,6 +14,7 @@ import {
   GitFork,
   Layers,
   LayoutDashboard,
+  Link2,
   MoreVertical,
   Pencil,
   Plug,
@@ -100,7 +101,9 @@ export function App() {
     seenWorking: boolean;
   }) | null>(null);
   const [focusSessionId, setFocusSessionId] = useState('');
+  const [activeSessionId, setActiveSessionId] = useState('');
   const [pendingLaunch, setPendingLaunch] = useState<PendingLaunchMeta | null>(null);
+  const deepLinkAppliedRef = useRef(false);
   const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
 
@@ -329,6 +332,66 @@ export function App() {
     const id = window.setInterval(loadSyncStatus, 60000);
     return () => window.clearInterval(id);
   }, [loadWorkspace, loadSyncStatus]);
+
+  // Aplica deep link inicial (?project=<id>&session=<sid>&tab=<tab>) ao abrir por link direto ou "Abrir no PC"
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || !ws) return;
+    deepLinkAppliedRef.current = true;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const projParam = (sp.get('project') || '').trim();
+      const sessParam = (sp.get('session') || '').trim();
+      const tabParam = (sp.get('tab') || '').trim() as EntityTab;
+      if (projParam) {
+        const found = (ws.entities || []).find((e) => e.id === projParam);
+        if (found) {
+          setSelection({ kind: 'entity', id: found.id });
+          setExpandedGroups((prev) => ({ ...prev, [found.group || '__ungrouped']: true }));
+          if (['step', 'docs', 'memory', 'files', 'terminal'].includes(tabParam)) {
+            setEntityTab(tabParam);
+          } else {
+            setEntityTab('step');
+          }
+          setStepIdx(0);
+        }
+      }
+      if (sessParam) {
+        setFocusSessionId(sessParam);
+      }
+    } catch {}
+  }, [ws]);
+
+  // Mantém a URL sincronizada com o projeto/sessão atuais (sem perder ?t= se presente)
+  useEffect(() => {
+    if (!deepLinkAppliedRef.current) return;
+    try {
+      const url = new URL(window.location.href);
+      const projId = selection?.kind === 'entity' ? selection.id : '';
+      if (projId) url.searchParams.set('project', projId);
+      else url.searchParams.delete('project');
+      if (activeSessionId) url.searchParams.set('session', activeSessionId);
+      else url.searchParams.delete('session');
+      url.searchParams.delete('tab');
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+        window.history.replaceState(null, '', next);
+      }
+    } catch {}
+  }, [selection, activeSessionId]);
+
+  const copyWorkspaceLink = useCallback(async (projId?: string, sessId?: string) => {
+    const params = new URLSearchParams();
+    if (projId) params.set('project', projId);
+    if (sessId) params.set('session', sessId);
+    const qs = params.toString();
+    const link = `${window.location.origin}/workspace${qs ? `?${qs}` : ''}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      notify(projId && sessId ? 'Link do projeto + sessão copiado!' : projId ? 'Link do projeto copiado!' : 'Link copiado!');
+    } catch {
+      window.prompt('Copie o link:', link);
+    }
+  }, [notify]);
 
   // Atualiza o skeleton inicial com progresso real até workspaces e sessões estarem prontos
   useEffect(() => {
@@ -1093,6 +1156,13 @@ export function App() {
                     />
                   )}
                   <button
+                    className="btn btn-sm btn-icon"
+                    onClick={() => copyWorkspaceLink(selectedEntity.id, activeSessionId || undefined)}
+                    title={activeSessionId ? 'Copiar link direto (projeto + sessão atual)' : 'Copiar link direto deste projeto'}
+                  >
+                    <Link2 size={13} />
+                  </button>
+                  <button
                     className="btn btn-sm btn-primary"
                     onClick={() => { setNewChatPrompt(''); setNewChatLocked(true); setNewChatOpen(true); }}
                     title="Abrir nova conversa neste projeto"
@@ -1300,6 +1370,7 @@ export function App() {
           binding={activeBinding}
           focusSessionId={focusSessionId}
           onFocusSessionConsumed={consumeFocusSession}
+          onSelectedSessionChange={setActiveSessionId}
           pendingLaunch={pendingLaunch}
           onPendingLaunchConsumed={consumePendingLaunch}
           draftPrompt={draftPrompt}

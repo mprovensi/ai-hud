@@ -4,13 +4,18 @@ const fs = require('fs');
 const path = require('path');
 const { isValidSessionId } = require('../core/shared-session');
 
+function cleanFsPath(p) {
+  return String(p || '').trim().replace(/^\\\\\?\\/, '');
+}
+
 function createSharedSessionIndex() {
   // Cache por diretório `<cwd>/.ai-workspace/sessions` invalidado por mtime do diretório + arquivos
   const dirCache = new Map();
 
   function readDirRecords(cwd) {
-    if (!cwd) return [];
-    const dir = path.join(path.resolve(cwd), '.ai-workspace', 'sessions');
+    const clean = cleanFsPath(cwd);
+    if (!clean) return [];
+    const dir = path.join(path.resolve(clean), '.ai-workspace', 'sessions');
     let dirStat;
     try { dirStat = fs.statSync(dir); } catch { return []; }
     if (!dirStat.isDirectory()) return [];
@@ -54,7 +59,8 @@ function createSharedSessionIndex() {
     const cwds = new Set();
     for (const s of list) {
       byId.set(s.id, s);
-      if (s.cwd) cwds.add(s.cwd);
+      const cleanCwd = cleanFsPath(s.cwd);
+      if (cleanCwd) cwds.add(cleanCwd);
     }
 
     const byNativeId = new Map();
@@ -64,7 +70,23 @@ function createSharedSessionIndex() {
 
     for (const cwd of cwds) {
       for (const rec of readDirRecords(cwd)) {
-        const present = rec.natives.filter((nid) => byId.has(nid));
+        const present = [];
+        const seen = new Set();
+        for (const nid of rec.natives) {
+          if (byId.has(nid) && !seen.has(nid)) {
+            seen.add(nid);
+            present.push(nid);
+          }
+        }
+        // Também anexa sessões cujo prompt inicial referencia explicitamente esta sessão compartilhada
+        // (recupera handoffs lentos de CLIs como `agy` mesmo após reinício do servidor)
+        const extra = list
+          .filter((s) => !seen.has(s.id) && String(s.firstPrompt || s.title || '').includes(rec.id))
+          .sort((a, b) => (Date.parse(a.start) || 0) - (Date.parse(b.start) || 0));
+        for (const s of extra) {
+          seen.add(s.id);
+          present.push(s.id);
+        }
         if (!present.length) continue;
         // A sessão "cabeça" (driver ativo) é o último native presente na ordem do handoff
         const headId = present[present.length - 1];

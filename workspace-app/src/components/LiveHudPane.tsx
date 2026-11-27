@@ -11,6 +11,7 @@ import {
   Copy,
   Download,
   GitFork,
+  Link2,
   MessageSquare,
   Paperclip,
   Plus,
@@ -154,6 +155,7 @@ interface Props {
   binding?: { machine: string; cwd: string } | null;
   focusSessionId?: string;
   onFocusSessionConsumed?: () => void;
+  onSelectedSessionChange?: (sessionId: string) => void;
   pendingLaunch?: PendingLaunchMeta | null;
   onPendingLaunchConsumed?: (sessionId?: string) => void;
   draftPrompt?: string;
@@ -183,6 +185,7 @@ export function LiveHudPane({
   binding,
   focusSessionId,
   onFocusSessionConsumed,
+  onSelectedSessionChange,
   pendingLaunch = null,
   onPendingLaunchConsumed,
   draftPrompt,
@@ -316,13 +319,15 @@ export function LiveHudPane({
     if (projectId === prevProjectIdRef.current) return;
     prevProjectIdRef.current = projectId;
     if (projectId) {
-      setSelectedId('');
-      setDetail(null);
+      if (!focusSessionId) {
+        setSelectedId('');
+        setDetail(null);
+      }
       setFilter(binding || projectTitle ? 'project' : 'all');
     } else {
       setFilter('all');
     }
-  }, [projectId, binding, projectTitle]);
+  }, [projectId, binding, projectTitle, focusSessionId]);
 
   useEffect(() => {
     if (!focusSessionId) return;
@@ -342,6 +347,11 @@ export function LiveHudPane({
     }
     onDraftConsumed();
   }, [draftPrompt, selectedId, onDraftConsumed, onOpenNewSession]);
+
+  // Notifica App.tsx quando a sessão aberta muda (para sincronizar deep link na URL)
+  useEffect(() => {
+    if (onSelectedSessionChange) onSelectedSessionChange(selectedId);
+  }, [selectedId, onSelectedSessionChange]);
 
   // Carrega detalhes da sessão selecionada e acompanha atualizações do snapshot
   useEffect(() => {
@@ -630,7 +640,28 @@ export function LiveHudPane({
         selectedIdRef.current = nextId;
         setSelectedId(nextId);
         const gen = selectionGenRef.current;
-        window.setTimeout(() => fetchSessionDetail(nextId, gen), 600);
+        [700, 2000, 4200].forEach((delay) => {
+          window.setTimeout(() => {
+            if (selectedIdRef.current === nextId) {
+              fetchSessionDetail(nextId, gen);
+              onPollNow();
+            }
+          }, delay);
+        });
+      } else {
+        // CLI lenta (>15s) ainda não emitiu UUID: mantém conversa aberta e acompanha redirecionamento transparente
+        setDetail((prev) => (prev ? { ...prev, tool: r.tool, state: 'working' } : prev));
+        const gen = selectionGenRef.current;
+        let attempts = 0;
+        const followTimer = window.setInterval(() => {
+          attempts += 1;
+          if (selectedIdRef.current !== targetId || selectionGenRef.current !== gen || attempts > 18) {
+            window.clearInterval(followTimer);
+            return;
+          }
+          fetchSessionDetail(targetId, gen);
+          if (attempts % 2 === 0) onPollNow();
+        }, 1500);
       }
     } catch (e) {
       onNotify((e as Error).message, true);
@@ -845,6 +876,24 @@ export function LiveHudPane({
               }}
             >
               <Star size={12} fill={activeDetail.pinned ? '#e5c063' : 'none'} color={activeDetail.pinned ? '#e5c063' : 'currentColor'} />
+            </button>
+            <button
+              className="btn btn-sm btn-icon"
+              title={projectId ? 'Copiar link direto (projeto + sessão)' : 'Copiar link direto desta sessão'}
+              onClick={async () => {
+                const params = new URLSearchParams();
+                if (projectId) params.set('project', projectId);
+                params.set('session', activeDetail.id);
+                const link = `${window.location.origin}/workspace?${params.toString()}`;
+                try {
+                  await navigator.clipboard.writeText(link);
+                  onNotify('Link da sessão copiado!');
+                } catch {
+                  window.prompt('Copie o link da sessão:', link);
+                }
+              }}
+            >
+              <Link2 size={12} />
             </button>
             <button
               className="btn btn-sm"

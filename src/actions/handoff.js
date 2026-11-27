@@ -19,7 +19,8 @@ function writeAtomic(filePath, content) {
 
 function normCwd(p) {
   if (!p) return '';
-  const abs = path.resolve(String(p));
+  const clean = String(p).trim().replace(/^\\\\\?\\/, '');
+  const abs = path.resolve(clean);
   return process.platform === 'win32' ? abs.toLowerCase() : abs;
 }
 
@@ -92,9 +93,12 @@ function createHandoff({
         if (p.knownIds.has(s.id)) return false;
         const sTool = s.tool === 'Antigravity' ? 'Gemini' : s.tool;
         if (sTool !== p.tool) return false;
+        // Se o primeiro prompt cita explicitamente o ID da sessão compartilhada, casa na hora (mesmo se cwd ainda não foi gravado pelo agy)
+        const fp = String(s.firstPrompt || s.title || '');
+        if (p.sharedId && fp.includes(p.sharedId)) return true;
         if (p.cwdNorm && normCwd(s.cwd) !== p.cwdNorm) return false;
         const started = Date.parse(s.start) || 0;
-        return started >= p.since - 10000;
+        return started >= p.since - 15000;
       });
       if (!match) continue;
       try {

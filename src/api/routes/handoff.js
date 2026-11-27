@@ -18,6 +18,7 @@ module.exports = ({ handoff, peers, collector, sessionMeta, machineName, json, t
         });
         if (r.status !== 200 || !r.json) return text(res, r.status || 502, r.text || `${remote.peer.name} não respondeu`);
         collector.poke();
+        if (typeof peers.poll === 'function') peers.poll(remote.peer).then((changed) => { if (changed) collector.poke(); }).catch(() => {});
         const prefixed = r.json.id ? `m${remote.peer.i}:${r.json.id}` : null;
         if (prefixed) inheritSessionMeta(sessionMeta, id, prefixed);
         return json(res, { ...r.json, id: prefixed, machine: remote.peer.name });

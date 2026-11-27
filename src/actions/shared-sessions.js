@@ -51,7 +51,7 @@ function withFileLock(filePath, fn) {
 
 function createSharedSessions({ workspaceRoot, now = () => Date.now(), randomHex = () => crypto.randomBytes(4).toString('hex') } = {}) {
   function resolveCwd(cwd) {
-    const raw = String(cwd || '').trim();
+    const raw = String(cwd || '').trim().replace(/^\\\\\?\\/, '');
     if (!raw) return { error: 'Informe o caminho da pasta do projeto (cwd).' };
     const abs = path.resolve(raw);
     try { if (!fs.statSync(abs).isDirectory()) throw new Error(); } catch { return { error: `Pasta do projeto não encontrada: ${abs}` }; }

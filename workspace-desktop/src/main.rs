@@ -402,7 +402,27 @@ fn update_boot_progress(app: &AppHandle, pct: u8, text: &str, step_idx: u8) {
     }
 }
 
+fn extract_open_url_arg(args: &[String]) -> Option<String> {
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if arg == "--open-url" {
+            if let Some(u) = it.next() {
+                if u.starts_with("http://") || u.starts_with("https://") {
+                    return Some(u.clone());
+                }
+            }
+        } else if let Some(rest) = arg.strip_prefix("--open-url=") {
+            if rest.starts_with("http://") || rest.starts_with("https://") {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn main() {
+    let startup_args: Vec<String> = std::env::args().collect();
+    let initial_open_url = extract_open_url_arg(&startup_args);
     let root = find_repo_root();
     let cfg = read_hud_config(root.as_deref());
     let (primary, local, local_port, local_token) = build_endpoints(&cfg);
@@ -425,10 +445,24 @@ fn main() {
     let app = tauri::Builder::default()
         .manage(managed)
         .manage(runtime)
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let rt = app.state::<Arc<RuntimeState>>();
             let (_, target) = rt.active_target();
             let title = window_title("AI Workspace", &target.label);
+            if let Some(deep_url) = extract_open_url_arg(&args) {
+                if let Some(win) = app.get_webview_window("workspace") {
+                    let _ = win.set_title(&title);
+                    if let Ok(parsed) = Url::parse(&deep_url) {
+                        let _ = win.navigate(parsed);
+                    }
+                    let _ = win.show();
+                    let _ = win.unminimize();
+                    let _ = win.set_focus();
+                } else {
+                    open_or_focus_window(app, "workspace", &title, &deep_url, 1360.0, 860.0);
+                }
+                return;
+            }
             open_or_focus_window(app, "workspace", &title, &target.workspace, 1360.0, 860.0);
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -458,6 +492,7 @@ fn main() {
                 let rt_boot = runtime_setup.clone();
                 let managed_child = managed_child_boot.clone();
                 let root_dir = root_boot.clone();
+                let start_url_override = initial_open_url.clone();
                 thread::spawn(move || {
                     thread::sleep(Duration::from_millis(80));
                     update_boot_progress(&app_boot, 18, "Verificando servidor local…", 0);
@@ -488,13 +523,14 @@ fn main() {
                     update_boot_progress(&app_boot, 68, &load_msg, 2);
 
                     let title = window_title("AI Workspace", &target.label);
+                    let nav_url = start_url_override.unwrap_or_else(|| target.workspace.clone());
                     if let Some(ws) = app_boot.get_webview_window("workspace") {
                         let _ = ws.set_title(&title);
-                        if let Ok(url) = Url::parse(&target.workspace) {
+                        if let Ok(url) = Url::parse(&nav_url) {
                             let _ = ws.navigate(url);
                         }
                     } else {
-                        open_or_focus_window(&app_boot, "workspace", &title, &target.workspace, 1360.0, 860.0);
+                        open_or_focus_window(&app_boot, "workspace", &title, &nav_url, 1360.0, 860.0);
                     }
                 });
             }

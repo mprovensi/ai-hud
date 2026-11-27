@@ -160,7 +160,8 @@ function createSessionLauncher({
       const args = [`--print=${cleanPrompt}`, '--dangerously-skip-permissions', '--output-format', 'stream-json'];
       if (cleanModel) args.push('--model', cleanModel);
       try {
-        const id = await launchCli({ exe: agyExe, args, cwd: targetCwd, spawnFn: spawn, waitForId: detectNewBrain, running });
+        // `agy` no Windows pode levar 8–12s em cold start para criar a pasta em brain/
+        const id = await launchCli({ exe: agyExe, args, cwd: targetCwd, spawnFn: spawn, waitForId: detectNewBrain, waitMs: 15000, running });
         return { status: 200, body: { ok: true, id, tool: 'Gemini' } };
       } catch (e) { return { status: 502, body: e.message }; }
     }

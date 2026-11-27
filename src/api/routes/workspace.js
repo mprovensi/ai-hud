@@ -568,12 +568,16 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
 
     // ---- EGM Lite: Revisão Goldfish (1 chamada isolada) + Estruturação opcional por IA ----
 
-    { method: 'POST', path: '/api/workspace/project/review', json: true, maxBytes: 256 * 1024, handler: async ({ res, body }) => {
+    { method: 'POST', path: '/api/workspace/project/review', json: true, maxBytes: 256 * 1024, handler: async ({ res, url, body }) => {
       if (!workspaceWorkflow) return text(res, 501, 'Motor EGM Lite indisponível.');
+      const isLocal = url.searchParams.get('local') === '1';
       const entityId = body.entityId || '';
       const docPath = String(body.docPath || '').split('#')[0].trim();
-      const target = resolveTarget({ entityId, cwd: body.cwd || '', machine: body.machine || '' });
+      const target = resolveTarget({ entityId, cwd: body.cwd || '', machine: body.machine || '', isLocalCall: isLocal });
       if (!target.cwd || !docPath) return text(res, 400, 'Informe o projeto e o caminho do documento para revisão.');
+      if (!isLocal && !target.peer && target.machine && target.machine !== machineName) {
+        return text(res, 404, `Máquina "${target.machine}" não encontrada.`);
+      }
 
       // 1. Lê o conteúdo do doc (local ou via peer)
       let docContent = '';
@@ -582,7 +586,7 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
         if (!pr || pr.status !== 200 || !pr.json) return text(res, (pr && pr.status) || 502, (pr && pr.text) || 'Não foi possível ler o documento no peer.');
         docContent = pr.json.content || '';
       } else {
-        const chk = checkAuthorizedCwd(target.cwd, false);
+        const chk = checkAuthorizedCwd(target.cwd, isLocal);
         if (!chk.ok) return text(res, 403, chk.reason);
         const lr = readProjectDoc(target.cwd, docPath);
         if (lr.status !== 200) return text(res, lr.status, lr.error);
@@ -592,7 +596,7 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
       const projectLabel = (target.entity && target.entity.title) || body.project || target.cwd;
       const mem = readProjectMemory({ workspaceRoot: wsRoot(), project: projectLabel, cwd: target.peer ? '' : target.cwd });
 
-      const rev = await workspaceWorkflow.reviewSpec({
+      let rev = await workspaceWorkflow.reviewSpec({
         project: projectLabel,
         docPath,
         docContent,
@@ -603,6 +607,29 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
         dryRun: !!body.dryRun,
         ignoreQuota: body.ignoreQuota !== false,
       });
+      // Se o Hub não tem motor disponível para revisão (ex.: CLI/Ollama está na máquina do projeto), encaminha ao peer dono do projeto
+      const noLocalEngine = rev.status === 503 || (body.dryRun && rev.status === 200 && rev.body && rev.body.available === false);
+      if (noLocalEngine && target.peer) {
+        const pr = await peers.forward(target.peer, 'POST', '/api/workspace/project/review?local=1', {
+          cwd: target.cwd,
+          project: projectLabel,
+          docPath,
+          itemId: body.itemId || '',
+          engine: body.engine || '',
+          model: body.model || '',
+          dryRun: !!body.dryRun,
+          ignoreQuota: body.ignoreQuota !== false,
+        }, 140000).catch(() => null);
+        if (pr && pr.status === 200 && pr.json) {
+          if (!body.dryRun && entityId) {
+            const br = await forwardJson(target.peer, 'GET', `/api/workspace/project/board?local=1&cwd=${encodeURIComponent(target.cwd)}`).catch(() => null);
+            if (br && br.status === 200 && br.json && br.json.content) {
+              try { workspace.saveEntityFile({ entityId, relPath: 'overview.card.json', content: br.json.content }); } catch {}
+            }
+          }
+          return json(res, pr.json, 200);
+        }
+      }
       if (rev.status !== 200 || body.dryRun) {
         return typeof rev.body === 'string' ? text(res, rev.status, rev.body) : json(res, rev.body, rev.status);
       }
@@ -664,12 +691,16 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
       return json(res, { ...rev.body, reportPath, review: reviewBadge });
     } },
 
-    { method: 'POST', path: '/api/workspace/project/structure-ai', json: true, maxBytes: 256 * 1024, handler: async ({ res, body }) => {
+    { method: 'POST', path: '/api/workspace/project/structure-ai', json: true, maxBytes: 256 * 1024, handler: async ({ res, url, body }) => {
       if (!workspaceWorkflow) return text(res, 501, 'Motor EGM Lite indisponível.');
+      const isLocal = url.searchParams.get('local') === '1';
       const entityId = body.entityId || '';
       const docPaths = Array.isArray(body.docPaths) ? body.docPaths.slice(0, 8) : [];
-      const target = resolveTarget({ entityId, cwd: body.cwd || '', machine: body.machine || '' });
+      const target = resolveTarget({ entityId, cwd: body.cwd || '', machine: body.machine || '', isLocalCall: isLocal });
       if (!target.cwd || !docPaths.length) return text(res, 400, 'Informe o projeto e ao menos um documento.');
+      if (!isLocal && !target.peer && target.machine && target.machine !== machineName) {
+        return text(res, 404, `Máquina "${target.machine}" não encontrada.`);
+      }
 
       const docs = [];
       for (const p of docPaths) {
@@ -677,7 +708,7 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
           const pr = await forwardJson(target.peer, 'GET', `/api/workspace/project/doc?local=1&cwd=${encodeURIComponent(target.cwd)}&path=${encodeURIComponent(p)}`).catch(() => null);
           if (pr && pr.status === 200 && pr.json) docs.push({ path: pr.json.path, content: pr.json.content || '' });
         } else {
-          const chk = checkAuthorizedCwd(target.cwd, false);
+          const chk = checkAuthorizedCwd(target.cwd, isLocal);
           if (!chk.ok) return text(res, 403, chk.reason);
           const lr = readProjectDoc(target.cwd, p);
           if (lr.status === 200) docs.push({ path: lr.body.path, content: lr.body.content || '' });
@@ -694,6 +725,19 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
         dryRun: !!body.dryRun,
         ignoreQuota: body.ignoreQuota !== false,
       });
+      const noLocalEngine = r.status === 503 || (body.dryRun && r.status === 200 && r.body && r.body.available === false);
+      if (noLocalEngine && target.peer) {
+        const pr = await peers.forward(target.peer, 'POST', '/api/workspace/project/structure-ai?local=1', {
+          cwd: target.cwd,
+          project: projectLabel,
+          docPaths,
+          engine: body.engine || '',
+          model: body.model || '',
+          dryRun: !!body.dryRun,
+          ignoreQuota: body.ignoreQuota !== false,
+        }, 140000).catch(() => null);
+        if (pr && pr.status === 200 && pr.json) return json(res, pr.json, 200);
+      }
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);
     } },
   ];

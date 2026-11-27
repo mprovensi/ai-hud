@@ -163,17 +163,29 @@ interface Props {
   pendingCardExec?: CardExecIntent | null;
   onCancelCardExec?: () => void;
   onCardExecAttached?: (sessionId: string) => void;
-  onOpenNewSession: (initialPrompt?: string) => void;
+  onSessionSwitched?: (fromId: string, toId: string) => void;
+  onOpenNewSession: (initialPrompt?: string, lockToProject?: boolean) => void;
   onNotify: (msg: string, err?: boolean) => void;
   onPollNow: () => void;
   width?: number;
 }
 
-function projectMatch(s: SessionCard, binding?: { machine: string; cwd: string } | null, title?: string): boolean {
+function normCwdForMatch(p?: string): string {
+  return String(p || '').trim().replace(/^\\\\\?\\/, '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+function projectMatch(s: SessionCard | SessionDetail, binding?: { machine: string; cwd: string } | null, title?: string): boolean {
   if (!binding && !title) return true;
+  if (binding?.machine && s.machine && s.machine !== binding.machine) return false;
+  const bindCwd = normCwdForMatch(binding?.cwd);
+  const sessCwd = normCwdForMatch('cwd' in s ? s.cwd : '');
+  if (bindCwd && sessCwd) {
+    if (sessCwd === bindCwd || sessCwd.startsWith(`${bindCwd}/`)) return true;
+    return false;
+  }
   const folder = binding?.cwd ? binding.cwd.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() : '';
   const proj = (s.project || '').toLowerCase();
-  if (folder && (proj === folder || proj.includes(folder))) return true;
+  if (folder) return proj === folder || proj.includes(folder);
   if (title && proj && title.toLowerCase().includes(proj)) return true;
   return false;
 }
@@ -193,6 +205,7 @@ export function LiveHudPane({
   pendingCardExec = null,
   onCancelCardExec,
   onCardExecAttached,
+  onSessionSwitched,
   onOpenNewSession,
   onNotify,
   onPollNow,
@@ -226,6 +239,7 @@ export function LiveHudPane({
 
   // Auto-scroll ref (Conversation) & guarda contra respostas atrasadas de sessão anterior (R08)
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const aiPickerRef = useRef<HTMLDivElement | null>(null);
   const stickBottomRef = useRef(true);
   const prevMsgCountRef = useRef(0);
   const prevProjectIdRef = useRef<string | undefined>(projectId);
@@ -336,17 +350,39 @@ export function LiveHudPane({
     if (onFocusSessionConsumed) onFocusSessionConsumed();
   }, [focusSessionId, onFocusSessionConsumed]);
 
-  // Recebe prompt enviado a partir de um card
+  // Recebe prompt enviado a partir de um card ou documento do projeto.
+  // Só reaproveita a sessão aberta se ela realmente pertencer à mesma máquina e pasta/projeto;
+  // caso contrário (ex.: sessão de outro projeto ou da VPS-Oracle aberta no painel), abre nova sessão fixada no projeto atual.
   useEffect(() => {
     if (!draftPrompt) return;
+    let canReuseSelected = false;
     if (selectedId) {
+      const cardMatch = [...(snapshot?.active || []), ...(snapshot?.recent || [])].find((s) => s.id === selectedId) || null;
+      const targetSess = activeDetail || cardMatch;
+      if (targetSess) {
+        canReuseSelected = projectMatch(targetSess, binding, projectTitle);
+      }
+    }
+    if (canReuseSelected) {
       setViewMode('conversation');
       setReplyText(draftPrompt);
     } else {
-      onOpenNewSession(draftPrompt);
+      onOpenNewSession(draftPrompt, !!(binding || projectTitle));
     }
     onDraftConsumed();
-  }, [draftPrompt, selectedId, onDraftConsumed, onOpenNewSession]);
+  }, [draftPrompt, selectedId, activeDetail, snapshot, binding, projectTitle, onDraftConsumed, onOpenNewSession]);
+
+  // Fecha o popover de troca de IA ao clicar fora
+  useEffect(() => {
+    if (!aiPickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (aiPickerRef.current && !aiPickerRef.current.contains(e.target as Node)) {
+        setAiPickerOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [aiPickerOpen]);
 
   // Notifica App.tsx quando a sessão aberta muda (para sincronizar deep link na URL)
   useEffect(() => {
@@ -631,6 +667,8 @@ export function LiveHudPane({
       const nextId = r.id || '';
       if (nextId && pendingCardExec && onCardExecAttached) {
         onCardExecAttached(nextId);
+      } else if (nextId && onSessionSwitched) {
+        onSessionSwitched(targetId, nextId);
       }
       onNotify(`${r.tool} assumiu a conversa!`);
       onPollNow();
@@ -770,7 +808,7 @@ export function LiveHudPane({
               </button>
             </div>
             <div style={{ flex: 1 }} />
-            <button className="btn btn-sm btn-primary" onClick={() => onOpenNewSession()} title="Abrir gaveta lateral para nova conversa">
+            <button className="btn btn-sm btn-primary" onClick={() => onOpenNewSession(undefined, filter === 'project' && !!(binding || projectTitle))} title="Abrir gaveta lateral para nova conversa">
               <Plus size={13} /> Nova
             </button>
           </>
@@ -784,7 +822,7 @@ export function LiveHudPane({
             <div style={{ fontSize: 11.5, color: 'var(--muted)', padding: '2px 2px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className="ell">Filtrado por <b style={{ color: 'var(--text)' }}>{projectTitle}</b></span>
               {visible.length === 0 && (
-                <button className="btn btn-sm" onClick={() => onOpenNewSession()}>
+                <button className="btn btn-sm" onClick={() => onOpenNewSession(undefined, true)}>
                   <Plus size={11} /> Iniciar aqui
                 </button>
               )}
@@ -794,7 +832,7 @@ export function LiveHudPane({
             <div className="empty">
               Nenhuma sessão {filter === 'project' ? 'neste projeto' : 'ativa'}.
               <div style={{ marginTop: 10 }}>
-                <button className="btn btn-primary btn-sm" onClick={() => onOpenNewSession()}>
+                <button className="btn btn-primary btn-sm" onClick={() => onOpenNewSession(undefined, filter === 'project' && !!(binding || projectTitle))}>
                   <Plus size={13} /> Nova conversa
                 </button>
               </div>
@@ -1467,7 +1505,7 @@ export function LiveHudPane({
                     placeholder="Responder… (Enter envia · Ctrl+V cola imagem · / skills)"
                   />
                   <div className="chat-composer-bar">
-                    <div className="chat-composer-tools" style={{ position: 'relative' }}>
+                    <div className="chat-composer-tools" style={{ position: 'relative' }} ref={aiPickerRef}>
                       <button
                         type="button"
                         className={`chat-ai-pill ${pendingSwitch ? 'switching' : ''}`}

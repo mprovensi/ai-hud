@@ -3,6 +3,40 @@
   var chipsOpen = false;
   var replyAiChoice = {};
   var replyAiOpen = false;
+  var replyAiLastId = '';
+  var replyAiDocBound = false;
+
+  function closeReplyAiMenu() {
+    if (!replyAiOpen) return;
+    replyAiOpen = false;
+    var btn = $('replyAiBtn'), menu = $('replyAiMenu');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+    if (menu) menu.className = 'rai-menu';
+  }
+
+  function isInsideReplyAi(node) {
+    var wrap = $('replyAiWrap');
+    if (!wrap) return false;
+    var el = node;
+    while (el) {
+      if (el === wrap) return true;
+      el = el.parentNode;
+    }
+    return false;
+  }
+
+  function bindReplyAiOutsideClose() {
+    if (replyAiDocBound || typeof document === 'undefined' || !document.addEventListener) return;
+    replyAiDocBound = true;
+    var onOutside = function (ev) {
+      if (!replyAiOpen) return;
+      var t = ev && (ev.target || ev.srcElement);
+      if (!isInsideReplyAi(t)) closeReplyAiMenu();
+    };
+    document.addEventListener('touchstart', onOutside, true);
+    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener('click', onOutside, true);
+  }
 
   function shortAiLabel(t) {
     return t === 'Claude Code' ? 'Claude' : t === 'Antigravity' ? 'Gemini' : t;
@@ -46,6 +80,10 @@
     html += '<div class="chips' + (chipsOpen ? ' open' : '') + '" id="quickChips">';
     for (i = 0; i < QUICK.length; i++) html += '<button type="button" class="chip" data-chip="' + esc(QUICK[i]) + '">' + esc(QUICK[i]) + '</button>';
     var curNorm = d.tool === 'Antigravity' ? 'Gemini' : d.tool;
+    if (replyAiLastId !== d.id) {
+      replyAiLastId = d.id;
+      replyAiOpen = false;
+    }
     var pickedTool = replyAiChoice[d.id] || curNorm;
     var isSwitchingAi = pickedTool !== curNorm;
     var aiOpts = ['Claude Code', 'Codex', 'Gemini', 'Ollama'];
@@ -178,6 +216,7 @@
       };
     }
     if ($('replyAiBtn') && $('replyAiMenu')) {
+      bindReplyAiOutsideClose();
       $('replyAiBtn').onclick = function (ev) {
         if (ev && ev.stopPropagation) ev.stopPropagation();
         replyAiOpen = !replyAiOpen;
@@ -360,6 +399,7 @@
 
   // Não redesenha a gaveta enquanto o usuário escreve, marca opções, configura Handoff ou lê prévia de arquivo
   function typing() {
+    if (replyAiOpen) return true;
     var t = $('replyText');
     if (t && (t.value || document.activeElement === t || !!rec)) return true;
     if (typeof handoffUi !== 'undefined' && handoffUi && handoffUi.open) return true;

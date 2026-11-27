@@ -50,27 +50,48 @@ export function NewSessionDrawer({
 
   useEffect(() => {
     if (!open) return;
+    let alive = true;
     setPrompt(initialPrompt || '');
+    // Pre-popula máquina e pasta sincronamente a partir do projeto para nunca enviar machine/cwd vazios enquanto capabilities carrega
+    setMachine(lockedProject?.machine || effectiveBinding?.machine || '');
+    setCwd(lockedProject?.cwd || effectiveBinding?.cwd || '');
     setLoadingCaps(true);
     api.getCapabilities()
       .then((r) => {
+        if (!alive) return;
         const list = orderMachines(r.machines || []);
         setCaps(list);
+        if (lockedProject?.machine) {
+          const lockedMach = list.find((m) => m.name === lockedProject.machine) || null;
+          setMachine(lockedProject.machine);
+          setCwd(lockedProject.cwd || '');
+          if (lockedMach) {
+            const availTool = AI_META.find((a) => lockedMach.tools?.[a.id] && lockedMach.tools?.[a.id]?.auth?.ok !== false)?.id
+              || AI_META.find((a) => lockedMach.tools?.[a.id])?.id
+              || 'Claude Code';
+            setTool(availTool);
+          }
+          return;
+        }
         const preferred = (effectiveBinding?.machine && list.find((m) => m.name === effectiveBinding.machine))
           || list.find((m) => m.online)
           || list[0];
         if (preferred) {
-          setMachine(lockedProject?.machine || preferred.name);
-          setCwd(lockedProject?.cwd || effectiveBinding?.cwd || preferred.pinned?.[0] || preferred.cwds?.[0] || '');
-          const availTool = AI_META.find((a) => preferred.tools?.[a.id])?.id || 'Claude Code';
+          setMachine(preferred.name);
+          const sameMachBinding = effectiveBinding?.machine && effectiveBinding.machine === preferred.name;
+          setCwd((sameMachBinding ? effectiveBinding.cwd : '') || (!effectiveBinding?.machine ? effectiveBinding?.cwd : '') || preferred.pinned?.[0] || preferred.cwds?.[0] || '');
+          const availTool = AI_META.find((a) => preferred.tools?.[a.id] && preferred.tools?.[a.id]?.auth?.ok !== false)?.id
+            || AI_META.find((a) => preferred.tools?.[a.id])?.id
+            || 'Claude Code';
           setTool(availTool);
         } else if (lockedProject) {
           setMachine(lockedProject.machine);
           setCwd(lockedProject.cwd);
         }
       })
-      .catch((e) => onNotify((e as Error).message, true))
-      .finally(() => setLoadingCaps(false));
+      .catch((e) => { if (alive) onNotify((e as Error).message, true); })
+      .finally(() => { if (alive) setLoadingCaps(false); });
+    return () => { alive = false; };
   }, [open, lockedProject?.machine, lockedProject?.cwd, effectiveBinding?.machine, effectiveBinding?.cwd, initialPrompt, onNotify]);
 
   useEffect(() => {
@@ -80,7 +101,18 @@ export function NewSessionDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const currentMachine = useMemo(() => caps.find((m) => m.name === machine) || caps[0] || null, [caps, machine]);
+  const targetMachineName = lockedProject?.machine || machine;
+  const matchedMachine = useMemo(
+    () => (targetMachineName ? caps.find((m) => m.name === targetMachineName) || null : null),
+    [caps, targetMachineName],
+  );
+  // Nunca faz fallback silencioso para outra máquina (ex.: VPS-Oracle) quando o projeto está fixado em uma máquina específica
+  const currentMachine = useMemo(
+    () => (lockedProject?.machine ? matchedMachine : (matchedMachine || caps[0] || null)),
+    [lockedProject?.machine, matchedMachine, caps],
+  );
+  const lockedMachineOffline = !!(lockedProject?.machine && !loadingCaps && (!matchedMachine || !matchedMachine.online));
+  const selectedMachineOffline = !!(!loadingCaps && currentMachine && !currentMachine.online);
   const models = useMemo(() => currentMachine?.tools?.[tool]?.models || [], [currentMachine, tool]);
 
   useEffect(() => {
@@ -90,21 +122,27 @@ export function NewSessionDrawer({
 
   async function launch() {
     const cleanPrompt = prompt.trim();
-    if (!cleanPrompt || submitting) return;
+    if (!cleanPrompt || submitting || loadingCaps || lockedMachineOffline || selectedMachineOffline) return;
+    const resolvedMachine = lockedProject?.machine || machine || currentMachine?.name || '';
+    const resolvedCwd = (lockedProject?.cwd || cwd).trim();
+    if (lockedProject?.machine && (!matchedMachine || !matchedMachine.online)) {
+      onNotify(`A máquina "${lockedProject.machine}" está offline — não é possível iniciar sessão deste projeto.`, true);
+      return;
+    }
     setSubmitting(true);
     try {
       const r = await api.newSession({
-        machine: currentMachine?.name || undefined,
+        machine: resolvedMachine || undefined,
         tool,
         model: model || undefined,
-        cwd: cwd.trim() || undefined,
+        cwd: resolvedCwd || undefined,
         prompt: cleanPrompt,
       });
       onNotify(`Sessão ${r.tool} iniciada${r.machine ? ` em ${r.machine}` : ''}!`);
       onCreated(r.id || undefined, {
         tool: r.tool || tool,
-        machine: r.machine || currentMachine?.name || '',
-        cwd: cwd.trim(),
+        machine: r.machine || resolvedMachine,
+        cwd: resolvedCwd,
       });
       onClose();
     } catch (e) {
@@ -134,10 +172,10 @@ export function NewSessionDrawer({
           <Button
             variant="primary"
             style={{ flex: 1 }}
-            disabled={submitting || !prompt.trim()}
+            disabled={submitting || loadingCaps || lockedMachineOffline || selectedMachineOffline || !prompt.trim()}
             onClick={launch}
           >
-            <Send size={14} /> {submitting ? 'Iniciando sessão…' : `Iniciar com ${tool}`}
+            <Send size={14} /> {loadingCaps ? 'Verificando máquina…' : submitting ? 'Iniciando sessão…' : `Iniciar com ${tool}${targetMachineName ? ` (${targetMachineName})` : ''}`}
           </Button>
         </>
       }
@@ -145,16 +183,29 @@ export function NewSessionDrawer({
       {lockedProject ? (
         <div
           className="card-item"
-          style={{ marginBottom: 0, borderColor: 'rgba(95, 184, 164, .4)', background: 'var(--ds-accent-soft)' }}
+          style={{
+            marginBottom: 0,
+            borderColor: lockedMachineOffline ? 'rgba(229, 192, 99, .55)' : 'rgba(95, 184, 164, .4)',
+            background: lockedMachineOffline ? 'rgba(229, 192, 99, .10)' : 'var(--ds-accent-soft)',
+          }}
         >
           <div className="ds-row" style={{ gap: 7, marginBottom: 4 }}>
-            <FolderLock size={14} color="var(--ds-accent)" />
+            <FolderLock size={14} color={lockedMachineOffline ? 'var(--warn)' : 'var(--ds-accent)'} />
             <strong style={{ fontSize: 13.5 }}>{lockedProject.title}</strong>
-            {lockedProject.machine && <Badge style={{ marginLeft: 'auto' }}>{lockedProject.machine}</Badge>}
+            {lockedProject.machine && (
+              <Badge style={{ marginLeft: 'auto' }}>
+                {lockedProject.machine}{lockedMachineOffline ? ' (offline)' : ''}
+              </Badge>
+            )}
           </div>
           <div className="mono ell" style={{ fontSize: 11.5, color: 'var(--ds-muted)' }} title={lockedProject.cwd}>
             {lockedProject.cwd || '(sem pasta vinculada)'}
           </div>
+          {lockedMachineOffline && (
+            <div style={{ fontSize: 11.5, color: 'var(--warn)', marginTop: 6, lineHeight: 1.4 }}>
+              ⚠ A máquina <b>{lockedProject.machine}</b> está offline — ligue-a para iniciar sessões neste projeto (não será redirecionada para outra máquina).
+            </div>
+          )}
         </div>
       ) : (
         <FolderPicker

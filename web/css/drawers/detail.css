@@ -16,10 +16,10 @@
 .stopmini:active { background: #593333; }
 .ctxwarn { margin-bottom: 10px; padding: 7px 9px 7px 11px; border-radius: 10px; background: #2d2618; border: 1px solid #6b5629;
   color: #f0d799; font-size: .8em; line-height: 1.35; -webkit-align-items: center; align-items: center; }
-.ctxwarn-x { margin-left: 6px; width: 26px; height: 26px; min-width: 26px; padding: 0; border-radius: 50%;
-  background: rgba(255,255,255,.06); border: 1px solid rgba(240,215,153,.28); color: #e6cf96;
-  font-size: .82em; line-height: 1; text-align: center; -webkit-flex-shrink: 0; flex-shrink: 0; }
-.ctxwarn-x:active { background: rgba(255,255,255,.14); }
+.ctxwarn-x { margin-left: 6px; padding: 4px 6px; width: auto; height: auto; min-width: 0; min-height: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d8c084;
+  font-size: .95em; line-height: 1; text-align: center; -webkit-flex-shrink: 0; flex-shrink: 0; opacity: .82; }
+.ctxwarn-x:active { background: transparent; color: #fff0c8; opacity: 1; }
 .dtech-btn { display: block; width: 100%; text-align: left; margin-top: 10px; padding: 6px 2px 2px;
   border: 0; border-top: 1px solid #2b2b28; background: transparent; color: #8d8d87; font-size: .78em; font-weight: 600; }
 .dtech-btn:active { color: #d8d8d0; }
@@ -163,7 +163,7 @@
 .rcomposer:focus-within { border-color: #5fb8a4; }
 /* Seletor customizado de IA no padrão visual do AI HUD (sem chrome nativo de <select> no Safari/iPad) */
 .rai-wrap { position: relative; display: inline-block; margin-left: 5px; -webkit-flex-shrink: 0; flex-shrink: 0; }
-.rai-btn { height: 32px; padding: 0 10px; border-radius: 99px; background: #1e2330; border: 1px solid #323a4f;
+.rai-btn { height: 32px; min-height: 32px; min-width: 0; padding: 0 10px; border-radius: 99px; background: #1e2330; border: 1px solid #323a4f;
   color: #d8e0f0; font-size: .74em; font-weight: 700; white-space: nowrap; display: -webkit-inline-flex; display: inline-flex;
   -webkit-align-items: center; align-items: center; }
 .rai-btn:active { background: #262d3f; }

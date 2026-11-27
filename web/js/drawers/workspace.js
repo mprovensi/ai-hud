@@ -228,7 +228,8 @@
   function wsFindCardFile(ent) {
     var steps = ent.steps || [], i;
     for (i = 0; i < steps.length; i++) {
-      if (steps[i].file && /\.card\.json$/i.test(steps[i].file)) return steps[i].file;
+      var sp = steps[i].path || steps[i].file;
+      if (sp && /\.card\.json$/i.test(sp)) return sp;
     }
     return 'overview.card.json';
   }

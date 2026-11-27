@@ -73,6 +73,38 @@ function quotaPair(q?: { windows?: Record<string, { used: number }> }): { primar
   };
 }
 
+function matchesSessionId(trackedId: string, candidateId: string): boolean {
+  if (!trackedId || !candidateId) return false;
+  if (trackedId === candidateId) return true;
+  const tp = trackedId.match(/^(m\d+:)/)?.[1] || '';
+  const cp = candidateId.match(/^(m\d+:)/)?.[1] || '';
+  if (tp !== cp) return false;
+  const tb = trackedId.slice(tp.length);
+  const cb = candidateId.slice(cp.length);
+  return (!!tb && cb.endsWith('-' + tb)) || (!!cb && tb.endsWith('-' + cb));
+}
+
+function inferSpecDocRef(detail: { files?: [string, number][]; lastReply?: string; cwd?: string } | null, bindingCwd = ''): string {
+  if (!detail) return '';
+  const baseCwd = String(bindingCwd || detail.cwd || '').trim().replace(/^\\\\\?\\/, '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const toRel = (raw: string): string => {
+    let s = String(raw || '').trim().replace(/^`+|`+$/g, '').replace(/^\\\\\?\\/, '').replace(/\\/g, '/');
+    if (baseCwd && s.toLowerCase().startsWith(`${baseCwd.toLowerCase()}/`)) {
+      s = s.slice(baseCwd.length + 1);
+    }
+    s = s.replace(/^\.\//, '').replace(/^\/+/, '');
+    if (!s || /^[a-zA-Z]:/.test(s) || s.includes('..') || !/\.md$/i.test(s)) return '';
+    return s;
+  };
+  const files = Array.isArray(detail.files) ? detail.files.map((f) => (Array.isArray(f) ? String(f[0] || '') : String(f || ''))) : [];
+  const mdFiles = files.map(toRel).filter(Boolean);
+  const preferredFile = mdFiles.find((p) => /^docs\/specs\//i.test(p)) || mdFiles.find((p) => /^docs\//i.test(p)) || mdFiles[0];
+  if (preferredFile) return preferredFile;
+  const reply = String(detail.lastReply || '');
+  const m = /(?:^|[\s`(["'])(docs\/[^\s`)"']+\.md|[^\s`)"']*spec[^\s`)"']*\.md)/i.exec(reply);
+  return m ? toRel(m[1]) : '';
+}
+
 function readStoredWidth(key: string, fallback: number, min: number, max: number): number {
   try {
     const n = Number(localStorage.getItem(key));
@@ -119,6 +151,7 @@ export function App() {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatPrompt, setNewChatPrompt] = useState('');
   const [newChatLocked, setNewChatLocked] = useState(false);
+  const newChatCreatedRef = useRef(false);
 
   // Gaveta lateral direita com detalhes de uso da assinatura de IA
   const [quotaProvider, setQuotaProvider] = useState<QuotaProvider | null>(null);
@@ -209,11 +242,24 @@ export function App() {
     });
   }, []);
 
+  const handleSessionSwitched = useCallback((fromId: string, toId: string) => {
+    if (!fromId || !toId) return;
+    setRunningCardExec((cur) => (cur && matchesSessionId(cur.sessionId, fromId) ? { ...cur, sessionId: toId } : cur));
+  }, []);
+
+  useEffect(() => {
+    setPendingCardExec((cur) => (cur && (!selection || selection.kind !== 'entity' || cur.entityId !== selection.id) ? null : cur));
+  }, [selection]);
+
   useEffect(() => {
     if (!runningCardExec || !snap) return;
     const all = [...(snap.active || []), ...(snap.recent || [])];
-    const s = all.find((x) => x.id === runningCardExec.sessionId);
+    const s = all.find((x) => matchesSessionId(runningCardExec.sessionId, x.id));
     if (!s) return;
+
+    if (s.id !== runningCardExec.sessionId) {
+      setRunningCardExec((prev) => (prev ? { ...prev, sessionId: s.id } : null));
+    }
 
     if (s.state === 'working') {
       if (!runningCardExec.seenWorking) {
@@ -225,68 +271,84 @@ export function App() {
     const finishedAfterStart = (s.end || 0) > runningCardExec.startedAt - 1000;
     if ((runningCardExec.seenWorking || finishedAfterStart) && (s.state === 'waiting' || s.state === 'idle')) {
       const exec = runningCardExec;
+      const resolvedSessId = s.id;
       setRunningCardExec(null);
       if (!exec.nextStatus) return;
 
       (async () => {
         try {
-          const detail = await api.getSession(exec.sessionId).catch(() => null);
+          const detail = await api.getSession(resolvedSessId).catch(() => null);
           const b = await api.getProjectBoard(exec.entityId);
           if (!b.content || b.offlineFallback) return;
           const target = b.content.items.find((it) => it.id === exec.itemId);
-          if (!target || (target.status || 'idea') !== exec.currentStatus) return;
+          if (!target) return;
 
-          const gate = evaluateStageAdvance({
-            currentStatus: exec.currentStatus,
-            nextStatus: exec.nextStatus,
-            detail,
-            target,
-          });
-          if (!gate.ok) {
-            notify(`"${exec.title}" mantido na etapa atual: ${gate.reason}`);
-            return;
+          const curStatus = (target.status || 'idea');
+          const alreadyAdvanced = curStatus === exec.nextStatus;
+          if (!alreadyAdvanced && curStatus !== exec.currentStatus) return;
+
+          const ent = (ws?.entities || []).find((x) => x.id === exec.entityId);
+          const bnd = ent?.projectBindings?.[0];
+
+          if (!alreadyAdvanced) {
+            const gate = evaluateStageAdvance({
+              currentStatus: exec.currentStatus,
+              nextStatus: exec.nextStatus,
+              detail,
+              target,
+            });
+            if (!gate.ok) {
+              notify(`"${exec.title}" mantido na etapa atual: ${gate.reason}`);
+              return;
+            }
+
+            const inferredDocRef = exec.currentStatus === 'idea' && exec.nextStatus === 'spec' && !target.docRef
+              ? inferSpecDocRef(detail, bnd?.cwd || '')
+              : '';
+
+            const nextCard = {
+              ...b.content,
+              items: b.content.items.map((it) => (
+                it.id === exec.itemId
+                  ? {
+                      ...it,
+                      status: exec.nextStatus!,
+                      ...(inferredDocRef ? { docRef: inferredDocRef } : {}),
+                      updatedAt: Date.now(),
+                    }
+                  : it
+              )),
+            };
+            await api.saveProjectBoard({ entityId: exec.entityId, content: nextCard, baseHash: b.hash });
+            if (exec.nextStatus === 'done' && target.docRef) {
+              await api.syncDocCheckbox({ entityId: exec.entityId, docRef: target.docRef, title: target.title, done: true }).catch(() => {});
+            }
           }
 
-          const nextCard = {
-            ...b.content,
-            items: b.content.items.map((it) => (
-              it.id === exec.itemId
-                ? { ...it, status: exec.nextStatus!, updatedAt: Date.now() }
-                : it
-            )),
-          };
-          await api.saveProjectBoard({ entityId: exec.entityId, content: nextCard, baseHash: b.hash });
-          if (exec.nextStatus === 'done' && target.docRef) {
-            await api.syncDocCheckbox({ entityId: exec.entityId, docRef: target.docRef, title: target.title, done: true }).catch(() => {});
-          }
           if (exec.nextStatus === 'done') {
             setLastAutoDone({ entityId: exec.entityId, itemId: exec.itemId, title: exec.title, ts: Date.now() });
           }
-          if (exec.nextStatus === 'review') {
-            const ent = (ws?.entities || []).find((x) => x.id === exec.entityId);
-            const bnd = ent?.projectBindings?.[0];
-            if (bnd?.cwd) {
-              api.getRunConfig(bnd.cwd, bnd.machine || '')
-                .then(async (cfg) => {
-                  if (cfg.source === 'saved') return;
-                  notify('Sem Play configurado — configurando .ai-workspace/run.json via IA e validando boot…');
-                  const r = await api.autoConfigureRun({ cwd: bnd.cwd, machine: bnd.machine || '', project: ent?.title });
-                  if (r.configured) setRunConfigVersion((v) => v + 1);
-                  if (r.bootOk) {
-                    notify('Play configurado via IA e validado: projeto subiu sem erros!');
-                  } else {
-                    notify(`Play salvo, mas houve erro ao validar boot: ${r.bootError || 'verifique os logs'}`, true);
-                  }
-                })
-                .catch(() => {});
-            }
+          if (exec.nextStatus === 'review' && bnd?.cwd) {
+            api.getRunConfig(bnd.cwd, bnd.machine || '')
+              .then(async (cfg) => {
+                if (cfg.source === 'saved') return;
+                notify('Sem Play configurado — configurando .ai-workspace/run.json via IA e validando boot…');
+                const r = await api.autoConfigureRun({ cwd: bnd.cwd, machine: bnd.machine || '', project: ent?.title });
+                if (r.configured) setRunConfigVersion((v) => v + 1);
+                if (r.bootOk) {
+                  notify('Play configurado via IA e validado: projeto subiu sem erros!');
+                } else {
+                  notify(`Play salvo, mas houve erro ao validar boot: ${r.bootError || 'verifique os logs'}`, true);
+                }
+              })
+              .catch(() => {});
           }
           setBoardReloadKey((k) => k + 1);
           notify(`"${exec.title}" movido automaticamente para ${exec.nextLabel}.`);
         } catch {}
       })();
     }
-  }, [runningCardExec, snap, notify]);
+  }, [runningCardExec, snap, ws, notify]);
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -674,8 +736,9 @@ export function App() {
       let tip = '';
 
       for (const s of allSess) {
+        if (binding?.machine && s.machine && binding.machine !== s.machine) continue;
         const p = (s.project || '').toLowerCase();
-        const match = (folder && (p === folder || p.includes(folder))) || (p && title.includes(p));
+        const match = folder ? (p === folder || p.includes(folder)) : (!!p && title.includes(p));
         if (!match) continue;
         if (s.state === 'working') {
           kind = 'working';
@@ -1378,9 +1441,11 @@ export function App() {
           pendingCardExec={pendingCardExec}
           onCancelCardExec={() => setPendingCardExec(null)}
           onCardExecAttached={attachCardExecToSession}
-          onOpenNewSession={(initial) => {
+          onSessionSwitched={handleSessionSwitched}
+          onOpenNewSession={(initial, lockToProject) => {
+            newChatCreatedRef.current = false;
             setNewChatPrompt(initial || '');
-            setNewChatLocked(false);
+            setNewChatLocked(Boolean(lockToProject && selectedEntity && activeBinding));
             setNewChatOpen(true);
           }}
           onNotify={notify}
@@ -1481,7 +1546,10 @@ export function App() {
         <Suspense fallback={null}>
           <NewSessionDrawer
             open={newChatOpen}
-            onClose={() => setNewChatOpen(false)}
+            onClose={() => {
+              setNewChatOpen(false);
+              if (!newChatCreatedRef.current) setPendingCardExec(null);
+            }}
             defaultBinding={activeBinding}
             lockedProject={
               newChatLocked && selectedEntity
@@ -1496,6 +1564,7 @@ export function App() {
             snapshot={snap}
             initialPrompt={newChatPrompt}
             onCreated={(newSessionId, meta) => {
+              newChatCreatedRef.current = true;
               if (newSessionId) {
                 setPendingLaunch(null);
                 setFocusSessionId(newSessionId);

@@ -351,6 +351,7 @@ export function CardEditor({
   const baseHashRef = useRef('');
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
+  const queuedSaveRef = useRef<{ card: CardDoc; silentToast: boolean } | null>(null);
   const modalOpenRef = useRef(false);
   const editRevRef = useRef(0);
   const boardKeyRef = useRef('');
@@ -616,9 +617,15 @@ export function CardEditor({
     } catch {}
   }
 
-  async function save(cardOverride?: CardDoc, silentToast = false) {
+  async function save(cardOverride?: CardDoc, silentToast = false): Promise<boolean> {
     const targetCard = cardOverride || card;
-    if (!targetCard || savingRef.current || offlineFallback) return false;
+    if (!targetCard || offlineFallback) return false;
+    if (savingRef.current) {
+      if (cardOverride) {
+        queuedSaveRef.current = { card: cardOverride, silentToast };
+      }
+      return false;
+    }
     const sentKey = boardKeyRef.current;
     const sentRev = editRevRef.current;
     savingRef.current = true;
@@ -655,6 +662,11 @@ export function CardEditor({
     } finally {
       savingRef.current = false;
       setSaving(false);
+      const queued = queuedSaveRef.current;
+      if (queued && boardKeyRef.current === sentKey) {
+        queuedSaveRef.current = null;
+        window.setTimeout(() => { save(queued.card, queued.silentToast); }, 0);
+      }
     }
   }
 
@@ -938,21 +950,23 @@ export function CardEditor({
   }
 
   async function handleCreateSpecForItem(item: CardItem) {
-    if (!hasProjectCwd || !card) return;
+    if (!hasProjectCwd || !card || offlineFallback) return;
+    const cleanTitle = item.title.trim();
+    if (!cleanTitle) return onNotify('Informe o título do item antes de criar a spec.', true);
     try {
       const r = await api.createProjectSpec({
         entityId,
-        title: item.title,
+        title: cleanTitle,
         summary: item.body || '',
       });
-      const updatedItem: CardItem = { ...item, docRef: r.path, status: 'spec', updatedAt: Date.now() };
+      const updatedItem: CardItem = { ...item, title: cleanTitle, docRef: r.path, status: 'spec', updatedAt: Date.now() };
       const nextCard: CardDoc = {
         ...card,
         items: card.items.some((it) => it.id === item.id)
           ? card.items.map((it) => (it.id === item.id ? updatedItem : it))
           : [updatedItem, ...card.items],
       };
-      setCard(nextCard);
+      updateCard(nextCard);
       await save(nextCard, true);
       setDetailModal(null);
       onNotify(`Spec criada em ${r.path}`);
@@ -1137,7 +1151,7 @@ export function CardEditor({
       const slug = normCommitText(item.title).replace(/\s+/g, '-').slice(0, 48) || 'spec';
       const targetDoc = docClean || `docs/specs/${slug}.md`;
       return [
-        `[EGM · Ideia → Spec] Tarefa: "${item.title}"`,
+        `[EGM · Ideia → Spec] Tarefa: "${item.title}" (id: \`${item.id}\`)`,
         specLine,
         bodyLine,
         `Regras Elephant-Goldfish (fase Elefante / Spec-First):`,
@@ -1145,13 +1159,13 @@ export function CardEditor({
         `2. Leia apenas os arquivos relevantes do projeto para entender o contexto real.`,
         `3. ${subagentRoutingLine}`,
         `4. Crie ou atualize uma especificação enxuta em \`${targetDoc}\` com: Objetivo, Escopo, Fora de escopo, Arquivos impactados e Critérios de aceite objetivos.`,
-        `5. Ao concluir, atualize este item no \`.ai-workspace/board.card.json\` (ou via MCP \`board_update_status\`) com \`docRef: "${targetDoc}"\`.`,
+        `5. Ao concluir, atualize este item (\`id: "${item.id}"\`) no \`.ai-workspace/board.card.json\` (ou via MCP \`board_update_status\`) para \`status: "spec"\` com \`docRef: "${targetDoc}"\`.`,
       ].filter(Boolean).join('\n\n');
     }
 
     if (st === 'spec') {
       return [
-        `[EGM · Spec → Em andamento] Tarefa: "${item.title}"`,
+        `[EGM · Spec → Em andamento] Tarefa: "${item.title}" (id: \`${item.id}\`)`,
         specLine,
         reviewLine,
         bodyLine,
@@ -1168,7 +1182,7 @@ export function CardEditor({
 
     if (st === 'in-progress') {
       return [
-        `[EGM · Em andamento → Revisão] Tarefa: "${item.title}"`,
+        `[EGM · Em andamento → Revisão] Tarefa: "${item.title}" (id: \`${item.id}\`)`,
         specLine,
         reviewLine,
         bodyLine,
@@ -1183,7 +1197,7 @@ export function CardEditor({
 
     if (st === 'review') {
       return [
-        `[EGM · Revisão → Concluído (Goldfish)] Tarefa: "${item.title}"`,
+        `[EGM · Revisão → Concluído (Goldfish)] Tarefa: "${item.title}" (id: \`${item.id}\`)`,
         specLine,
         bodyLine,
         `Regras Elephant-Goldfish (Modo Goldfish — Revisão fria e aceite):`,
@@ -1191,6 +1205,7 @@ export function CardEditor({
         `2. ${subagentRoutingLine}`,
         `3. Procure apenas bugs concretos, regressões, edge-cases, segurança ou falta de testes; corrija pendências críticas se houver.`,
         `4. Confirme que \`.ai-workspace/run.json\` está configurado e que o projeto sobe como um todo sem erros, e que os testes/build passam 100%${docClean ? ` (sincronizando \`- [x]\` em \`${docClean}\`)` : ''}.`,
+        `5. Ao aprovar, atualize o item \`id: "${item.id}"\` para \`status: "done"\` via MCP \`board_update_status\` (se disponível) ou deixe o resumo final claro.`,
       ].filter(Boolean).join('\n\n');
     }
 
@@ -1198,6 +1213,10 @@ export function CardEditor({
   }
 
   function triggerExecute(item: CardItem) {
+    if (offlineFallback) {
+      onNotify('Máquina do projeto offline — não é possível executar tarefas agora.', true);
+      return;
+    }
     const prompt = buildExecutePrompt(item);
     const curSt = (item.status || 'idea') as CardStatus;
     const nxt = nextWorkflowStatus(curSt);
@@ -1214,6 +1233,31 @@ export function CardEditor({
     } else {
       onSendPrompt(prompt);
     }
+  }
+
+  async function executeFromModal() {
+    if (!card || !detailModal || offlineFallback) return;
+    const cleanTitle = detailModal.draft.title.trim();
+    if (!cleanTitle) return onNotify('Informe o título do item antes de enviar à IA.', true);
+    const stamped: CardItem = {
+      ...detailModal.draft,
+      title: cleanTitle,
+      status: detailModal.draft.status || 'idea',
+      updatedAt: Date.now(),
+    };
+    const prev = card.items.find((i) => i.id === stamped.id);
+    const changed = detailModal.isNew || !prev || JSON.stringify(prev) !== JSON.stringify({ ...stamped, updatedAt: prev.updatedAt });
+    if (changed) {
+      const nextItems = detailModal.isNew
+        ? [stamped, ...card.items]
+        : card.items.map((it) => (it.id === stamped.id ? stamped : it));
+      const nextCard: CardDoc = { ...card, items: nextItems };
+      updateCard(nextCard);
+      const ok = await save(nextCard, true);
+      if (!ok) return;
+    }
+    setDetailModal(null);
+    triggerExecute(stamped);
   }
 
   // Card limpo no Board (detalhes completos e edição abrem no modal ao clicar)
@@ -1334,7 +1378,8 @@ export function CardEditor({
             <button
               className="btn btn-sm"
               style={{ padding: '3px 7px', fontSize: 11 }}
-              title={EGM_STAGE_GUIDE[st]?.actionTip || 'Avançar tarefa com IA'}
+              disabled={offlineFallback}
+              title={offlineFallback ? 'Máquina do projeto offline' : (EGM_STAGE_GUIDE[st]?.actionTip || 'Avançar tarefa com IA')}
               onClick={() => triggerExecute(item)}
             >
               {renderStageActionIcon(st, 11)} {EGM_STAGE_GUIDE[st]?.actionLabel || 'Avançar'}
@@ -1343,7 +1388,8 @@ export function CardEditor({
               <button
                 className="btn btn-sm"
                 style={{ padding: '3px 7px', fontSize: 11 }}
-                title="Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)"
+                disabled={offlineFallback}
+                title={offlineFallback ? 'Máquina do projeto offline' : 'Criar especificação enxuta (docs/specs/) e mover para Spec (0 tokens)'}
                 onClick={() => handleCreateSpecForItem(item)}
               >
                 <FilePlus2 size={11} /> Spec
@@ -1353,9 +1399,9 @@ export function CardEditor({
               <button
                 className="btn btn-sm"
                 style={{ padding: '3px 7px', fontSize: 11 }}
-                title="Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)"
+                title={offlineFallback ? 'Máquina do projeto offline' : 'Revisão Goldfish isolada desta spec (mostra estimativa de tokens antes)'}
                 onClick={() => requestItemReview(item)}
-                disabled={reviewRunning}
+                disabled={reviewRunning || offlineFallback}
               >
                 🐟 Revisar
               </button>
@@ -1509,15 +1555,12 @@ export function CardEditor({
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                {!detailModal.isNew && modalStage !== 'done' && (
+                {modalStage !== 'done' && (
                   <button
                     className="btn btn-sm btn-primary"
-                    title={EGM_STAGE_GUIDE[modalStage]?.actionTip}
-                    onClick={() => {
-                      const item = detailModal.draft;
-                      setDetailModal(null);
-                      triggerExecute(item);
-                    }}
+                    disabled={saving || offlineFallback || !detailModal.draft.title.trim()}
+                    title={offlineFallback ? 'Máquina do projeto offline' : EGM_STAGE_GUIDE[modalStage]?.actionTip}
+                    onClick={executeFromModal}
                   >
                     {renderStageActionIcon(modalStage, 12)} {EGM_STAGE_GUIDE[modalStage]?.modalActionLabel || 'Avançar'}
                   </button>

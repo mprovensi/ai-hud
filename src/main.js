@@ -21,6 +21,8 @@ const { createReplyQueue, replyKey } = require('./actions/reply/claude-queue');
 const { createReplies } = require('./actions/reply');
 const { createSessionLauncher } = require('./actions/spawn');
 const { createHandoff } = require('./actions/handoff');
+const { createSharedSessions } = require('./actions/shared-sessions');
+const { resolveWorkspaceRoot } = require('./infra/workspace-paths');
 const { createProjectPins } = require('./actions/projects');
 const { createSessionMeta } = require('./actions/session-meta');
 const { createUpload } = require('./actions/upload');
@@ -158,7 +160,7 @@ function createApp({
   const launch = createSessionLauncher({ claudeExe, codexExe, agyExe, spawn,
     ollamaCreate: (model, text, url) => sources.ollamaCreate && sources.ollamaCreate(model, text, url),
     ollamaUrl: () => ollama.url, running });
-  const handoff = createHandoff({ dataDir, launch });
+  const handoff = createHandoff({ dataDir, launch, sharedSessions: createSharedSessions({ workspaceRoot: resolveWorkspaceRoot(dataDir, config) }) });
   const setProjectPin = createProjectPins({ config, saveConfig });
   const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });

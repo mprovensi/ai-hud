@@ -138,6 +138,12 @@ test('MCP memory-server: initialize, tools/list, memory_search, memory_read com 
     'board_read',
     'board_update_status',
     'board_add_item',
+    'session_create',
+    'session_read',
+    'session_update',
+    'session_handoff',
+    'session_link',
+    'session_publish',
   ]);
 
   const search = handleRpc({ id: 3, method: 'tools/call', params: { name: 'memory_search', arguments: { query: 'VAPID' } } }, ws);

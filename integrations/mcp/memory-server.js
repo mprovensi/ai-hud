@@ -10,9 +10,12 @@
 // - board_read(cwd, status?): lê visão compacta de <cwd>/.ai-workspace/board.card.json (baixo custo de tokens).
 // - board_update_status(cwd, updates, syncDocs?): atualiza status de tarefas no board com backup e sync `- [x]` em docs/.
 // - board_add_item(cwd, title, ...): adiciona novo item válido ao board com backup prévio.
+// - session_create/read/update/handoff/link/publish: sessão compartilhada entre IAs em
+//   <cwd>/.ai-workspace/sessions/<id>.json (independente da IA) e publicação na memória do projeto.
 
 const fs = require('fs');
 const path = require('path');
+const { createSharedSessions } = require('../../src/actions/shared-sessions');
 
 function resolveWorkspaceRoot() {
   if (process.env.AI_WORKSPACE_ROOT) return path.resolve(process.env.AI_WORKSPACE_ROOT);
@@ -421,7 +424,115 @@ const TOOLS = [
       required: ['cwd', 'title'],
     },
   },
+  {
+    name: 'session_create',
+    description: 'Cria uma sessão compartilhada entre IAs (independente da IA) em <cwd>/.ai-workspace/sessions/<id>.json. Use no início de um trabalho que pode trocar de IA.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Caminho absoluto da pasta do projeto' },
+        goal: { type: 'string', description: 'Objetivo da sessão' },
+        tool: { type: 'string', description: 'IA que cria a sessão (ex.: Claude Code, Codex, Gemini)' },
+        model: { type: 'string' },
+        nativeSessionId: { type: 'string', description: 'Id da sessão nativa da IA (opcional)' },
+      },
+      required: ['cwd', 'tool'],
+    },
+  },
+  {
+    name: 'session_read',
+    description: 'Sem id: lista as sessões compartilhadas do projeto. Com id: devolve o registro e o pacote de handoff (Markdown compacto) para continuar ou importar o contexto dela.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string' },
+        id: { type: 'string', description: 'Id da sessão (s-...)' },
+        status: { type: 'string', enum: ['active', 'closed'], description: 'Filtro da listagem' },
+      },
+      required: ['cwd'],
+    },
+  },
+  {
+    name: 'session_update',
+    description: 'Atualiza a sessão compartilhada (resumo, arquivos, decisões, pendências, nota na linha do tempo). Passe expectedRev para detectar escrita concorrente de outra IA.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string' },
+        id: { type: 'string' },
+        tool: { type: 'string', description: 'IA que está escrevendo' },
+        expectedRev: { type: 'integer', description: 'Rev lida por último; recusa com conflito se outra IA escreveu antes' },
+        summary: { type: 'string', description: 'Estado atual (substitui o anterior)' },
+        goal: { type: 'string' },
+        addFiles: { type: 'array', items: { type: 'string' } },
+        addDecisions: { type: 'array', items: { type: 'string' } },
+        addPending: { type: 'array', items: { type: 'string' } },
+        resolvePending: { type: 'array', items: { type: 'string' } },
+        note: { type: 'string', description: 'Evento curto para a linha do tempo' },
+        status: { type: 'string', enum: ['active', 'closed'] },
+      },
+      required: ['cwd', 'id', 'tool'],
+    },
+  },
+  {
+    name: 'session_handoff',
+    description: 'Troca a IA que conduz a sessão: registra o handoff na linha do tempo e devolve o pacote de handoff para iniciar a nova IA.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string' },
+        id: { type: 'string' },
+        fromTool: { type: 'string' },
+        toTool: { type: 'string' },
+        toModel: { type: 'string' },
+        note: { type: 'string', description: 'Instrução para a próxima IA' },
+        expectedRev: { type: 'integer' },
+      },
+      required: ['cwd', 'id', 'toTool'],
+    },
+  },
+  {
+    name: 'session_link',
+    description: 'Vincula duas sessões do mesmo projeto (nos dois sentidos) e devolve o pacote da outra sessão para importar o contexto dela.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string' },
+        id: { type: 'string' },
+        otherId: { type: 'string' },
+        note: { type: 'string' },
+        tool: { type: 'string' },
+      },
+      required: ['cwd', 'id', 'otherId'],
+    },
+  },
+  {
+    name: 'session_publish',
+    description: 'Publica um fato durável na memória compartilhada do projeto (decision → decisions.md, pitfall → pitfalls.md, episodic → sessions/). Segredos são mascarados. Outras sessões encontram via memory_search.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string' },
+        id: { type: 'string', description: 'Id da sessão de origem (opcional)' },
+        kind: { type: 'string', enum: ['decision', 'pitfall', 'episodic'] },
+        text: { type: 'string' },
+        tool: { type: 'string' },
+      },
+      required: ['cwd', 'kind', 'text'],
+    },
+  },
 ];
+
+function callSessionTool(name, args, wsRoot) {
+  const store = createSharedSessions({ workspaceRoot: wsRoot });
+  if (name === 'session_create') return store.create(args);
+  if (name === 'session_read') return args.id ? store.read(args) : store.list(args);
+  if (name === 'session_update') return store.update(args);
+  if (name === 'session_handoff') return store.handoff(args);
+  if (name === 'session_link') return store.link(args);
+  if (name === 'session_publish') return store.publish(args);
+  return null;
+}
 
 function handleRpc(msg, wsRoot) {
   const { id, method, params = {} } = msg || {};
@@ -442,14 +553,15 @@ function handleRpc(msg, wsRoot) {
   if (method === 'tools/call') {
     const name = params.name;
     const args = params.arguments || {};
-    let out;
+    let out = null;
     if (name === 'memory_search') out = searchMemory(wsRoot, args);
     else if (name === 'memory_read') out = readMemoryFile(wsRoot, args);
     else if (name === 'workspace_list') out = listWorkspace(wsRoot);
     else if (name === 'board_read') out = readBoardCompact(args);
     else if (name === 'board_update_status') out = updateBoardStatus(args);
     else if (name === 'board_add_item') out = addBoardItem(args);
-    else return { jsonrpc: '2.0', id, error: { code: -32601, message: `Ferramenta desconhecida: ${name}` } };
+    else if (String(name || '').startsWith('session_')) out = callSessionTool(name, args, wsRoot);
+    if (!out) return { jsonrpc: '2.0', id, error: { code: -32601, message: `Ferramenta desconhecida: ${name}` } };
 
     return {
       jsonrpc: '2.0',

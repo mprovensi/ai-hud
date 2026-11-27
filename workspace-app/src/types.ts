@@ -327,7 +327,10 @@ export interface MachineCaps {
   pinned?: string[];
   strictRemoteCwd?: boolean;
   cwds: string[];
-  tools: Record<string, { models: { id: string; label: string }[] }>;
+  tools: Record<string, {
+    models: { id: string; label: string }[];
+    auth?: { ok: boolean; reason?: string; loginCmd?: string };
+  }>;
 }
 
 export interface FsEntry {

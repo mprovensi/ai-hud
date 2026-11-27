@@ -9,9 +9,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="AI Workspace" />
     <link rel="manifest" href="/workspace/manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
-    <link rel="apple-touch-startup-image" href="/icon-512.png" />
-    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/workspace/icon-180.png" />
+    <link rel="apple-touch-startup-image" href="/workspace/icon-512.png" />
+    <link rel="icon" type="image/png" href="/workspace/favicon.png" />
     <style>
       #wsSplash {
         position: fixed; inset: 0; z-index: 9999;
@@ -21,7 +21,10 @@
         transition: opacity .26s ease;
       }
       #wsSplash.hide { opacity: 0; pointer-events: none; }
-      #wsSplash .sp-logo { width: 72px; height: 52px; margin-bottom: 14px; }
+      #wsSplash .sp-logo {
+        width: 72px; height: 72px; border-radius: 16px; margin-bottom: 14px;
+        box-shadow: 0 10px 28px rgba(95, 184, 164, .22);
+      }
       #wsSplash .sp-title { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
       #wsSplash .sp-sub { font-size: 12.5px; color: #8c94a6; margin-top: 6px; }
       #wsSplash .sp-track {
@@ -38,11 +41,7 @@
   </head>
   <body>
     <div id="wsSplash" aria-hidden="true">
-      <svg class="sp-logo" viewBox="96 150 320 228" aria-hidden="true">
-        <rect x="96" y="150" width="320" height="56" rx="28" fill="#23262f"/><rect x="96" y="150" width="230" height="56" rx="28" fill="#e08a66"/>
-        <rect x="96" y="236" width="320" height="56" rx="28" fill="#23262f"/><rect x="96" y="236" width="170" height="56" rx="28" fill="#5fb8a4"/>
-        <rect x="96" y="322" width="320" height="56" rx="28" fill="#23262f"/><rect x="96" y="322" width="115" height="56" rx="28" fill="#b39ddb"/>
-      </svg>
+      <img class="sp-logo" src="/workspace/icon-192.png" alt="" width="72" height="72" />
       <div class="sp-title">AI Workspace</div>
       <div class="sp-sub">Carregando projetos e sessões…</div>
       <div class="sp-track"><div class="sp-bar"></div></div>

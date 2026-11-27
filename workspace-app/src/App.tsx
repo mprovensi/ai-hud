@@ -108,8 +108,8 @@ export function App() {
   const [dragSb, setDragSb] = useState<{ kind: 'group'; name: string } | { kind: 'entity'; id: string } | null>(null);
   const [dragOverSb, setDragOverSb] = useState<{ kind: 'group'; name: string } | { kind: 'entity'; id: string } | null>(null);
 
-  // Englobadores colapsáveis na sidebar
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  // Workspaces iniciam colapsados na sidebar; usuário expande os que desejar ver
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
 
   // Gaveta lateral direita em altura total para Nova Conversa
@@ -691,7 +691,7 @@ export function App() {
     <div className="ws-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setSelection(null)} title="Voltar para a tela inicial do AI Workspace">
-          <span className="brand-dot" />
+          <img src="/workspace/favicon.png" alt="" width={20} height={20} style={{ borderRadius: 5, flexShrink: 0 }} />
           AI Workspace
         </button>
         <a className="pill-link" href={withToken('/')}>
@@ -789,7 +789,8 @@ export function App() {
           <div className="sb-scroll">
             {/* Workspaces e projetos com drag-and-drop para reordenar e destaque de mudanças recentes */}
             {groupedSections.map((sec) => {
-              const isCol = !!collapsedGroups[sec.name || '__ungrouped'];
+              const secKey = sec.name || '__ungrouped';
+              const isCol = !search.trim() && !expandedGroups[secKey];
               const isGroupDragOver = dragOverSb?.kind === 'group' && dragOverSb.name === sec.name;
               const isGroupDragging = dragSb?.kind === 'group' && dragSb.name === sec.name;
               return (
@@ -835,7 +836,7 @@ export function App() {
                   >
                     <button
                       style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit' }}
-                      onClick={() => setCollapsedGroups((prev) => ({ ...prev, [sec.name || '__ungrouped']: !prev[sec.name || '__ungrouped'] }))}
+                      onClick={() => setExpandedGroups((prev) => ({ ...prev, [secKey]: !prev[secKey] }))}
                     >
                       {isCol ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                       <Layers size={12} color="var(--accent)" style={{ flexShrink: 0 }} />
@@ -1311,6 +1312,7 @@ export function App() {
             onProjectSaved={async (entity, isEdit) => {
               await loadWorkspace();
               if (!isEdit) {
+                setExpandedGroups((prev) => ({ ...prev, [entity.group || '__ungrouped']: true }));
                 setSelection({ kind: 'entity', id: entity.id });
                 setEntityTab('step');
                 setStepIdx(0);

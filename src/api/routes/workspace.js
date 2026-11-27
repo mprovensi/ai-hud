@@ -103,6 +103,14 @@ module.exports = ({ dataDir, config, collector, peers, machineName, workspace, w
       return r.status !== 200 ? json(res, { ok: false, error: r.error, ...(r.currentSha256 ? { currentSha256: r.currentSha256 } : {}) }, r.status) : json(res, r.body);
     } },
 
+    { method: 'POST', path: '/api/workspace/peer-sync/session-meta', json: true, maxBytes: 512 * 1024, handler: ({ res, body }) => {
+      if (!workspacePeerSync || typeof workspacePeerSync.importSessionMeta !== 'function') {
+        return text(res, 501, 'Peer-sync indisponível.');
+      }
+      const r = workspacePeerSync.importSessionMeta(body && body.entries ? body.entries : {});
+      return json(res, r);
+    } },
+
     { method: 'POST', path: '/api/workspace/entity', json: true, maxBytes: 128 * 1024, handler: ({ res, body }) => {
       const r = workspace.createEntity(body);
       return typeof r.body === 'string' ? text(res, r.status, r.body) : json(res, r.body, r.status);

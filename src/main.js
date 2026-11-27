@@ -178,7 +178,15 @@ function createApp({
   const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });
   const workspaceSync = createWorkspaceSync({ dataDir, config, log });
-  const workspacePeerSync = createWorkspacePeerSync({ dataDir, config, peers, machineName, log });
+  const workspacePeerSync = createWorkspacePeerSync({
+    dataDir,
+    config,
+    peers,
+    machineName,
+    sessionMeta,
+    onSessionMetaChanged: () => collector.poke(),
+    log,
+  });
   const workspaceWorkflow = createWorkspaceWorkflow({
     dataDir, config, quotas, ollama, claudeExe, codexExe, agyExe, exec, runModel: dreamRunModel, log,
   });

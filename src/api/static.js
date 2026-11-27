@@ -86,14 +86,21 @@ function createStatic({ webDir, webAssets, workspaceDistDir = '', send, brands =
       send(res, 200, 'image/png', fs.readFileSync(iconFile(webDir, 'icon-180.png')));
       return true;
     }
-    // Estáticos compilados do AI Workspace (`/workspace/assets/*`, `/workspace/manifest.json`)
-    if (workspaceDistDir && (p === '/workspace/manifest.json' || p.startsWith('/workspace/assets/'))) {
+    // Estáticos públicos do AI Workspace (`/workspace/assets/*`, manifest e ícones)
+    const wsPublic = p === '/workspace/manifest.json'
+      || p === '/workspace/favicon.png'
+      || p === '/workspace/icon-180.png'
+      || p === '/workspace/icon-192.png'
+      || p === '/workspace/icon-512.png';
+    if (workspaceDistDir && (wsPublic || p.startsWith('/workspace/assets/'))) {
       const rel = p.slice('/workspace/'.length);
       if (isSafeRelativePath(rel)) {
         const file = path.resolve(workspaceDistDir, rel);
         if (isWithinRoot(workspaceDistDir, file) && fs.existsSync(file) && fs.statSync(file).isFile()) {
           const ext = path.extname(file).toLowerCase();
-          const headers = p.startsWith('/workspace/assets/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};
+          const headers = p.startsWith('/workspace/assets/')
+            ? { 'Cache-Control': 'public, max-age=31536000, immutable' }
+            : ext === '.png' ? day : {};
           send(res, 200, WS_MIME[ext] || 'application/octet-stream', fs.readFileSync(file), headers);
           return true;
         }

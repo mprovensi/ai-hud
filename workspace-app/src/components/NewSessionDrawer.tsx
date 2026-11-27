@@ -176,7 +176,9 @@ export function NewSessionDrawer({
         <label>{lockedProject ? '1. Inteligência Artificial' : '3. Inteligência Artificial'}</label>
         <div className="ai-grid">
           {AI_META.map((ai) => {
-            const avail = !currentMachine || !!currentMachine.tools?.[ai.id];
+            const tCap = currentMachine?.tools?.[ai.id];
+            const avail = !currentMachine || !!tCap;
+            const loggedOut = !!(tCap?.auth && tCap.auth.ok === false);
             const q = ai.quotaKey ? snapshot?.quotas?.[ai.quotaKey] : undefined;
             const w5 = q?.windows?.five_hour || q?.windows?.pro;
             const w7 = q?.windows?.seven_day || q?.windows?.daily;
@@ -185,18 +187,25 @@ export function NewSessionDrawer({
                 key={ai.id}
                 className={`ai-tile ${tool === ai.id ? 'active' : ''}`}
                 disabled={!avail}
+                title={
+                  loggedOut
+                    ? `${ai.label} deslogado em ${currentMachine?.name || 'esta máquina'} (${tCap?.auth?.reason || 'login necessário'}). Execute: ${tCap?.auth?.loginCmd || 'login'}`
+                    : undefined
+                }
                 onClick={() => setTool(ai.id)}
               >
                 <div className="ds-row" style={{ gap: 7 }}>
                   <ToolIcon tool={ai.id} size={13} />
                   <strong style={{ fontSize: 13 }}>{ai.label}</strong>
                 </div>
-                <div style={{ fontSize: 11.5, color: 'var(--ds-muted)' }}>
+                <div style={{ fontSize: 11.5, color: loggedOut ? '#f0b86e' : 'var(--ds-muted)' }}>
                   {!avail
                     ? 'Indisponível nesta máquina'
-                    : w5 && typeof w5.used === 'number'
-                      ? <><b>{Math.round(w5.used)}%</b>{w7 && typeof w7.used === 'number' ? ` • ${Math.round(w7.used)}%` : ''}</>
-                      : 'Pronta para uso'}
+                    : loggedOut
+                      ? `⚠ Deslogado${tCap?.auth?.loginCmd ? ` (${tCap.auth.loginCmd})` : ''}`
+                      : w5 && typeof w5.used === 'number'
+                        ? <><b>{Math.round(w5.used)}%</b>{w7 && typeof w7.used === 'number' ? ` • ${Math.round(w7.used)}%` : ''}</>
+                        : 'Pronta para uso'}
                 </div>
               </button>
             );

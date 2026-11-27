@@ -11,6 +11,10 @@ const {
   planWorkspaceSync,
 } = require('../core/workspace-sync');
 const {
+  toCanonicalMetaMap,
+  planSessionMetaMerge,
+} = require('../core/session-meta-sync');
+const {
   resolveWorkspaceRoot,
   resolveSafeContainedTarget,
   writeAtomicWithBackup,
@@ -191,6 +195,8 @@ function createWorkspacePeerSync({
   config,
   peers,
   machineName = '',
+  sessionMeta = null,
+  onSessionMetaChanged = null,
   callPeer = call,
   now = () => Date.now(),
   log = () => {},
@@ -203,10 +209,84 @@ function createWorkspacePeerSync({
   let primaryOnline = null;
   let timer = null;
   let startupTimer = null;
+  let metaSyncTimer = null;
   let stopped = false;
 
   const wsRoot = () => resolveWorkspaceRoot(dataDir, config);
   const statePath = () => path.join(wsRoot(), '.ai-workspace', 'peer-sync-state.json');
+
+  function peerMaps() {
+    const peerNamesByIndex = {};
+    const peerIndexByName = {};
+    const list = (peers && Array.isArray(peers.list) && peers.list) || [];
+    for (const p of list) {
+      if (p && typeof p.i === 'number' && p.name) {
+        peerNamesByIndex[p.i] = p.name;
+        peerIndexByName[p.name] = p.i;
+      }
+    }
+    return { peerNamesByIndex, peerIndexByName };
+  }
+
+  function exportSessionMeta() {
+    if (!sessionMeta || typeof sessionMeta.rawAll !== 'function') {
+      return { ok: true, machine: machineName, entries: {} };
+    }
+    const { peerNamesByIndex } = peerMaps();
+    return {
+      ok: true,
+      machine: machineName,
+      entries: toCanonicalMetaMap(sessionMeta.rawAll(), { machineName, peerNamesByIndex, now: now() }),
+    };
+  }
+
+  function importSessionMeta(remoteEntries) {
+    if (!sessionMeta || typeof sessionMeta.rawAll !== 'function' || typeof sessionMeta.applyUpdates !== 'function') {
+      return { ok: true, applied: 0, entries: {} };
+    }
+    const { peerIndexByName, peerNamesByIndex } = peerMaps();
+    const updates = planSessionMetaMerge(sessionMeta.rawAll(), remoteEntries || {}, { machineName, peerIndexByName });
+    const applied = sessionMeta.applyUpdates(updates);
+    if (applied > 0 && typeof onSessionMetaChanged === 'function') {
+      try { onSessionMetaChanged(); } catch {}
+    }
+    return {
+      ok: true,
+      applied,
+      entries: toCanonicalMetaMap(sessionMeta.rawAll(), { machineName, peerNamesByIndex, now: now() }),
+    };
+  }
+
+  async function syncSessionMeta(peerOverride = null) {
+    if (!sessionMeta || typeof sessionMeta.rawAll !== 'function') return { ok: true, pulled: 0, pushed: 0 };
+    const peer = peerOverride || getPrimaryPeer();
+    if (!peer) return { ok: false, skipped: true };
+    try {
+      const localExport = exportSessionMeta();
+      const res = await callPeer(peer, 'POST', '/api/workspace/peer-sync/session-meta', {
+        machine: machineName,
+        entries: localExport.entries,
+      }, 10000);
+      if (!res || res.status !== 200 || !res.json || !res.json.entries) {
+        return { ok: false, status: (res && res.status) || 0 };
+      }
+      const imported = importSessionMeta(res.json.entries);
+      return { ok: true, pulled: imported.applied, pushed: Number(res.json.applied) || 0 };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  function scheduleSessionMetaSync() {
+    if (stopped || !sessionMeta) return;
+    if (!getPrimaryPeer()) return;
+    if (metaSyncTimer) clearTimeout(metaSyncTimer);
+    metaSyncTimer = setTimeout(() => {
+      metaSyncTimer = null;
+      if (!stopped) syncSessionMeta().catch(() => {});
+    }, 1500);
+    if (metaSyncTimer.unref) metaSyncTimer.unref();
+  }
 
   function loadState(peerName) {
     try {
@@ -280,9 +360,18 @@ function createWorkspacePeerSync({
       const saved = loadState(peer.name);
 
       if (!force && saved.rootHash && saved.rootHash === localManifest.rootHash && saved.rootHash === remoteManifest.rootHash) {
+        const metaRes = await syncSessionMeta(peer);
         lastSyncAt = now();
         lastError = '';
-        lastSummary = { peer: peer.name, pulled: 0, pushed: 0, conflicts: 0, skipped: localManifest.count };
+        lastSummary = {
+          peer: peer.name,
+          pulled: 0,
+          pushed: 0,
+          conflicts: 0,
+          skipped: localManifest.count,
+          metaPulled: metaRes.pulled || 0,
+          metaPushed: metaRes.pushed || 0,
+        };
         return { status: 200, body: { ok: true, ...lastSummary, unchanged: true } };
       }
 
@@ -370,6 +459,8 @@ function createWorkspacePeerSync({
         });
       }
 
+      const metaRes = await syncSessionMeta(peer);
+
       lastSyncAt = now();
       lastError = errors.length ? errors.slice(0, 3).join('; ') : '';
       lastSummary = {
@@ -378,6 +469,8 @@ function createWorkspacePeerSync({
         pushed,
         conflicts: plan.conflicts.length,
         skipped: plan.skipped,
+        metaPulled: metaRes.pulled || 0,
+        metaPushed: metaRes.pushed || 0,
         errors,
       };
       if (pulled > 0 || pushed > 0) {
@@ -425,11 +518,16 @@ function createWorkspacePeerSync({
     stopped = true;
     if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
     if (timer) { clearInterval(timer); timer = null; }
+    if (metaSyncTimer) { clearTimeout(metaSyncTimer); metaSyncTimer = null; }
   }
 
   return {
     status,
     syncNow,
+    syncSessionMeta,
+    scheduleSessionMetaSync,
+    exportSessionMeta,
+    importSessionMeta,
     startAutoSync,
     stopAutoSync,
     notifyPeerOnline,

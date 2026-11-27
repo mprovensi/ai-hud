@@ -1434,7 +1434,9 @@ export function LiveHudPane({
                       </button>
                       {aiPickerOpen && (() => {
                         const selectedTool = pendingSwitch?.tool || activeDetail.tool;
-                        const selModels = sessionMachineCaps?.tools?.[selectedTool]?.models || [];
+                        const selCap = sessionMachineCaps?.tools?.[selectedTool];
+                        const selModels = selCap?.models || [];
+                        const selAuthWarn = selCap?.auth && selCap.auth.ok === false ? selCap.auth : null;
                         return (
                           <div className="chat-ai-popover">
                             <div className="chat-ai-pop-head">Trocar IA nesta conversa</div>
@@ -1442,13 +1444,20 @@ export function LiveHudPane({
                               const pct = toolQuotaPct(t);
                               const isCur = activeDetail.tool === t;
                               const isPicked = selectedTool === t;
-                              const avail = !sessionMachineCaps || !!sessionMachineCaps.tools?.[t];
+                              const tCap = sessionMachineCaps?.tools?.[t];
+                              const avail = !sessionMachineCaps || !!tCap;
+                              const loggedOut = !!(tCap?.auth && tCap.auth.ok === false);
                               return (
                                 <button
                                   key={t}
                                   type="button"
                                   className={`chat-ai-opt ${isPicked ? 'active' : ''}`}
                                   disabled={!avail}
+                                  title={
+                                    loggedOut
+                                      ? `${t} deslogado em ${sessionMachineCaps?.name || 'esta máquina'} (${tCap?.auth?.reason || 'login necessário'}). Execute: ${tCap?.auth?.loginCmd || 'login'}`
+                                      : undefined
+                                  }
                                   onClick={() => {
                                     if (isCur) {
                                       setPendingSwitch(null);
@@ -1462,14 +1471,26 @@ export function LiveHudPane({
                                   <span style={{ flex: 1, textAlign: 'left' }}>
                                     {t}{isCur ? ' (atual)' : ''}
                                   </span>
-                                  {pct !== null && (
+                                  {loggedOut ? (
+                                    <span className="badge perm" style={{ fontSize: 9.5, padding: '1px 5px' }}>
+                                      Deslogado
+                                    </span>
+                                  ) : pct !== null ? (
                                     <span className={`badge ${pct >= 98 ? 'perm' : ''}`} style={{ fontSize: 10, padding: '1px 5px' }}>
                                       {pct}%
                                     </span>
-                                  )}
+                                  ) : null}
                                 </button>
                               );
                             })}
+                            {selAuthWarn && (
+                              <div style={{ padding: '6px 9px', borderTop: '1px solid var(--border)', fontSize: 11, color: '#f0b86e', background: 'rgba(229, 192, 99, .08)', lineHeight: 1.4 }}>
+                                ⚠ <b>{selectedTool}</b> está deslogado em <b>{sessionMachineCaps?.name || 'esta máquina'}</b>.
+                                {selAuthWarn.loginCmd && (
+                                  <> Execute <code className="mono">{selAuthWarn.loginCmd}</code> no terminal antes de continuar.</>
+                                )}
+                              </div>
+                            )}
                             {pendingSwitch && selModels.length > 0 && (
                               <div style={{ padding: '6px 8px', borderTop: '1px solid var(--border)' }}>
                                 <select

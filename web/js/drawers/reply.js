@@ -49,6 +49,12 @@
             : (snap && snap.voiceStt ? '<input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" style="display:none"><button type="button" class="rtool mic" id="voiceSttBtn" aria-label="Ditar via Whisper local" title="Ditar via Whisper local">' + replyIcon('mic') + '</button>' : '')) +
           '<button type="button" class="qchips-btn' + (chipsOpen ? ' on' : '') + '" id="toggleChips" aria-expanded="' + (chipsOpen ? 'true' : 'false') + '">' +
             (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button>' +
+          (d.tool !== 'Ollama' ? '<select id="replyAiSel" class="rai-sel" aria-label="Trocar IA na próxima resposta" title="Trocar IA mantendo a mesma conversa">' +
+            '<option value="' + esc(d.tool === 'Antigravity' ? 'Gemini' : d.tool) + '" selected>' + esc(d.tool === 'Claude Code' ? 'Claude' : d.tool) + '</option>' +
+            (d.tool !== 'Claude Code' ? '<option value="Claude Code">↪ Claude</option>' : '') +
+            (d.tool !== 'Codex' ? '<option value="Codex">↪ Codex</option>' : '') +
+            (d.tool !== 'Gemini' && d.tool !== 'Antigravity' ? '<option value="Gemini">↪ Gemini</option>' : '') +
+            '<option value="Ollama">↪ Ollama</option></select>' : '') +
           '<span class="grow"></span>' +
           (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">na fila</span>') +
           '<button type="button" class="send" id="sendReply" aria-label="Enviar resposta" title="Enviar" disabled>' + replyIcon('arrowUp') + '</button>' +
@@ -153,7 +159,33 @@
     }
     $('sendReply').onclick = function () {
       var text = $('replyText').value.replace(/^\s+|\s+$/g, '');
-      if (text) sendReply(d, text);
+      if (!text) return;
+      var sel = $('replyAiSel');
+      var curNorm = d.tool === 'Antigravity' ? 'Gemini' : d.tool;
+      var chosenTool = sel ? sel.value : curNorm;
+      if (chosenTool && chosenTool !== curNorm) {
+        stopMic();
+        var btn = $('sendReply'), beforeIds = snapshotKnownIds();
+        if (btn) btn.disabled = true;
+        request('POST', '/api/handoff', function (err, r) {
+          if (err) { syncReplySendState(); return alert('Troca de IA falhou: ' + err.message); }
+          if ($('replyText')) { $('replyText').value = ''; $('replyText').blur(); }
+          syncReplySendState();
+          poll();
+          flash(chosenTool + ' assumiu a conversa.');
+          openPendingSessionDrawer({
+            id: r && r.id ? r.id : '',
+            tool: chosenTool,
+            machine: (r && r.machine) || d.machine || '',
+            cwd: d.cwd || '',
+            project: d.project || '',
+            prompt: text,
+            beforeIds: beforeIds,
+          });
+        }, { id: d.id, targetTool: chosenTool, note: text });
+        return;
+      }
+      sendReply(d, text);
     };
     if ($('cancelReply')) $('cancelReply').onclick = function () { sendReply(d, ''); };
     if ($('micReply')) $('micReply').onclick = toggleMic;

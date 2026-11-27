@@ -1,17 +1,26 @@
-// Handoff de conversa longa ("Resumir e continuar" na mesma IA ou Cross-IA).
-// Gera `# Handoff` sanitizado em `<dataDir>/workspace/inbox/handoffs/` e inicia a nova sessão.
-// Também registra a troca de IA na sessão compartilhada do projeto (`.ai-workspace/sessions/`).
+// Handoff de conversa longa ("Resumir e continuar" na mesma IA ou Cross-IA transparente).
+// Gera `# Handoff` sanitizado em `<dataDir>/workspace/inbox/handoffs/`, inicia a nova sessão,
+// registra a troca na sessão compartilhada (`.ai-workspace/sessions/`), herda metadados (pin/alias/grupo)
+// e vincula o novo UUID automaticamente mesmo quando a CLI demora > 4s para criar o arquivo.
 const fs = require('fs');
 const path = require('path');
 const { handoffFileName, buildHandoffMarkdown, buildHandoffPrompt } = require('../core/handoff');
 const { readGitBrief } = require('../collect/file-preview');
 const { createSharedSessions } = require('./shared-sessions');
 
+const PENDING_LINK_TTL_MS = 90 * 1000;
+
 function writeAtomic(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmp, content, 'utf8');
   fs.renameSync(tmp, filePath);
+}
+
+function normCwd(p) {
+  if (!p) return '';
+  const abs = path.resolve(String(p));
+  return process.platform === 'win32' ? abs.toLowerCase() : abs;
 }
 
 // Localiza (ou cria) a sessão compartilhada da sessão nativa e registra o handoff.
@@ -39,11 +48,74 @@ function recordSharedHandoff(store, session, { tool, targetModel, note }) {
   }
 }
 
-function createHandoff({ dataDir, launch, sharedSessions = null, readGit = readGitBrief, now = () => Date.now() } = {}) {
+function inheritSessionMeta(sessionMeta, fromId, toId) {
+  if (!sessionMeta || !fromId || !toId || fromId === toId) return;
+  try {
+    const prev = sessionMeta.get(fromId);
+    if (!prev) return;
+    if (!prev.pinned && !prev.alias && !prev.group) return;
+    const cur = sessionMeta.get(toId);
+    if (cur && (cur.pinned || cur.alias || cur.group)) return;
+    sessionMeta.set({
+      id: toId,
+      pinned: !!prev.pinned,
+      alias: prev.alias || '',
+      group: prev.group || '',
+    });
+  } catch {}
+}
+
+function createHandoff({
+  dataDir,
+  launch,
+  sharedSessions = null,
+  sessionMeta = null,
+  readGit = readGitBrief,
+  now = () => Date.now(),
+} = {}) {
   const store = sharedSessions || createSharedSessions({ workspaceRoot: path.join(dataDir, 'workspace'), now });
   const handoffsDir = path.join(dataDir, 'workspace', 'inbox', 'handoffs');
+  const pendingLinks = [];
 
-  return async function handoff({ session, targetTool = '', targetModel = '', note = '' }) {
+  function reconcile(sessions) {
+    if (!pendingLinks.length || !Array.isArray(sessions) || !sessions.length) return 0;
+    const ts = now();
+    let linked = 0;
+    for (let i = pendingLinks.length - 1; i >= 0; i--) {
+      const p = pendingLinks[i];
+      if (ts > p.expiresAt) {
+        pendingLinks.splice(i, 1);
+        continue;
+      }
+      const match = sessions.find((s) => {
+        if (!s || s.subagent || !s.id) return false;
+        if (p.knownIds.has(s.id)) return false;
+        const sTool = s.tool === 'Antigravity' ? 'Gemini' : s.tool;
+        if (sTool !== p.tool) return false;
+        if (p.cwdNorm && normCwd(s.cwd) !== p.cwdNorm) return false;
+        const started = Date.parse(s.start) || 0;
+        return started >= p.since - 10000;
+      });
+      if (!match) continue;
+      try {
+        store.update({ cwd: p.cwd, id: p.sharedId, tool: p.tool, addNative: String(match.id) });
+        inheritSessionMeta(sessionMeta, p.fromId, String(match.id));
+        linked += 1;
+      } catch {}
+      pendingLinks.splice(i, 1);
+    }
+    return linked;
+  }
+
+  async function handoff({
+    session,
+    targetTool = '',
+    targetModel = '',
+    note = '',
+    cardTitle = '',
+    docRef = '',
+    knownIds = null,
+  }) {
     if (!session) return { status: 404, body: 'sessão não encontrada' };
     const rawTool = String(targetTool || session.tool || '').trim();
     const tool = rawTool === 'Antigravity' ? 'Gemini' : rawTool;
@@ -58,6 +130,8 @@ function createHandoff({ dataDir, launch, sharedSessions = null, readGit = readG
       targetTool: tool,
       gitBranch: git.branch,
       gitStatus: git.status,
+      cardTitle,
+      docRef,
       now: ts,
     });
 
@@ -70,7 +144,7 @@ function createHandoff({ dataDir, launch, sharedSessions = null, readGit = readG
     }
 
     const shared = recordSharedHandoff(store, session, { tool, targetModel, note });
-    let prompt = buildHandoffPrompt({ filePath, session, note, targetTool: tool });
+    let prompt = buildHandoffPrompt({ filePath, session, note, targetTool: tool, cardTitle, docRef });
     if (shared) {
       // O launcher corta o prompt em 4000 caracteres: reserva espaço para a referência não ser truncada.
       const ref = `\n\nSessão compartilhada AI HUD: ${shared.id} (rev ${shared.rev}). Para atualizar o estado, use o MCP ai-hud-memory: session_read/session_update com cwd="${shared.cwd}" e id="${shared.id}".`;
@@ -86,9 +160,30 @@ function createHandoff({ dataDir, launch, sharedSessions = null, readGit = readG
     if (launched.status !== 200) {
       return launched;
     }
-    if (shared && launched.body && launched.body.id) {
-      try { store.update({ cwd: shared.cwd, id: shared.id, tool, addNative: String(launched.body.id) }); } catch {}
+
+    const newId = launched.body && launched.body.id ? String(launched.body.id) : '';
+    if (newId) {
+      if (shared) {
+        try { store.update({ cwd: shared.cwd, id: shared.id, tool, addNative: newId }); } catch {}
+      }
+      inheritSessionMeta(sessionMeta, session.id, newId);
+    } else if (shared) {
+      // CLI demorou > 4s para emitir UUID: reconcilia automaticamente assim que aparecer no collector
+      const idsSet = new Set(knownIds || []);
+      idsSet.add(session.id);
+      for (const n of shared.natives || []) idsSet.add(n);
+      pendingLinks.push({
+        cwd: shared.cwd,
+        cwdNorm: normCwd(shared.cwd),
+        sharedId: shared.id,
+        tool,
+        fromId: session.id,
+        since: ts,
+        expiresAt: ts + PENDING_LINK_TTL_MS,
+        knownIds: idsSet,
+      });
     }
+
     return {
       status: 200,
       body: {
@@ -99,7 +194,10 @@ function createHandoff({ dataDir, launch, sharedSessions = null, readGit = readG
         ...(shared ? { sharedSessionId: shared.id } : {}),
       },
     };
-  };
+  }
+
+  handoff.reconcile = reconcile;
+  return handoff;
 }
 
-module.exports = { createHandoff };
+module.exports = { createHandoff, inheritSessionMeta };

@@ -1,5 +1,6 @@
-// GET /api/session?id=: detalhe de uma sessão (deste PC ou repassado ao PC dono)
-module.exports = ({ collector, peers, detail, sessionMeta, running, machineName, json, text, send }) => {
+// GET /api/session?id=: detalhe de uma sessão (deste PC ou repassado ao PC dono).
+// Se `id` for uma sessão antiga já assumida por outra IA na mesma sessão compartilhada, resolve automaticamente para o driver ativo.
+module.exports = ({ collector, peers, detail, resolveActiveSession, sessionMeta, running, machineName, json, text, send }) => {
   const withMeta = (id, obj) => {
     const m = sessionMeta && sessionMeta.get(id);
     return m ? { ...obj, pinned: !!m.pinned, alias: m.alias || '', group: m.group || '' } : obj;
@@ -15,7 +16,10 @@ module.exports = ({ collector, peers, detail, sessionMeta, running, machineName,
           json(res, withMeta(canonicalId, { ...r.json, id: canonicalId, machine: remote.peer.name }));
         }, () => text(res, 502, `${remote.peer.name} não respondeu`));
       }
-      const s = collector.find((x) => !x.subagent && (x.id === id || x.id.endsWith('-' + id)));
+      let s = collector.find((x) => !x.subagent && (x.id === id || x.id.endsWith('-' + id)));
+      if (s && typeof resolveActiveSession === 'function') {
+        s = resolveActiveSession(s) || s;
+      }
       if (s) return json(res, withMeta(s.id, { ...detail(s, Date.now()), machine: machineName }));
       const err = running && running.lastError(id);
       if (err) return send(res, 502, 'text/plain; charset=utf-8', err);

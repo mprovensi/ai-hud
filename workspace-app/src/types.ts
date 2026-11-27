@@ -232,6 +232,8 @@ export interface SessionCard {
   pinned?: boolean;
   alias?: string;
   group?: string;
+  sharedSessionId?: string;
+  handoffChain?: string[];
 }
 
 export interface BurnSeries {
@@ -283,6 +285,25 @@ export interface Snapshot {
   machines?: { name: string; ok: boolean; error?: string }[];
 }
 
+export interface SessionHistoryMsg {
+  role: 'user' | 'assistant' | 'handoff';
+  content: string;
+  at?: number;
+  tool?: string;
+  fromTool?: string;
+  toTool?: string;
+  tools?: string[];
+}
+
+export interface QuotaHandoffSuggestion {
+  reason: 'quota-full' | 'rate-limit';
+  currentTool: string;
+  currentUsed: number | null;
+  suggestedTool: string;
+  suggestedUsed: number | null;
+  alternatives: { tool: string; used: number | null }[];
+}
+
 export interface SessionDetail extends SessionCard {
   cwd?: string;
   models?: string[];
@@ -291,8 +312,10 @@ export interface SessionDetail extends SessionCard {
   lastTool?: string;
   subagents?: number;
   permission?: { id: string; tool: string; summary?: string } | null;
-  history?: { role: 'user' | 'assistant'; content: string; at?: number; tools?: string[] }[] | null;
+  history?: SessionHistoryMsg[] | null;
   testRun?: { ok: boolean; command?: string; summary?: string; at?: number } | null;
+  sharedSession?: { id: string; rev: number; tools: string[]; nativesCount: number } | null;
+  quotaSuggestion?: QuotaHandoffSuggestion | null;
 }
 
 export interface MachineCaps {

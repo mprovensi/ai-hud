@@ -453,11 +453,20 @@
         (d.lastReplyAt ? '<span class="muted ctime">' + when(d.lastReplyAt) + '</span>' : '') + '</div>' +
         '<div class="convo lastreply" id="lastReply" tabindex="-1">';
       for (var i = 0; i < msgs.length; i++) {
-        var m = msgs[i], isMe = m.role === 'user';
+        var m = msgs[i];
+        if (m.role === 'handoff') {
+          html += '<div class="hdiv"><span>↪ ' + esc(m.toTool || 'Outra IA') + ' assumiu a conversa' +
+            (m.fromTool ? ' (' + esc(m.fromTool) + ' → ' + esc(m.toTool || '') + ')' : '') +
+            (m.at ? ' · ' + when(m.at) : '') + '</span></div>';
+          continue;
+        }
+        var isMe = m.role === 'user';
         if (!isMe && m.tools && m.tools.length) {
           html += '<div class="mtools">' + esc(formatToolSummary(m.tools)) + '</div>';
         }
-        html += '<div class="msg ' + (isMe ? 'me' : 'ai') + '">' +
+        var multiAi = !!(d.handoffChain && d.handoffChain.length > 1);
+        var aiBadge = (multiAi && !isMe && m.tool) ? '<div class="maitag">' + esc(m.tool) + '</div>' : '';
+        html += '<div class="msg ' + (isMe ? 'me' : 'ai') + '">' + aiBadge +
           (isMe ? '<div class="mtxt">' + esc(m.content) + '</div>' : '<div class="md">' + renderMd(m.content) + '</div>') +
           (m.at ? '<div class="mt">' + when(m.at) + '</div>' : '') + '</div>';
       }
@@ -518,6 +527,14 @@
 
     // ---- Aba Conversa ----
     html += '<div class="dtab-pane' + (onConvo ? ' active' : '') + '" id="paneConvo">';
+    if (d.quotaSuggestion && d.quotaSuggestion.suggestedTool && !handoffUi.open) {
+      var qs = d.quotaSuggestion;
+      html += '<div class="row ctxwarn qwarn"><span class="grow">⚠ Cota de <b>' + esc(qs.currentTool) + '</b>' +
+        (qs.currentUsed != null ? ' (' + qs.currentUsed + '%)' : ' no limite') +
+        ' · <b>' + esc(qs.suggestedTool) + '</b>' +
+        (qs.suggestedUsed != null ? ' (' + qs.suggestedUsed + '%)' : '') + ' livre</span>' +
+        '<button type="button" class="pcmini" id="quotaAssumeNow" data-qt="' + esc(qs.suggestedTool) + '">↪ Assumir agora</button></div>';
+    }
     if (pct >= 75 && d.tool !== 'Ollama' && !handoffUi.open) {
       html += '<div class="row ctxwarn"><span class="grow">Contexto em <b>' + pct + '%</b> — recomenda-se Handoff para manter qualidade</span>' +
         '<button type="button" class="pcmini" id="openHandoffBanner">↪ Handoff</button></div>';
@@ -762,6 +779,28 @@
       handoffUi.tool = handoffUi.tool || defaultHandoffTarget(d.tool);
       renderDetail(d);
     }
+    if ($('quotaAssumeNow')) $('quotaAssumeNow').onclick = function () {
+      var target = this.getAttribute('data-qt') || 'Codex';
+      var b = this, beforeIds = snapshotKnownIds();
+      b.disabled = true;
+      b.textContent = 'Assumindo…';
+      request('POST', '/api/handoff', function (err, r) {
+        b.disabled = false;
+        b.textContent = '↪ Assumir agora';
+        if (err) return flash('Falhou: ' + err.message, false);
+        poll();
+        flash(target + ' assumiu a conversa.');
+        openPendingSessionDrawer({
+          id: r && r.id ? r.id : '',
+          tool: target,
+          machine: (r && r.machine) || d.machine || '',
+          cwd: d.cwd || '',
+          project: d.project || '',
+          prompt: 'Assumindo conversa a partir do ponto de parada…',
+          beforeIds: beforeIds,
+        });
+      }, { id: d.id, targetTool: target, note: '' });
+    };
     if ($('openHandoffTop')) $('openHandoffTop').onclick = openHandoffPanel;
     if ($('openHandoffBanner')) $('openHandoffBanner').onclick = openHandoffPanel;
     if ($('openHandoff')) $('openHandoff').onclick = openHandoffPanel;

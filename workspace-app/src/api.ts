@@ -90,8 +90,8 @@ export const api = {
       body: JSON.stringify({ id }),
     }),
 
-  handoff: (body: { id: string; targetTool: string; note?: string }) =>
-    apiFetch<{ ok: boolean; id?: string; tool: string; machine?: string; handoffFile?: string }>('/api/handoff', {
+  handoff: (body: { id: string; targetTool: string; targetModel?: string; note?: string; cardTitle?: string; docRef?: string }) =>
+    apiFetch<{ ok: boolean; id?: string; tool: string; machine?: string; handoffFile?: string; sharedSessionId?: string }>('/api/handoff', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

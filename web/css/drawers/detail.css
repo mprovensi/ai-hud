@@ -165,6 +165,13 @@
 .send .ico { width: 18px; height: 18px; stroke-width: 2.4; display: block; }
 .send:active { background: #6ecab6; }
 .send:disabled { background: #242833; color: #666c7a; }
+.hdiv { text-align: center; margin: 10px 0; position: relative; }
+.hdiv span { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .74em;
+  background: #171d27; border: 1px solid #35544d; color: #5fb8a4; }
+.maitag { font-size: .72em; color: #8c94a6; margin-bottom: 3px; font-weight: 600; }
+.rai-sel { height: 28px; padding: 0 6px; margin-left: 6px; border-radius: 8px;
+  border: 1px solid #2e3240; background: #1a1c22; color: #cfd5e2; font-size: .76em; max-width: 98px; }
+.qwarn { border-color: #7a622a; background: #252016; }
 .mic.on { background: #4d2f2f; color: #f5b4b4; -webkit-animation: pulse 1.6s infinite; animation: pulse 1.6s infinite; }
 .substrip { font-size: .76em; color: #aeb6c7; background: #1a1c22; border: 1px solid #2e3240; border-radius: 9px;
   padding: 5px 10px; margin-bottom: 8px; }

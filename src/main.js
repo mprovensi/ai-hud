@@ -14,6 +14,7 @@ const { readFilePreview, listProjectFiles, readProjectGit } = require('./collect
 const { createQuotaTracker } = require('./collect/quotas/tracker');
 const { createFxTracker } = require('./collect/fx');
 const { Ollama } = require('./collect/ollama-status');
+const { createSharedSessionIndex } = require('./collect/shared-sessions');
 const { buildSnapshot } = require('./views/snapshot');
 const { buildSessionDetail } = require('./views/session-detail');
 const { createPendingStore } = require('./actions/pending');
@@ -119,16 +120,22 @@ function createApp({
   const machineName = config.name || os.hostname();
   const fx = createFxTracker({ dataDir, config });
   const peers = new Peers(config.peers, path.join(dataDir, 'peer-ollamas.json'), path.join(dataDir, 'peer-cache.json'));
+  const sharedSessionIndex = createSharedSessionIndex();
+  let lastSharedIndex = null;
+  let handoff = null;
 
   // Snapshot local (usado quando outro hub pede ?local=1, evitando loop de federação)
   function buildLocal(sessions, now) {
+    if (handoff && typeof handoff.reconcile === 'function') handoff.reconcile(sessions);
     if (quotas.expired(now) && quotas.sinceRefresh(now) > 60e3) quotas.refreshAll();
     // Releitura do log cria um objeto novo: reaplica o fim das sessões encerradas pelo HUD
     for (const s of sessions) if (!s.endedAt && closeFn.endedAt) s.endedAt = closeFn.endedAt(s.id);
+    lastSharedIndex = sharedSessionIndex.indexForSessions(sessions);
     return buildSnapshot({
       sessions, now, quotas, pendingInfo, remoteMode: permissions.remoteMode, ideListen,
       fxState: fx.view(), pricingOverrides: config.pricing || null,
       ollamaState: () => (showOllama ? ollama.state : null),
+      sharedIndex: lastSharedIndex,
     });
   }
   // Snapshot consolidado que os aparelhos recebem: este PC (views) + secundários (federation) + metadados (pin/alias/grupo)
@@ -161,7 +168,12 @@ function createApp({
   const launch = createSessionLauncher({ claudeExe, codexExe, agyExe, spawn,
     ollamaCreate: (model, text, url) => sources.ollamaCreate && sources.ollamaCreate(model, text, url),
     ollamaUrl: () => ollama.url, running });
-  const handoff = createHandoff({ dataDir, launch, sharedSessions: createSharedSessions({ workspaceRoot: resolveWorkspaceRoot(dataDir, config) }) });
+  handoff = createHandoff({
+    dataDir,
+    launch,
+    sharedSessions: createSharedSessions({ workspaceRoot: resolveWorkspaceRoot(dataDir, config) }),
+    sessionMeta,
+  });
   const setProjectPin = createProjectPins({ config, saveConfig });
   const uploadAttachment = createUpload({ dataDir, config });
   const workspace = createWorkspaceActions({ dataDir, config });
@@ -194,9 +206,28 @@ function createApp({
   const mcp = createMcpActions({ dataDir, config, machineName, log });
   const skills = createSkillsActions({ dataDir, config, machineName, log });
 
+  const getSharedIndex = () => {
+    if (!lastSharedIndex) {
+      try { lastSharedIndex = sharedSessionIndex.indexForSessions(collector.current().sessions); } catch {}
+    }
+    return lastSharedIndex;
+  };
+  const resolveActiveSession = (s) => {
+    const idx = getSharedIndex();
+    const headId = idx && idx.redirectToHead && idx.redirectToHead.get(s.id);
+    if (!headId || headId === s.id) return s;
+    return collector.find((x) => !x.subagent && x.id === headId) || s;
+  };
+
   // api
   const routes = createRoutes({
-    send, collector, appVersion: webAssets.version, detail: (s, now) => buildSessionDetail(s, now, pendingInfo),
+    send, collector, appVersion: webAssets.version,
+    resolveActiveSession,
+    detail: (s, now) => {
+      const idx = getSharedIndex();
+      const sharedCtx = (idx && idx.byNativeId && idx.byNativeId.get(s.id)) || null;
+      return buildSessionDetail(s, now, pendingInfo, { sharedCtx, quotas });
+    },
     reply, launch, handoff, setProjectPin, sessionMeta, uploadAttachment, workspace, workspaceSync, workspacePeerSync, workspaceWorkflow, memory, mcp, skills, push, voice, terminal, ptyManager, pickFolder, openVsCode, filePreview, fileList, projectGit, projectGitCommit, projectRunner,
     dataDir, config, capabilities, running, queue, permissions, getIdeListen, setIdeListen, focus, close: closeFn, peers, quotas, machineName,
   });

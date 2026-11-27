@@ -1,5 +1,7 @@
-// POST /api/handoff: gera `# Handoff` de uma sessão longa e inicia nova sessão na mesma IA ou Cross-IA.
-module.exports = ({ handoff, peers, collector, machineName, json, text }) => [
+// POST /api/handoff: gera `# Handoff` de uma sessão e inicia/assume na mesma IA ou Cross-IA de forma transparente.
+const { inheritSessionMeta } = require('../../actions/handoff');
+
+module.exports = ({ handoff, peers, collector, sessionMeta, machineName, json, text }) => [
   { method: 'POST', path: '/api/handoff', json: true, handler: async ({ res, body }) => {
     const id = String(body.id || '').trim();
     if (!id) return text(res, 400, 'sessão inválida');
@@ -11,22 +13,30 @@ module.exports = ({ handoff, peers, collector, machineName, json, text }) => [
           targetTool: body.targetTool,
           targetModel: body.targetModel,
           note: body.note,
+          cardTitle: body.cardTitle || '',
+          docRef: body.docRef || '',
         });
         if (r.status !== 200 || !r.json) return text(res, r.status || 502, r.text || `${remote.peer.name} não respondeu`);
         collector.poke();
         const prefixed = r.json.id ? `m${remote.peer.i}:${r.json.id}` : null;
+        if (prefixed) inheritSessionMeta(sessionMeta, id, prefixed);
         return json(res, { ...r.json, id: prefixed, machine: remote.peer.name });
       } catch {
         return text(res, 502, `${remote.peer.name} não respondeu`);
       }
     }
+    const cur = collector.current();
     const s = collector.find((x) => x.id === id && !x.subagent);
     if (!s) return text(res, 404, 'sessão não encontrada');
+    const knownIds = (cur && Array.isArray(cur.sessions)) ? cur.sessions.map((x) => x.id) : [];
     const r = await handoff({
       session: s,
       targetTool: body.targetTool,
       targetModel: body.targetModel,
       note: body.note,
+      cardTitle: body.cardTitle || '',
+      docRef: body.docRef || '',
+      knownIds,
     });
     if (r.status === 200) collector.poke();
     return typeof r.body === 'string'

@@ -1,6 +1,7 @@
 // /api/session: tudo o que a gaveta mostra ao tocar numa sessão. Mesmo contrato do snapshot: só acrescentar.
 const { sessionState, base } = require('../core/session');
 const { extractTextQuestions, suggestReplies } = require('../core/questions');
+const { stitchSharedHistory, detectQuotaHandoffSuggestion } = require('../core/handoff');
 
 function canReplyRemote(s) {
   if (s.where === 'ollama-run' || s.tool === 'Antigravity') return false;
@@ -42,24 +43,34 @@ function buildFilesList(files, cwd) {
   return [...map.entries()].reverse().slice(0, 12);
 }
 
-function buildSessionDetail(s, now, pendingInfo) {
+function buildSessionDetail(s, now, pendingInfo, { sharedCtx = null, quotas = null } = {}) {
   const tools = Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const files = buildFilesList(s.files, s.cwd);
   const state = sessionState(s, now);
   const pending = pendingInfo(s, now);
-  const rawHistory = Array.isArray(s.history) && s.history.length
-    ? s.history.filter((m) => m && (m.role === 'user' || m.role === 'assistant')).slice(-20)
-        .map((m) => ({
-          role: m.role,
-          content: String(m.content || '').slice(0, 4000),
-          at: m.at || 0,
-          tools: Array.isArray(m.tools) && m.tools.length ? m.tools.slice(0, 6) : undefined,
-        }))
-    : null;
+  const hasChain = !!(sharedCtx && Array.isArray(sharedCtx.chain) && sharedCtx.chain.length > 1);
+  const rawHistory = hasChain
+    ? stitchSharedHistory({ chain: sharedCtx.chain, maxMessages: 45 })
+    : (Array.isArray(s.history) && s.history.length
+        ? s.history.filter((m) => m && (m.role === 'user' || m.role === 'assistant')).slice(-20)
+            .map((m) => ({
+              role: m.role,
+              content: String(m.content || '').slice(0, 4000),
+              at: m.at || 0,
+              tool: s.tool,
+              tools: Array.isArray(m.tools) && m.tools.length ? m.tools.slice(0, 6) : undefined,
+            }))
+        : null);
   const question = resolveQuestion(s, state, pending);
+  const firstSeg = hasChain ? sharedCtx.chain[0] : s;
+  const quotaSuggestion = detectQuotaHandoffSuggestion({
+    tool: s.tool,
+    lastReply: s.lastReply,
+    quotas: quotas && typeof quotas.view === 'function' ? quotas.view(now) : quotas,
+  });
   return {
-    tool: s.tool, id: s.id, title: s.title || s.firstPrompt, project: s.project || base(s.cwd) || '—', cwd: s.cwd,
-    models: [...s.models], start: Date.parse(s.start), end: Date.parse(s.end), state, now,
+    tool: s.tool, id: s.id, title: (firstSeg && (firstSeg.title || firstSeg.firstPrompt)) || s.title || s.firstPrompt, project: s.project || base(s.cwd) || '—', cwd: s.cwd,
+    models: [...s.models], start: Date.parse((firstSeg && firstSeg.start) || s.start), end: Date.parse(s.end), state, now,
     completedAt: s.completedAt || 0,
     ollamaGeneration: s.tool === 'Ollama' ? s.generation || null : undefined,
     input: s.input, output: s.output, cacheRead: s.cacheRead, cacheWrite: s.cacheWrite,
@@ -74,6 +85,16 @@ function buildSessionDetail(s, now, pendingInfo) {
     history: rawHistory,
     question,
     suggestions: suggestReplies({ lastReply: s.lastReply, state, testFailed: !!(s.testRun && !s.testRun.ok), hasQuestion: !!question }),
+    ...(sharedCtx ? {
+      sharedSession: {
+        id: sharedCtx.record.id,
+        rev: sharedCtx.record.rev,
+        tools: sharedCtx.tools,
+        nativesCount: sharedCtx.chain.length,
+      },
+      handoffChain: sharedCtx.tools,
+    } : {}),
+    ...(quotaSuggestion ? { quotaSuggestion } : {}),
   };
 }
 

@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Check,
   CheckCheck,
+  ChevronDown,
   Clock,
   Copy,
   Download,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { ToolIcon } from '../ui';
-import type { CardStatus, SessionCard, SessionDetail, Snapshot } from '../types';
+import type { CardStatus, MachineCaps, SessionCard, SessionDetail, SessionHistoryMsg, Snapshot } from '../types';
 
 const XtermPty = lazy(() => import('./XtermPty').then((m) => ({ default: m.XtermPty })));
 
@@ -184,10 +185,15 @@ export function LiveHudPane({
   const [dragOver, setDragOver] = useState(false);
   const [outgoing, setOutgoing] = useState<OutgoingMsg[]>([]);
 
-  // Handoff inline
+  // Handoff inline e troca transparente de IA no composer
   const [handoffOpen, setHandoffOpen] = useState(false);
   const [handoffTool, setHandoffTool] = useState('Claude Code');
+  const [handoffModel, setHandoffModel] = useState('');
   const [handoffNote, setHandoffNote] = useState('');
+  const [aiPickerOpen, setAiPickerOpen] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState<{ tool: string; model: string } | null>(null);
+  const [caps, setCaps] = useState<MachineCaps[] | null>(null);
+  const [dismissedQuotaFor, setDismissedQuotaFor] = useState('');
   const [skills, setSkills] = useState<{ cmd: string; name: string; description: string; prompt?: string; source: string }[]>([]);
 
   // Modo do PTY quando em aba Terminal: CLI nativa da sessão (resume) ou Shell na pasta
@@ -215,11 +221,72 @@ export function LiveHudPane({
     return api.getSession(targetId)
       .then((d) => {
         if (selectedIdRef.current !== targetId || selectionGenRef.current !== gen) return;
-        if (d && d.id && d.id !== targetId) return;
+        if (d && d.id && d.id !== targetId) {
+          // Redirecionamento transparente dentro da mesma sessão compartilhada (outra IA assumiu)
+          if (d.sharedSession) {
+            selectedIdRef.current = d.id;
+            setSelectedId(d.id);
+            setDetail(d);
+            return;
+          }
+          return;
+        }
         setDetail(d);
       })
       .catch(() => {});
   }
+
+  function ensureCapsLoaded() {
+    if (caps !== null) return;
+    api.getCapabilities().then((r) => setCaps(r.machines || [])).catch(() => setCaps([]));
+  }
+
+  const sessionMachineCaps = useMemo(() => {
+    if (!caps || !caps.length) return null;
+    const mName = activeDetail?.machine || binding?.machine || '';
+    return (mName && caps.find((m) => m.name === mName)) || caps.find((m) => m.online) || caps[0] || null;
+  }, [caps, activeDetail?.machine, binding?.machine]);
+
+  function toolQuotaPct(toolName: string): number | null {
+    const key = toolName === 'Claude Code' ? 'claude' : toolName === 'Codex' ? 'codex' : (toolName === 'Gemini' || toolName === 'Antigravity') ? 'gemini' : '';
+    if (!key || !snapshot?.quotas) return null;
+    const q = snapshot.quotas[key];
+    if (!q?.windows) return null;
+    const vals = Object.values(q.windows)
+      .map((w) => (w && typeof w.used === 'number' ? w.used : null))
+      .filter((v): v is number => v !== null);
+    return vals.length ? Math.round(Math.max(...vals)) : null;
+  }
+
+  // Detecta cota esgotada no backend OU localmente pelo snapshot mais recente
+  const quotaAlert = useMemo(() => {
+    if (!activeDetail || activeDetail.id === dismissedQuotaFor) return null;
+    if (activeDetail.quotaSuggestion && activeDetail.quotaSuggestion.suggestedTool) {
+      return activeDetail.quotaSuggestion;
+    }
+    const curNorm = activeDetail.tool === 'Antigravity' ? 'Gemini' : activeDetail.tool;
+    const curPct = toolQuotaPct(curNorm);
+    if (curPct === null || curPct < 98) return null;
+    const alts = ['Claude Code', 'Codex', 'Gemini', 'Ollama']
+      .filter((t) => t !== curNorm)
+      .map((t) => ({ tool: t, used: toolQuotaPct(t) }))
+      .filter((x) => x.used === null || x.used < 95)
+      .sort((a, b) => {
+        const ao = a.tool === 'Ollama' ? 1 : 0;
+        const bo = b.tool === 'Ollama' ? 1 : 0;
+        if (ao !== bo) return ao - bo;
+        return (a.used ?? 50) - (b.used ?? 50);
+      });
+    if (!alts.length) return null;
+    return {
+      reason: 'quota-full' as const,
+      currentTool: curNorm,
+      currentUsed: curPct,
+      suggestedTool: alts[0].tool,
+      suggestedUsed: alts[0].used,
+      alternatives: alts,
+    };
+  }, [activeDetail, snapshot?.quotas, dismissedQuotaFor]);
 
   // Item 4: Ao clicar em um projeto na barra esquerda, já alterna a lista de sessões para as do projeto;
   // ao voltar para a tela inicial (sem projeto), volta para "Todas".
@@ -267,10 +334,10 @@ export function LiveHudPane({
     fetchSessionDetail(selectedId, gen);
   }, [selectedId, snapshot?.version]);
 
-  const messages = useMemo(() => {
+  const messages = useMemo<SessionHistoryMsg[]>(() => {
     if (!activeDetail) return [];
     if (activeDetail.history && activeDetail.history.length) return activeDetail.history;
-    const out: { role: 'user' | 'assistant'; content: string; at?: number; tools?: string[] }[] = [];
+    const out: SessionHistoryMsg[] = [];
     if (activeDetail.lastPrompt) out.push({ role: 'user', content: activeDetail.lastPrompt });
     if (activeDetail.lastReply) out.push({ role: 'assistant', content: activeDetail.lastReply });
     return out;
@@ -317,11 +384,13 @@ export function LiveHudPane({
     return () => window.clearInterval(timer);
   }, [selectedId, viewMode, hasAwaitingDelivery, activeDetail?.state]);
 
-  // Limpa anexos e cache de skills ao trocar de sessão
+  // Limpa anexos, cache de skills e estado de troca ao trocar de sessão
   useEffect(() => {
     setPendingImgs([]);
     setDragOver(false);
     setSkills([]);
+    setPendingSwitch(null);
+    setAiPickerOpen(false);
   }, [selectedId]);
 
   // Rola automaticamente para a mensagem mais recente ao abrir sessão, enviar ou receber novas mensagens
@@ -440,12 +509,71 @@ export function LiveHudPane({
     }
   }
 
+  async function executeTransparentSwitch({
+    targetTool,
+    targetModel = '',
+    note = '',
+  }: {
+    targetTool: string;
+    targetModel?: string;
+    note?: string;
+  }) {
+    if (!activeDetail || sending) return;
+    const targetId = activeDetail.id;
+    setSending(true);
+    stickBottomRef.current = true;
+    try {
+      const r = await api.handoff({
+        id: targetId,
+        targetTool,
+        targetModel: targetModel || undefined,
+        note: note || undefined,
+        cardTitle: pendingCardExec?.title || undefined,
+      });
+      setHandoffOpen(false);
+      setHandoffNote('');
+      setPendingSwitch(null);
+      setAiPickerOpen(false);
+      const nextId = r.id || '';
+      if (nextId && pendingCardExec && onCardExecAttached) {
+        onCardExecAttached(nextId);
+      }
+      onNotify(`${r.tool} assumiu a conversa!`);
+      onPollNow();
+      if (nextId) {
+        // Transição suave na mesma janela: preserva o histórico atual enquanto o novo driver carrega
+        setDetail((prev) => (prev ? { ...prev, id: nextId, tool: r.tool, state: 'working' } : prev));
+        selectedIdRef.current = nextId;
+        setSelectedId(nextId);
+        const gen = selectionGenRef.current;
+        window.setTimeout(() => fetchSessionDetail(nextId, gen), 600);
+      }
+    } catch (e) {
+      onNotify((e as Error).message, true);
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function sendReply() {
     if (!activeDetail || sending || uploadingImgs) return;
     const cleanText = replyText.trim();
     if (!cleanText) return;
     const imgLines = readyImgs.map((img) => `[Imagem anexada: ${img.path}]`);
-    const promptSent = [...imgLines, ...(cleanText ? [cleanText] : [])].join('\n');
+    const promptSent = [...imgLines, cleanText].join('\n');
+
+    // Troca transparente (lazy switch): o usuário trocou a IA no seletor do input e enviou a mensagem
+    if (pendingSwitch && pendingSwitch.tool && pendingSwitch.tool !== activeDetail.tool) {
+      setReplyText('');
+      setPendingImgs([]);
+      await executeTransparentSwitch({
+        targetTool: pendingSwitch.tool,
+        targetModel: pendingSwitch.model,
+        note: promptSent,
+      });
+      return;
+    }
+
     const entry: OutgoingMsg = {
       localId: `out-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       sessionId: activeDetail.id,
@@ -471,21 +599,11 @@ export function LiveHudPane({
   }
 
   async function doHandoff() {
-    if (!activeDetail || sending) return;
-    const targetId = activeDetail.id;
-    setSending(true);
-    try {
-      const r = await api.handoff({ id: targetId, targetTool: handoffTool, note: handoffNote });
-      setHandoffOpen(false);
-      setHandoffNote('');
-      onNotify(`Handoff criado para ${r.tool}!`);
-      onPollNow();
-      if (r.id) setSelectedId(r.id);
-    } catch (e) {
-      onNotify((e as Error).message, true);
-    } finally {
-      setSending(false);
-    }
+    await executeTransparentSwitch({
+      targetTool: handoffTool,
+      targetModel: handoffModel,
+      note: handoffNote,
+    });
   }
 
   return (
@@ -581,6 +699,11 @@ export function LiveHudPane({
                     <ToolIcon tool={s.tool} size={12} />
                     {s.tool}
                   </span>
+                  {s.handoffChain && s.handoffChain.length > 1 && (
+                    <span className="badge" style={{ fontSize: 10, padding: '1px 5px' }} title={`Conversa contínua: ${s.handoffChain.join(' → ')}`}>
+                      {s.handoffChain.map((t) => (t === 'Claude Code' ? 'Claude' : t)).join(' → ')}
+                    </span>
+                  )}
                   {s.machine && <span>· {s.machine}</span>}
                   {!!s.contextWindow && s.contextWindow > 0 && <span>· ctx {Math.round(((s.context || 0) / s.contextWindow) * 100)}%</span>}
                 </div>
@@ -599,6 +722,11 @@ export function LiveHudPane({
           <div className="hud-chat-bar">
             <span className={`badge ${activeDetail.state}`}>{activeDetail.state}</span>
             <span className="badge" style={{ gap: 5 }}><ToolIcon tool={activeDetail.tool} size={11} /> {activeDetail.tool}</span>
+            {activeDetail.handoffChain && activeDetail.handoffChain.length > 1 && (
+              <span className="badge" style={{ fontSize: 10 }} title={`Histórico unificado: ${activeDetail.handoffChain.join(' → ')}`}>
+                {activeDetail.handoffChain.map((t) => (t === 'Claude Code' ? 'Claude' : t)).join(' → ')}
+              </span>
+            )}
             {activeDetail.machine && <span className="badge">{activeDetail.machine}</span>}
             {!!activeDetail.contextWindow && activeDetail.contextWindow > 0 && (
               <span className="badge">ctx {Math.round(((activeDetail.context || 0) / activeDetail.contextWindow) * 100)}%</span>
@@ -638,12 +766,15 @@ export function LiveHudPane({
               className="btn btn-sm"
               onClick={() => {
                 if (!handoffOpen) {
+                  ensureCapsLoaded();
                   const cur = activeDetail.tool === 'Antigravity' ? 'Gemini' : activeDetail.tool;
-                  setHandoffTool(cur === 'Gemini' ? 'Codex' : cur === 'Codex' ? 'Claude Code' : 'Codex');
+                  const next = quotaAlert?.suggestedTool || (cur === 'Gemini' ? 'Codex' : cur === 'Codex' ? 'Claude Code' : 'Codex');
+                  setHandoffTool(next);
+                  setHandoffModel('');
                 }
                 setHandoffOpen(!handoffOpen);
               }}
-              title="Transferir contexto e assumir esta sessão em outra IA (ex.: Gemini → Codex)"
+              title="Trocar IA mantendo a mesma conversa contínua (ex.: Gemini → Codex)"
             >
               <GitFork size={12} /> Trocar IA
             </button>
@@ -667,24 +798,52 @@ export function LiveHudPane({
           </div>
 
           {/* Handoff inline drawer */}
-          {handoffOpen && (
-            <div style={{ padding: 10, borderBottom: '1px solid var(--border)', background: '#161a22' }}>
-              <div style={{ fontSize: 11.5, color: 'var(--ds-muted)', marginBottom: 8, lineHeight: 1.45 }}>
-                Salva um <code># Handoff</code> (histórico, arquivos alterados e git) e vincula à sessão compartilhada para a nova IA assumir exatamente do ponto de parada.
+          {handoffOpen && (() => {
+            const targetModels = sessionMachineCaps?.tools?.[handoffTool]?.models || [];
+            return (
+              <div style={{ padding: 10, borderBottom: '1px solid var(--border)', background: '#161a22' }}>
+                <div style={{ fontSize: 11.5, color: 'var(--ds-muted)', marginBottom: 8, lineHeight: 1.45 }}>
+                  Mantém esta mesma conversa na tela, salva o resumo de contexto e troca a IA que responde a partir do ponto de parada.
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <div className="field" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
+                    <label>Nova IA</label>
+                    <select className="sel" value={handoffTool} onChange={(e) => { setHandoffTool(e.target.value); setHandoffModel(''); }}>
+                      {['Claude Code', 'Codex', 'Gemini', 'Ollama'].map((t) => {
+                        const pct = toolQuotaPct(t);
+                        return <option key={t} value={t}>{t}{pct !== null ? ` (${pct}%)` : ''}</option>;
+                      })}
+                    </select>
+                  </div>
+                  {targetModels.length > 0 && (
+                    <div className="field" style={{ flex: 1, minWidth: 150, marginBottom: 0 }}>
+                      <label>Modelo (opcional)</label>
+                      <select className="sel" value={handoffModel} onChange={(e) => setHandoffModel(e.target.value)}>
+                        <option value="">Padrão da CLI</option>
+                        {targetModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <textarea className="ta" rows={2} value={handoffNote} onChange={(e) => setHandoffNote(e.target.value)} placeholder="Instrução opcional (vazio = continuar exatamente de onde parou)…" />
+                <div className="card-actions">
+                  <button className="btn btn-sm btn-primary" disabled={sending} onClick={doHandoff}>Assumir agora com {handoffTool}</button>
+                  <button
+                    className="btn btn-sm"
+                    disabled={sending}
+                    onClick={() => {
+                      setPendingSwitch({ tool: handoffTool, model: handoffModel });
+                      setHandoffOpen(false);
+                    }}
+                    title="Não gasta turno extra: a troca acontece quando você enviar a próxima mensagem"
+                  >
+                    Trocar na próxima msg
+                  </button>
+                  <button className="btn btn-sm" onClick={() => setHandoffOpen(false)}>Cancelar</button>
+                </div>
               </div>
-              <div className="field">
-                <label>Continuar em (Cross-IA)</label>
-                <select className="sel" value={handoffTool} onChange={(e) => setHandoffTool(e.target.value)}>
-                  {['Claude Code', 'Codex', 'Gemini', 'Ollama'].map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <textarea className="ta" rows={2} value={handoffNote} onChange={(e) => setHandoffNote(e.target.value)} placeholder="Instrução opcional para a nova IA (ex.: continue a partir do erro nos testes)…" />
-              <div className="card-actions">
-                <button className="btn btn-sm btn-primary" disabled={sending} onClick={doHandoff}>Assumir com {handoffTool}</button>
-                <button className="btn btn-sm" onClick={() => setHandoffOpen(false)}>Cancelar</button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* MODE 1: CONVERSATION (Traditional AI Chat with fixed bottom input & auto-scroll) */}
           {viewMode === 'conversation' ? (
@@ -748,9 +907,35 @@ export function LiveHudPane({
                   ) : (
                     <>
                       {messages.map((m, i) => {
+                        if (m.role === 'handoff') {
+                          return (
+                            <div key={`ho-${i}`} className="handoff-divider" role="separator">
+                              <span className="handoff-divider-pill">
+                                <GitFork size={11} />
+                                <span>{m.toTool || 'Outra IA'} assumiu a conversa</span>
+                                {m.fromTool && <span style={{ opacity: 0.7 }}>({m.fromTool} → {m.toTool})</span>}
+                                {m.at ? <span style={{ opacity: 0.65 }}>· {fmtMsgTime(m.at)}</span> : null}
+                              </span>
+                            </div>
+                          );
+                        }
                         const userParsed = m.role === 'user' ? parseAttachedImages(m.content) : null;
+                        const multiAi = !!(activeDetail.sharedSession && activeDetail.sharedSession.tools.length > 1);
+                        const prevAssistantTool = (() => {
+                          for (let k = i - 1; k >= 0; k--) {
+                            if (messages[k].role === 'assistant') return messages[k].tool || '';
+                            if (messages[k].role === 'handoff') return '';
+                          }
+                          return '';
+                        })();
+                        const showAiTag = multiAi && m.role === 'assistant' && m.tool && m.tool !== prevAssistantTool;
                         return (
                           <div key={i} className={`msg ${m.role === 'user' ? 'me' : 'ai'}`}>
+                            {showAiTag && m.tool && (
+                              <div className="msg-ai-tag">
+                                <ToolIcon tool={m.tool} size={11} /> {m.tool}
+                              </div>
+                            )}
                             {m.role === 'assistant' && m.tools && m.tools.length > 0 && (
                               <div className="tool-pills">
                                 {m.tools.slice(0, 8).map((t, ti) => (
@@ -990,6 +1175,69 @@ export function LiveHudPane({
                   if (files.length) attachImageFiles(files);
                 }}
               >
+                {quotaAlert && !pendingSwitch && (
+                  <div className="quota-switch-bar">
+                    <span className="ell" style={{ flex: 1 }}>
+                      ⚠️ Cota de <b>{quotaAlert.currentTool}</b>{quotaAlert.currentUsed !== null ? ` (${quotaAlert.currentUsed}%)` : ' atingiu o limite'}
+                      {' · '}<b>{quotaAlert.suggestedTool}</b>{quotaAlert.suggestedUsed !== null ? ` (${quotaAlert.suggestedUsed}%)` : ''} livre
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      style={{ padding: '2px 8px', fontSize: 11 }}
+                      disabled={sending}
+                      onClick={() => executeTransparentSwitch({ targetTool: quotaAlert.suggestedTool })}
+                    >
+                      Assumir agora
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ padding: '2px 7px', fontSize: 11 }}
+                      disabled={sending}
+                      onClick={() => setPendingSwitch({ tool: quotaAlert.suggestedTool, model: '' })}
+                    >
+                      Próx. msg
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-icon"
+                      style={{ padding: 2, border: 0, background: 'transparent' }}
+                      title="Dispensar aviso"
+                      onClick={() => setDismissedQuotaFor(activeDetail.id)}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+                {pendingSwitch && (
+                  <div className="lazy-switch-bar">
+                    <GitFork size={12} color="var(--accent)" />
+                    <span className="ell" style={{ flex: 1 }}>
+                      Próxima mensagem assumida por <b>{pendingSwitch.tool}</b>
+                      {pendingSwitch.model ? <span className="mono" style={{ opacity: 0.8 }}> ({pendingSwitch.model})</span> : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ padding: '2px 7px', fontSize: 11 }}
+                      disabled={sending}
+                      onClick={() => executeTransparentSwitch({ targetTool: pendingSwitch.tool, targetModel: pendingSwitch.model })}
+                      title="Retomar imediatamente do ponto de parada sem escrever nova mensagem"
+                    >
+                      Continuar agora
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-icon"
+                      style={{ padding: 2, border: 0, background: 'transparent' }}
+                      title="Cancelar troca de IA"
+                      onClick={() => setPendingSwitch(null)}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
                 {pendingCardExec && pendingCardExec.nextStatus && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 8px', borderRadius: 7, background: 'rgba(95, 184, 164, .10)', border: '1px solid rgba(95, 184, 164, .35)', marginBottom: 4 }}>
                     <span className="ell" style={{ flex: 1 }}>
@@ -1086,7 +1334,95 @@ export function LiveHudPane({
                     placeholder="Responder… (Enter envia · Ctrl+V cola imagem · / skills)"
                   />
                   <div className="chat-composer-bar">
-                    <div className="chat-composer-tools">
+                    <div className="chat-composer-tools" style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        className={`chat-ai-pill ${pendingSwitch ? 'switching' : ''}`}
+                        onClick={() => {
+                          ensureCapsLoaded();
+                          setAiPickerOpen((v) => !v);
+                        }}
+                        title="Trocar IA nesta mesma conversa (próxima mensagem ou imediato)"
+                      >
+                        <ToolIcon tool={pendingSwitch?.tool || activeDetail.tool} size={12} />
+                        <span>{(pendingSwitch?.tool || activeDetail.tool) === 'Claude Code' ? 'Claude' : (pendingSwitch?.tool || activeDetail.tool)}</span>
+                        <ChevronDown size={11} />
+                      </button>
+                      {aiPickerOpen && (() => {
+                        const selectedTool = pendingSwitch?.tool || activeDetail.tool;
+                        const selModels = sessionMachineCaps?.tools?.[selectedTool]?.models || [];
+                        return (
+                          <div className="chat-ai-popover">
+                            <div className="chat-ai-pop-head">Trocar IA nesta conversa</div>
+                            {['Claude Code', 'Codex', 'Gemini', 'Ollama'].map((t) => {
+                              const pct = toolQuotaPct(t);
+                              const isCur = activeDetail.tool === t;
+                              const isPicked = selectedTool === t;
+                              const avail = !sessionMachineCaps || !!sessionMachineCaps.tools?.[t];
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  className={`chat-ai-opt ${isPicked ? 'active' : ''}`}
+                                  disabled={!avail}
+                                  onClick={() => {
+                                    if (isCur) {
+                                      setPendingSwitch(null);
+                                      setAiPickerOpen(false);
+                                    } else {
+                                      setPendingSwitch({ tool: t, model: '' });
+                                    }
+                                  }}
+                                >
+                                  <ToolIcon tool={t} size={12} />
+                                  <span style={{ flex: 1, textAlign: 'left' }}>
+                                    {t}{isCur ? ' (atual)' : ''}
+                                  </span>
+                                  {pct !== null && (
+                                    <span className={`badge ${pct >= 98 ? 'perm' : ''}`} style={{ fontSize: 10, padding: '1px 5px' }}>
+                                      {pct}%
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                            {pendingSwitch && selModels.length > 0 && (
+                              <div style={{ padding: '6px 8px', borderTop: '1px solid var(--border)' }}>
+                                <select
+                                  className="sel"
+                                  style={{ fontSize: 11.5, padding: '4px 6px' }}
+                                  value={pendingSwitch.model}
+                                  onChange={(e) => setPendingSwitch({ ...pendingSwitch, model: e.target.value })}
+                                >
+                                  <option value="">Modelo padrão ({pendingSwitch.tool})</option>
+                                  {selModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                                </select>
+                              </div>
+                            )}
+                            {pendingSwitch && (
+                              <div style={{ display: 'flex', gap: 6, padding: '6px 8px', borderTop: '1px solid var(--border)' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  style={{ flex: 1, fontSize: 11 }}
+                                  disabled={sending}
+                                  onClick={() => executeTransparentSwitch({ targetTool: pendingSwitch.tool, targetModel: pendingSwitch.model })}
+                                >
+                                  Continuar agora
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  style={{ fontSize: 11 }}
+                                  onClick={() => setAiPickerOpen(false)}
+                                >
+                                  Próx. msg
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <label className="chat-tool-btn" title="Anexar ou colar imagem (Ctrl+V)">
                         <Paperclip size={15} />
                         <input

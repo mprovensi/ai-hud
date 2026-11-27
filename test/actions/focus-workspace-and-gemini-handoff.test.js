@@ -104,6 +104,13 @@ test('POST /api/focus abre projeto + sessão vinculados direto no AI Workspace D
     token,
     pin: '12345678',
     ollama: false,
+    peers: [{
+      name: 'VPS-Oracle',
+      primary: true,
+      url: 'http://100.98.174.63:8787',
+      publicUrl: 'https://ai-hud-vps.tail2a765a.ts.net',
+      token: 'vps-tok-123',
+    }],
   }));
 
   const spawnedCalls = [];
@@ -165,6 +172,20 @@ test('POST /api/focus abre projeto + sessão vinculados direto no AI Workspace D
     assert.equal(opened.pathname, '/workspace');
     assert.equal(opened.searchParams.get('project'), entityId);
     assert.equal(opened.searchParams.get('session'), sessId);
+
+    // 3. Simula foco encaminhado a partir do iPad via VPN (hubOrigin = http://10.10.10.1:8787):
+    // deve usar a publicUrl do peer primário configurada no PC (https://ai-hud-vps.tail2a765a.ts.net)
+    const frIpad = await reqJson(baseUrl, token, 'POST', '/api/focus', {
+      id: sessId,
+      hubSessionId: `m0:${sessId}`,
+      hubOrigin: 'http://10.10.10.1:8787',
+    });
+    assert.equal(frIpad.status, 200);
+    const openedIpad = new URL(spawnedCalls[1].args[1]);
+    assert.equal(openedIpad.origin, 'https://ai-hud-vps.tail2a765a.ts.net');
+    assert.equal(openedIpad.searchParams.get('project'), entityId);
+    assert.equal(openedIpad.searchParams.get('session'), `m0:${sessId}`);
+    assert.equal(openedIpad.searchParams.get('t'), 'vps-tok-123');
   } finally {
     await new Promise((resolve) => app.server.close(resolve));
     fs.rmSync(dataDir, { recursive: true, force: true });

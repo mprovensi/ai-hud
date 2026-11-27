@@ -34,17 +34,24 @@ function resolveHubOrigin(req) {
 
 function buildWorkspaceFocusUrl({ entityId, sessionId, hubOrigin = '', hubSessionId = '', config = {} }) {
   const cleanOrigin = String(hubOrigin || '').trim().replace(/\/+$/, '');
-  const useRemoteHub = /^https?:\/\//i.test(cleanOrigin) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(cleanOrigin);
+  const primaryPeer = Array.isArray(config.peers)
+    ? config.peers.find((p) => p && p.primary === true && (p.publicUrl || p.url))
+    : null;
+  const fromRemoteHub = Boolean(hubSessionId)
+    || (/^https?:\/\//i.test(cleanOrigin) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(cleanOrigin));
+
   let base = '';
   let tok = '';
   let sid = sessionId;
 
-  if (useRemoteHub) {
-    base = cleanOrigin;
+  if (fromRemoteHub) {
+    // Prefere a URL do peer primário configurada NESTE PC (ex.: https://ai-hud-vps.tail2a765a.ts.net),
+    // pois o origin do aparelho remoto pode ser o IP interno da VPN do iPad (ex.: 10.10.10.1:8787) inacessível no Windows!
+    const configuredPrimary = primaryPeer
+      ? String(primaryPeer.publicUrl || primaryPeer.url || '').trim().replace(/\/+$/, '')
+      : '';
+    base = configuredPrimary || cleanOrigin;
     sid = hubSessionId || sessionId;
-    const primaryPeer = Array.isArray(config.peers)
-      ? config.peers.find((p) => p && p.primary === true && p.token)
-      : null;
     if (primaryPeer && primaryPeer.token) tok = String(primaryPeer.token).trim();
   } else {
     const port = Number(config.port) || 8787;

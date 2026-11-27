@@ -8,6 +8,20 @@ function cleanFsPath(p) {
   return String(p || '').trim().replace(/^\\\\\?\\/, '');
 }
 
+function sessionMentionsSharedId(s, sharedId) {
+  if (!s || !sharedId) return false;
+  if (String(s.firstPrompt || '').includes(sharedId)) return true;
+  if (String(s.title || '').includes(sharedId)) return true;
+  if (Array.isArray(s.history) && s.history.length) {
+    for (let i = 0; i < Math.min(3, s.history.length); i++) {
+      if (s.history[i] && s.history[i].role === 'user' && String(s.history[i].content || '').includes(sharedId)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function createSharedSessionIndex() {
   // Cache por diretório `<cwd>/.ai-workspace/sessions` invalidado por mtime do diretório + arquivos
   const dirCache = new Map();
@@ -78,10 +92,10 @@ function createSharedSessionIndex() {
             present.push(nid);
           }
         }
-        // Também anexa sessões cujo prompt inicial referencia explicitamente esta sessão compartilhada
+        // Também anexa sessões cujo prompt inicial (em history[0]/firstPrompt) referencia explicitamente esta sessão compartilhada
         // (recupera handoffs lentos de CLIs como `agy` mesmo após reinício do servidor)
         const extra = list
-          .filter((s) => !seen.has(s.id) && String(s.firstPrompt || s.title || '').includes(rec.id))
+          .filter((s) => !seen.has(s.id) && sessionMentionsSharedId(s, rec.id))
           .sort((a, b) => (Date.parse(a.start) || 0) - (Date.parse(b.start) || 0));
         for (const s of extra) {
           seen.add(s.id);

@@ -93,8 +93,9 @@ function createHandoff({
         if (p.knownIds.has(s.id)) return false;
         const sTool = s.tool === 'Antigravity' ? 'Gemini' : s.tool;
         if (sTool !== p.tool) return false;
-        // Se o primeiro prompt cita explicitamente o ID da sessão compartilhada, casa na hora (mesmo se cwd ainda não foi gravado pelo agy)
-        const fp = String(s.firstPrompt || s.title || '');
+        // Se o primeiro prompt (ou history[0]) cita explicitamente o ID da sessão compartilhada, casa na hora
+        const firstHist = (Array.isArray(s.history) && s.history[0] && s.history[0].content) || '';
+        const fp = `${s.firstPrompt || ''}\n${s.title || ''}\n${firstHist}`;
         if (p.sharedId && fp.includes(p.sharedId)) return true;
         if (p.cwdNorm && normCwd(s.cwd) !== p.cwdNorm) return false;
         const started = Date.parse(s.start) || 0;

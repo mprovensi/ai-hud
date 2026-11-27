@@ -29,7 +29,7 @@ import {
 import { api, withToken } from './api';
 import { evaluateStageAdvance } from './egmAdvance';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
-import { LiveHudPane, type CardExecIntent } from './components/LiveHudPane';
+import { LiveHudPane, type CardExecIntent, type PendingLaunchMeta } from './components/LiveHudPane';
 import type { ProjectDrawerMode } from './components/NewProjectDrawer';
 import { ProjectIcon } from './components/ProjectIcon';
 import { ProjectRunControl } from './components/ProjectRunControl';
@@ -100,6 +100,7 @@ export function App() {
     seenWorking: boolean;
   }) | null>(null);
   const [focusSessionId, setFocusSessionId] = useState('');
+  const [pendingLaunch, setPendingLaunch] = useState<PendingLaunchMeta | null>(null);
   const [syncSt, setSyncSt] = useState<WorkspaceSyncStatus | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
 
@@ -332,9 +333,16 @@ export function App() {
   // Long-polling do snapshot ao vivo do AI HUD
   const versionRef = useRef<string | undefined>(undefined);
   const pollNowRef = useRef<() => void>(() => {});
+  const triggerPollNow = useCallback(() => { pollNowRef.current(); }, []);
+  const consumeFocusSession = useCallback(() => { setFocusSessionId(''); }, []);
+  const consumePendingLaunch = useCallback((matchedId?: string) => {
+    setPendingLaunch(null);
+    if (matchedId) attachCardExecToSession(matchedId);
+  }, []);
   useEffect(() => {
     let alive = true;
     let retryTimer: number | null = null;
+    let quickInFlight = false;
     async function loop(immediate = false) {
       if (!alive) return;
       try {
@@ -352,8 +360,17 @@ export function App() {
       }
     }
     pollNowRef.current = () => {
-      if (retryTimer) window.clearTimeout(retryTimer);
-      loop(true);
+      if (!alive || quickInFlight) return;
+      quickInFlight = true;
+      api.getSnapshot(undefined)
+        .then((s) => {
+          if (!alive) return;
+          setSnap(s);
+          setOnline(true);
+          versionRef.current = s.version;
+        })
+        .catch(() => {})
+        .finally(() => { quickInFlight = false; });
     };
     loop(true);
     return () => {
@@ -1259,7 +1276,9 @@ export function App() {
           projectTitle={selectedEntity?.title}
           binding={activeBinding}
           focusSessionId={focusSessionId}
-          onFocusSessionConsumed={() => setFocusSessionId('')}
+          onFocusSessionConsumed={consumeFocusSession}
+          pendingLaunch={pendingLaunch}
+          onPendingLaunchConsumed={consumePendingLaunch}
           draftPrompt={draftPrompt}
           onDraftConsumed={() => setDraftPrompt('')}
           pendingCardExec={pendingCardExec}
@@ -1271,7 +1290,7 @@ export function App() {
             setNewChatOpen(true);
           }}
           onNotify={notify}
-          onPollNow={() => pollNowRef.current()}
+          onPollNow={triggerPollNow}
           width={rightW}
         />
       </div>
@@ -1381,12 +1400,16 @@ export function App() {
             entities={ws?.entities || []}
             snapshot={snap}
             initialPrompt={newChatPrompt}
-            onCreated={(newSessionId) => {
+            onCreated={(newSessionId, meta) => {
               if (newSessionId) {
+                setPendingLaunch(null);
                 setFocusSessionId(newSessionId);
                 attachCardExecToSession(newSessionId);
+              } else if (meta) {
+                const beforeIds = [...(snap?.active || []), ...(snap?.recent || [])].map((s) => s.id);
+                setPendingLaunch({ ...meta, beforeIds, startedAt: Date.now() });
               }
-              pollNowRef.current();
+              triggerPollNow();
             }}
             onNotify={notify}
           />

@@ -13,7 +13,7 @@ interface Props {
   entities: WorkspaceEntity[];
   snapshot: Snapshot | null;
   initialPrompt?: string;
-  onCreated: (sessionId?: string) => void;
+  onCreated: (sessionId?: string, meta?: { tool: string; machine: string; cwd: string }) => void;
   onNotify: (msg: string, err?: boolean) => void;
 }
 
@@ -101,7 +101,11 @@ export function NewSessionDrawer({
         prompt: cleanPrompt,
       });
       onNotify(`Sessão ${r.tool} iniciada${r.machine ? ` em ${r.machine}` : ''}!`);
-      onCreated(r.id);
+      onCreated(r.id || undefined, {
+        tool: r.tool || tool,
+        machine: r.machine || currentMachine?.name || '',
+        cwd: cwd.trim(),
+      });
       onClose();
     } catch (e) {
       onNotify((e as Error).message, true);

@@ -33,7 +33,7 @@ function extractIdFromJsonLine(line) {
 }
 
 // Dispara um CLI em segundo plano; opcionalmente espera até `waitMs` por um UUID (stdout JSON ou pasta nova)
-function launchCli({ exe, args, cwd, spawnFn, waitForId = null, waitMs = 4000, quickMs = 250, running = null, trackKey = '' }) {
+function launchCli({ exe, args, cwd, spawnFn, waitForId = null, waitMs = 8000, quickMs = 250, running = null, trackKey = '' }) {
   return new Promise((resolve, reject) => {
     if (!exe) return reject(new Error('CLI não encontrado neste PC.'));
     const child = spawnFn(exe, args, {

@@ -129,6 +129,24 @@ function imageFileName(raw: string): string {
   return clean.split('/').filter(Boolean).pop() || 'imagem.png';
 }
 
+function isCanonicalAlias(requestedId: string, resolvedId: string): boolean {
+  if (!requestedId || !resolvedId || requestedId === resolvedId) return false;
+  const reqPrefix = requestedId.match(/^(m\d+:)/)?.[1] || '';
+  const resPrefix = resolvedId.match(/^(m\d+:)/)?.[1] || '';
+  if (reqPrefix !== resPrefix) return false;
+  const reqBare = requestedId.slice(reqPrefix.length);
+  const resBare = resolvedId.slice(resPrefix.length);
+  return !!reqBare && resBare.endsWith('-' + reqBare);
+}
+
+export interface PendingLaunchMeta {
+  tool: string;
+  machine: string;
+  cwd: string;
+  beforeIds: string[];
+  startedAt: number;
+}
+
 interface Props {
   snapshot: Snapshot | null;
   projectId?: string;
@@ -136,6 +154,8 @@ interface Props {
   binding?: { machine: string; cwd: string } | null;
   focusSessionId?: string;
   onFocusSessionConsumed?: () => void;
+  pendingLaunch?: PendingLaunchMeta | null;
+  onPendingLaunchConsumed?: (sessionId?: string) => void;
   draftPrompt?: string;
   onDraftConsumed: () => void;
   pendingCardExec?: CardExecIntent | null;
@@ -163,6 +183,8 @@ export function LiveHudPane({
   binding,
   focusSessionId,
   onFocusSessionConsumed,
+  pendingLaunch = null,
+  onPendingLaunchConsumed,
   draftPrompt,
   onDraftConsumed,
   pendingCardExec = null,
@@ -222,8 +244,8 @@ export function LiveHudPane({
       .then((d) => {
         if (selectedIdRef.current !== targetId || selectionGenRef.current !== gen) return;
         if (d && d.id && d.id !== targetId) {
-          // Redirecionamento transparente dentro da mesma sessão compartilhada (outra IA assumiu)
-          if (d.sharedSession) {
+          // Redirecionamento transparente (outra IA assumiu) OU resolução canônica de ID (ex.: Codex UUID -> rollout-...-UUID)
+          if (d.sharedSession || isCanonicalAlias(targetId, d.id)) {
             selectedIdRef.current = d.id;
             setSelectedId(d.id);
             setDetail(d);
@@ -333,6 +355,68 @@ export function LiveHudPane({
     const gen = selectionGenRef.current;
     fetchSessionDetail(selectedId, gen);
   }, [selectedId, snapshot?.version]);
+
+  // Se a sessão recém-criada ainda não gravou o .jsonl na primeira tentativa (404), reconsulta automaticamente até aparecer
+  useEffect(() => {
+    if (!selectedId || activeDetail) return;
+    const gen = selectionGenRef.current;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      if (selectedIdRef.current !== selectedId || selectionGenRef.current !== gen) {
+        window.clearInterval(timer);
+        return;
+      }
+      tries += 1;
+      if (tries > 15) {
+        window.clearInterval(timer);
+        return;
+      }
+      fetchSessionDetail(selectedId, gen);
+      if (tries % 2 === 0) onPollNow();
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [selectedId, activeDetail, onPollNow]);
+
+  // Promove alias canônico (ex.: UUID do Codex -> rollout-...-UUID) assim que aparecer no snapshot
+  useEffect(() => {
+    if (!selectedId || !snapshot) return;
+    const list = [...(snapshot.active || []), ...(snapshot.recent || [])];
+    const match = list.find((s) => isCanonicalAlias(selectedId, s.id));
+    if (match && match.id !== selectedId) {
+      selectedIdRef.current = match.id;
+      setSelectedId(match.id);
+    }
+  }, [selectedId, snapshot]);
+
+  // Fallback: se uma nova sessão levou >8s e retornou sem UUID, abre automaticamente assim que surgir no snapshot
+  useEffect(() => {
+    if (!pendingLaunch) return;
+    const expired = Date.now() - pendingLaunch.startedAt > 45000;
+    if (expired) {
+      if (onPendingLaunchConsumed) onPendingLaunchConsumed();
+      return;
+    }
+    const list = [...(snapshot?.active || []), ...(snapshot?.recent || [])];
+    const beforeSet = new Set(pendingLaunch.beforeIds);
+    const folder = pendingLaunch.cwd ? pendingLaunch.cwd.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() : '';
+    const normTool = pendingLaunch.tool === 'Antigravity' ? 'Gemini' : pendingLaunch.tool;
+    const match = list.find((s) => {
+      if (beforeSet.has(s.id)) return false;
+      const st = s.tool === 'Antigravity' ? 'Gemini' : s.tool;
+      if (normTool && st !== normTool) return false;
+      if (pendingLaunch.machine && s.machine && s.machine !== pendingLaunch.machine) return false;
+      if (folder && s.project && s.project.toLowerCase() !== folder && !s.project.toLowerCase().includes(folder)) return false;
+      return true;
+    });
+    if (match) {
+      setSelectedId(match.id);
+      setViewMode('conversation');
+      if (onPendingLaunchConsumed) onPendingLaunchConsumed(match.id);
+      return;
+    }
+    const t = window.setTimeout(() => onPollNow(), 1500);
+    return () => window.clearTimeout(t);
+  }, [pendingLaunch, snapshot, onPendingLaunchConsumed, onPollNow]);
 
   const messages = useMemo<SessionHistoryMsg[]>(() => {
     if (!activeDetail) return [];

@@ -17,6 +17,7 @@ module.exports = ({ launch, peers, collector, machineName, config, json, text })
         });
         if (r.status !== 200 || !r.json) return text(res, r.status || 502, r.text || `${peer.name} não respondeu`);
         collector.poke();
+        if (typeof peers.poll === 'function') peers.poll(peer).then((changed) => { if (changed) collector.poke(); }).catch(() => {});
         const prefixed = r.json.id ? `m${peer.i}:${r.json.id}` : null;
         return json(res, { ...r.json, id: prefixed, machine: peer.name });
       } catch {

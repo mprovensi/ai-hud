@@ -175,9 +175,10 @@
 
     // 5. Mensagem inicial
     var prevPrompt = $('newPrompt') ? $('newPrompt').value : '';
+    var hasPrevPrompt = String(prevPrompt || '').replace(/^\s+|\s+$/g, '').length > 0;
     html += '<label class="nlabel" for="newPrompt">Mensagem inicial</label>' +
       '<textarea id="newPrompt" class="ntext" rows="3" placeholder="Escreva o que a IA deve fazer…">' + esc(prevPrompt) + '</textarea>' +
-      '<div class="row nactions"><button type="button" class="pbtn allow" id="startNewSess"' + (newBusy ? ' disabled' : '') + '>' +
+      '<div class="row nactions"><button type="button" class="pbtn allow" id="startNewSess"' + (newBusy || !hasPrevPrompt ? ' disabled' : '') + '>' +
       (newBusy ? 'Iniciando…' : 'Iniciar sessão') + '</button></div>';
     html += '</div>';
 
@@ -225,6 +226,17 @@
       }, { machine: chosen.name, cwd: targetCwd, pinned: nextPin });
     };
     if ($('newCustomCwd')) $('newCustomCwd').oninput = function () { newSel.customCwd = this.value; };
+    function syncNewPromptBtn() {
+      var b = $('startNewSess'), p = $('newPrompt');
+      if (!b) return;
+      b.disabled = newBusy || !(p && String(p.value || '').replace(/^\s+|\s+$/g, '').length > 0);
+    }
+    if ($('newPrompt')) {
+      $('newPrompt').oninput = syncNewPromptBtn;
+      $('newPrompt').onchange = syncNewPromptBtn;
+      $('newPrompt').onkeyup = syncNewPromptBtn;
+    }
+    syncNewPromptBtn();
     if ($('startNewSess')) $('startNewSess').onclick = function () {
       var prompt = $('newPrompt') ? $('newPrompt').value.replace(/^\s+|\s+$/g, '') : '';
       if (!prompt) { flash('Escreva uma mensagem inicial.', false); if ($('newPrompt')) $('newPrompt').focus(); return; }

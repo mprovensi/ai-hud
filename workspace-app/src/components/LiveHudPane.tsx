@@ -442,7 +442,7 @@ export function LiveHudPane({
   async function sendReply() {
     if (!activeDetail || sending || uploadingImgs) return;
     const cleanText = replyText.trim();
-    if (!cleanText && !readyImgs.length) return;
+    if (!cleanText) return;
     const imgLines = readyImgs.map((img) => `[Imagem anexada: ${img.path}]`);
     const promptSent = [...imgLines, ...(cleanText ? [cleanText] : [])].join('\n');
     const entry: OutgoingMsg = {
@@ -633,8 +633,18 @@ export function LiveHudPane({
             >
               <Star size={12} fill={activeDetail.pinned ? '#e5c063' : 'none'} color={activeDetail.pinned ? '#e5c063' : 'currentColor'} />
             </button>
-            <button className="btn btn-sm" onClick={() => setHandoffOpen(!handoffOpen)} title="Resumir e continuar em outra sessão/IA">
-              <GitFork size={12} /> Handoff
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                if (!handoffOpen) {
+                  const cur = activeDetail.tool === 'Antigravity' ? 'Gemini' : activeDetail.tool;
+                  setHandoffTool(cur === 'Gemini' ? 'Codex' : cur === 'Codex' ? 'Claude Code' : 'Codex');
+                }
+                setHandoffOpen(!handoffOpen);
+              }}
+              title="Transferir contexto e assumir esta sessão em outra IA (ex.: Gemini → Codex)"
+            >
+              <GitFork size={12} /> Trocar IA
             </button>
             {activeDetail.lastReply && (
               <button
@@ -658,15 +668,18 @@ export function LiveHudPane({
           {/* Handoff inline drawer */}
           {handoffOpen && (
             <div style={{ padding: 10, borderBottom: '1px solid var(--border)', background: '#161a22' }}>
+              <div style={{ fontSize: 11.5, color: 'var(--ds-muted)', marginBottom: 8, lineHeight: 1.45 }}>
+                Salva um <code># Handoff</code> (histórico, arquivos alterados e git) e vincula à sessão compartilhada para a nova IA assumir exatamente do ponto de parada.
+              </div>
               <div className="field">
                 <label>Continuar em (Cross-IA)</label>
                 <select className="sel" value={handoffTool} onChange={(e) => setHandoffTool(e.target.value)}>
                   {['Claude Code', 'Codex', 'Gemini', 'Ollama'].map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-              <textarea className="ta" rows={2} value={handoffNote} onChange={(e) => setHandoffNote(e.target.value)} placeholder="Nota opcional…" />
+              <textarea className="ta" rows={2} value={handoffNote} onChange={(e) => setHandoffNote(e.target.value)} placeholder="Instrução opcional para a nova IA (ex.: continue a partir do erro nos testes)…" />
               <div className="card-actions">
-                <button className="btn btn-sm btn-primary" disabled={sending} onClick={doHandoff}>Criar Handoff</button>
+                <button className="btn btn-sm btn-primary" disabled={sending} onClick={doHandoff}>Assumir com {handoffTool}</button>
                 <button className="btn btn-sm" onClick={() => setHandoffOpen(false)}>Cancelar</button>
               </div>
             </div>
@@ -1103,9 +1116,9 @@ export function LiveHudPane({
                     <button
                       type="button"
                       className="chat-send-btn"
-                      disabled={sending || uploadingImgs || (!replyText.trim() && !readyImgs.length)}
+                      disabled={sending || uploadingImgs || !replyText.trim()}
                       onClick={sendReply}
-                      title={uploadingImgs ? 'Aguarde o envio da imagem…' : 'Enviar resposta (Enter)'}
+                      title={uploadingImgs ? 'Aguarde o envio da imagem…' : !replyText.trim() ? 'Escreva uma mensagem para enviar' : 'Enviar resposta (Enter)'}
                       aria-label="Enviar resposta"
                     >
                       <ArrowUp size={16} strokeWidth={2.4} />

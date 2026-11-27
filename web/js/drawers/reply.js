@@ -51,7 +51,7 @@
             (sugg.length ? '⚡ Mais' : '⚡ Atalhos') + '</button>' +
           '<span class="grow"></span>' +
           (live ? '<span class="rtag lo">● ao vivo</span>' : '<span class="rtag">na fila</span>') +
-          '<button type="button" class="send" id="sendReply" aria-label="Enviar resposta" title="Enviar">' + replyIcon('arrowUp') + '</button>' +
+          '<button type="button" class="send" id="sendReply" aria-label="Enviar resposta" title="Enviar" disabled>' + replyIcon('arrowUp') + '</button>' +
         '</div>' +
       '</div></div>';
   }
@@ -80,6 +80,13 @@
 
   function stopMic() { if (rec) try { rec.stop(); } catch (e) {} }
 
+  function syncReplySendState() {
+    var btn = $('sendReply'), box = $('replyText');
+    if (!btn) return;
+    var hasText = !!(box && String(box.value || '').replace(/^\s+|\s+$/g, '').length > 0);
+    btn.disabled = !hasText;
+  }
+
   function toggleMic() {
     if (rec) return stopMic();
     var box = $('replyText'), base = box && box.value ? box.value.replace(/\s+$/, '') + ' ' : '';
@@ -91,13 +98,14 @@
       var b = $('replyText');
       if (!b) return stopMic(); // a gaveta fechou
       b.value = base + joinSpeech(e.results);
+      syncReplySendState();
     };
     rec.onerror = function (e) {
       if (e.error === 'aborted') return;
       flash(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'Microfone bloqueado: permita o acesso no navegador.'
         : e.error === 'no-speech' ? 'Não ouvi nada. Toque no 🎤 e fale.' : 'Microfone indisponível (' + e.error + ').', false);
     };
-    rec.onend = function () { rec = null; micState(); };
+    rec.onend = function () { rec = null; micState(); syncReplySendState(); };
     try { rec.start(); } catch (err) { rec = null; }
     micState();
   }
@@ -106,10 +114,10 @@
     stopMic();
     if ($('sendReply')) $('sendReply').disabled = true;
     request('POST', '/api/reply', function (err, r) {
-      if (err) { if ($('sendReply')) $('sendReply').disabled = false; return alert('Não enviado: ' + err.message); }
+      if (err) { syncReplySendState(); return alert('Não enviado: ' + err.message); }
       if ($('replyText')) { $('replyText').value = ''; $('replyText').blur(); }
+      syncReplySendState();
       if (r.sent) {
-        if ($('sendReply')) $('sendReply').disabled = false;
         flash(d.tool === 'Ollama' ? 'Enviado: o Ollama está gerando a resposta.'
           : d.tool === 'Gemini' ? 'Enviado ao Gemini.'
           : d.tool === 'Claude Code' ? 'Enviado ao Claude.' : 'Enviado ao Codex.');
@@ -125,6 +133,7 @@
 
   function bindReply(d) {
     if (!$('replyText')) return;
+    syncReplySendState();
     if ($('toggleChips')) $('toggleChips').onclick = function () {
       chipsOpen = !chipsOpen;
       this.className = 'qchips-btn' + (chipsOpen ? ' on' : '');
@@ -139,6 +148,7 @@
         chipsOpen = false;
         if ($('toggleChips')) { $('toggleChips').className = 'qchips-btn'; $('toggleChips').setAttribute('aria-expanded', 'false'); }
         if ($('quickChips')) $('quickChips').className = 'chips';
+        syncReplySendState();
       };
     }
     $('sendReply').onclick = function () {
@@ -165,6 +175,7 @@
               var cur = box.value ? box.value.replace(/\s+$/, '') + '\n' : '';
               box.value = cur + '[Imagem anexada: ' + r.path + '] ';
               box.focus();
+              syncReplySendState();
             }
             flash('Imagem anexada (' + r.name + ').');
           }, { id: d.id, fileName: f.name || 'imagem.png', base64Data: String(rd.result || '') });
@@ -195,17 +206,21 @@
           $('replyText').value = this.getAttribute('data-sc') + ' ';
           pop.style.display = 'none';
           $('replyText').focus();
+          syncReplySendState();
         };
       }
     }
     $('replyText').oninput = function () {
       var v = this.value;
+      syncReplySendState();
       if (v.charAt(0) !== '/') { renderSlash(''); return; }
       if (slashList) { renderSlash(v); return; }
       request('GET', '/api/skills?cwd=' + encodeURIComponent(d.cwd || ''), function (err, r) {
         if (!err && r && r.skills) { slashList = r.skills; renderSlash($('replyText') ? $('replyText').value : ''); }
       });
     };
+    $('replyText').onchange = syncReplySendState;
+    $('replyText').onkeyup = syncReplySendState;
     if ($('voiceSttBtn') && $('voiceFileInput')) {
       $('voiceSttBtn').onclick = function () { $('voiceFileInput').click(); };
       $('voiceFileInput').onchange = function () {
@@ -225,6 +240,7 @@
             if (box && r && r.text) {
               box.value = (box.value ? box.value.replace(/\s+$/, '') + ' ' : '') + r.text;
               box.focus();
+              syncReplySendState();
             }
           }, { audioBase64: String(rd.result || ''), mimeType: f.type || 'audio/wav', language: 'pt' });
         };

@@ -45,7 +45,8 @@ function createHandoff({ dataDir, launch, sharedSessions = null, readGit = readG
 
   return async function handoff({ session, targetTool = '', targetModel = '', note = '' }) {
     if (!session) return { status: 404, body: 'sessão não encontrada' };
-    const tool = String(targetTool || session.tool || '').trim();
+    const rawTool = String(targetTool || session.tool || '').trim();
+    const tool = rawTool === 'Antigravity' ? 'Gemini' : rawTool;
     if (!['Claude Code', 'Codex', 'Gemini', 'Ollama'].includes(tool)) {
       return { status: 400, body: 'ferramenta de destino inválida para handoff' };
     }

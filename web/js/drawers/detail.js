@@ -499,6 +499,7 @@
     var places = { vscode: 'VS Code', terminal: 'terminal', 'claude-desktop': 'app Claude', 'codex-desktop': 'app Codex', antigravity: 'Antigravity', 'antigravity-cli': 'terminal', 'gemini-cli': 'terminal', 'ollama-app': 'app Ollama', 'ollama-run': 'terminal' };
     html += '<div class="dstate row">' + st + '<span class="muted grow ell">' + (pct ? 'ctx ' + pct + '% · ' : '') + dur(d.end - d.start) + '</span>' +
       (d.tool === 'Gemini' && d.where === 'antigravity' ? '<button type="button" class="pcmini assume-btn" id="assumeHud" title="Assumir esta conversa no celular/iPad agora via Handoff para o agy CLI">📱 Assumir</button>' : '') +
+      (d.tool !== 'Ollama' ? '<button type="button" class="pcmini" id="openHandoffTop" title="Continuar esta sessão em outra IA (ex.: Gemini → Codex) a partir do ponto de parada">↪ Trocar IA</button>' : '') +
       (d.canFocus !== false && places[d.where] ? '<button class="pcmini" id="focusPc" title="Abrir no PC (' + places[d.where] + ')">🖥 Abrir no PC</button>' : '') + '</div>';
 
     // Pedido de permissão comum (Bash, Edit, etc.) fica sempre visível no topo; AskUserQuestion usa o cartão de opções
@@ -749,11 +750,19 @@
         flash(err ? 'Falhou: ' + err.message : r.message, !err && r.ok);
       }, { id: d.id });
     };
+    function defaultHandoffTarget(curTool) {
+      var norm = curTool === 'Antigravity' ? 'Gemini' : curTool;
+      if (norm === 'Gemini') return 'Codex';
+      if (norm === 'Codex') return 'Claude Code';
+      if (norm === 'Claude Code') return 'Codex';
+      return 'Claude Code';
+    }
     function openHandoffPanel() {
       handoffUi.open = true;
-      handoffUi.tool = handoffUi.tool || (d.tool === 'Antigravity' ? 'Gemini' : d.tool) || 'Claude Code';
+      handoffUi.tool = handoffUi.tool || defaultHandoffTarget(d.tool);
       renderDetail(d);
     }
+    if ($('openHandoffTop')) $('openHandoffTop').onclick = openHandoffPanel;
     if ($('openHandoffBanner')) $('openHandoffBanner').onclick = openHandoffPanel;
     if ($('openHandoff')) $('openHandoff').onclick = openHandoffPanel;
     if ($('handoffCancel')) $('handoffCancel').onclick = function () {

@@ -8,3 +8,11 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+const wsSplash = document.getElementById('wsSplash');
+if (wsSplash) {
+  requestAnimationFrame(() => {
+    wsSplash.classList.add('hide');
+    window.setTimeout(() => wsSplash.remove(), 280);
+  });
+}

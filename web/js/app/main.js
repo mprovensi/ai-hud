@@ -86,6 +86,8 @@
   window.addEventListener('resize', function () { if (snap) burnChart(snap, view === 'usage' ? usageName : null); });
   $('oretryNow').onclick = function () { poll(); tick(); };
   var lockedAtBoot = typeof bioInit === 'function' ? bioInit() : false;
+  if (lockedAtBoot && typeof hideAppSplash === 'function') hideAppSplash();
+  setTimeout(function () { if (typeof hideAppSplash === 'function') hideAppSplash(); }, 2500);
   syncHash();
   if (!lockedAtBoot) poll();
   tick();

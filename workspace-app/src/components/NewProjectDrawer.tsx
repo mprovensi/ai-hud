@@ -88,12 +88,19 @@ export function NewProjectDrawer({
 
   const [submitting, setSubmitting] = useState(false);
 
+  // Mantém referência atual de groupMeta sem reiniciar o formulário quando o poll atualiza o workspace em segundo plano
+  const groupMetaRef = useRef(groupMeta);
+  groupMetaRef.current = groupMeta;
+
   const activeGroupMeta = group.trim() ? groupMeta[group.trim()] : undefined;
   const restrictedRoot = activeGroupMeta?.rootCwd ? activeGroupMeta.rootCwd.trim() : '';
   const restrictedMachine = activeGroupMeta?.machine || machine;
 
+  const editEntityId = editEntity?.id || '';
+
   useEffect(() => {
     if (!open) return;
+    const gmMap = groupMetaRef.current;
     setMode(editEntity ? 'project' : editGroup ? 'group' : initialMode);
     setSubRel('');
     setSubQuery('');
@@ -114,7 +121,7 @@ export function NewProjectDrawer({
     }
 
     if (editGroup) {
-      const gm = groupMeta[editGroup];
+      const gm = gmMap[editGroup];
       setNewGroupName(editGroup);
       setGroupNameTouched(true);
       setWsMachine(gm?.machine || '');
@@ -132,7 +139,7 @@ export function NewProjectDrawer({
         const list = orderMachines(r.machines || []);
         setCaps(list);
         const first = list.find((m) => m.online) || list[0];
-        const gmEdit = editGroup ? groupMeta[editGroup] : undefined;
+        const gmEdit = editGroup ? groupMetaRef.current[editGroup] : undefined;
         if (first && !gmEdit?.machine) setWsMachine(first.name);
 
         const existingBinding = editEntity?.projectBindings?.[0];
@@ -140,7 +147,7 @@ export function NewProjectDrawer({
           setMachine(existingBinding.machine || first?.name || '');
           setCwd(existingBinding.cwd || '');
         } else {
-          const gmPreset = presetGroup ? groupMeta[presetGroup] : undefined;
+          const gmPreset = presetGroup ? groupMetaRef.current[presetGroup] : undefined;
           if (gmPreset?.rootCwd) {
             setMachine(gmPreset.machine || first?.name || '');
             setCwd('');
@@ -152,7 +159,7 @@ export function NewProjectDrawer({
       })
       .catch(() => {})
       .finally(() => setLoadingCaps(false));
-  }, [open, initialMode, presetGroup, editEntity, editGroup, groupMeta]);
+  }, [open, initialMode, presetGroup, editEntityId, editGroup]);
 
   // Carrega subpastas sempre que um workspace com rootCwd estiver selecionado no modo projeto
   useEffect(() => {
@@ -175,7 +182,14 @@ export function NewProjectDrawer({
     api.listFiles(restrictedRoot, subRel, activeGroupMeta?.machine || machine)
       .then((r) => {
         if (!alive) return;
-        setSubDirs((r.entries || []).filter((e) => e.type === 'dir'));
+        const dirs = (r.entries || []).filter((e) => e.type === 'dir');
+        // Mantém pastas reais de projeto no topo e pastas ocultas (.claude, .github, etc.) no final
+        dirs.sort((a, b) => {
+          const aDot = a.name.startsWith('.') ? 1 : 0;
+          const bDot = b.name.startsWith('.') ? 1 : 0;
+          return (aDot - bDot) || a.name.localeCompare(b.name);
+        });
+        setSubDirs(dirs);
       })
       .catch((e) => {
         if (!alive) return;
@@ -482,7 +496,12 @@ export function NewProjectDrawer({
                       <button
                         type="button"
                         className="btn btn-sm"
-                        onClick={() => setSubRel(subRel.split('/').slice(0, -1).join('/'))}
+                        onClick={() => {
+                          const parent = subRel.split('/').slice(0, -1).join('/');
+                          setSubRel(parent);
+                          setSubQuery('');
+                          handleSelectCwd(parent ? joinSubPath(restrictedRoot, parent) : '');
+                        }}
                       >
                         ↑ Subir
                       </button>
@@ -497,6 +516,16 @@ export function NewProjectDrawer({
                       <span className="mono ell" style={{ flex: 1 }}>
                         {restrictedRoot}{subRel ? `/${subRel}` : ''}
                       </span>
+                      {subRel && cwd.toLowerCase() !== joinSubPath(restrictedRoot, subRel).toLowerCase() && (
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ padding: '2px 7px', fontSize: 10.5 }}
+                          onClick={() => handleSelectCwd(joinSubPath(restrictedRoot, subRel))}
+                        >
+                          Usar esta pasta
+                        </button>
+                      )}
                       {restrictedMachine && <span className="badge" style={{ fontSize: 10 }}>{restrictedMachine}</span>}
                     </div>
                   </div>
@@ -514,7 +543,9 @@ export function NewProjectDrawer({
                       <div style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>Carregando subpastas…</div>
                     ) : visibleSubDirs.length === 0 ? (
                       <div style={{ padding: 10, fontSize: 12, color: 'var(--muted)' }}>
-                        Nenhuma subpasta existente aqui. Crie uma abaixo ou informe o nome do projeto para criar automaticamente.
+                        {subRel && cwd.toLowerCase() === joinSubPath(restrictedRoot, subRel).toLowerCase()
+                          ? 'Sem subpastas aqui — esta pasta já está selecionada para o projeto. Você pode criar o projeto nela ou criar uma nova subpasta abaixo.'
+                          : 'Nenhuma subpasta existente aqui. Crie uma abaixo ou informe o nome do projeto para criar automaticamente.'}
                       </div>
                     ) : (
                       visibleSubDirs.map((d) => {
@@ -536,8 +567,12 @@ export function NewProjectDrawer({
                               type="button"
                               className="btn btn-sm btn-icon"
                               style={{ border: 0, background: 'transparent' }}
-                              title="Abrir subpastas"
-                              onClick={() => setSubRel(d.path)}
+                              title="Entrar e selecionar esta pasta"
+                              onClick={() => {
+                                handleSelectCwd(fullPath);
+                                setSubRel(d.path);
+                                setSubQuery('');
+                              }}
                             >
                               <ChevronRight size={13} color="var(--muted)" />
                             </button>

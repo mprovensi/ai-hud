@@ -15,12 +15,52 @@
 <link rel="apple-touch-icon" sizes="120x120" href="/icon-120.png">
 <link rel="apple-touch-icon" sizes="152x152" href="/icon-152.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png">
+<link rel="apple-touch-startup-image" href="/icon-512.png">
 <link rel="icon" type="image/png" href="/icon-192.png">
 <title>AI HUD</title>
+<!-- Splash instantâneo (inline, ES5 + Safari 9 sem CSS gap) -->
+<style>
+#appSplash {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9999;
+  background: #0e0f12; color: #eceef4;
+  display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-transition: opacity .28s ease; transition: opacity .28s ease;
+}
+#appSplash.hide { opacity: 0; pointer-events: none; }
+#appSplash .sp-logo { width: 72px; height: 52px; margin-bottom: 14px; }
+#appSplash .sp-title { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+#appSplash .sp-sub { font-size: 12px; color: #8c94a6; margin-top: 6px; }
+#appSplash .sp-track {
+  width: 140px; height: 4px; border-radius: 4px; margin-top: 18px;
+  background: #23262f; overflow: hidden; position: relative;
+}
+#appSplash .sp-bar {
+  position: absolute; top: 0; left: -45%; width: 45%; height: 100%; border-radius: 4px;
+  background: #5fb8a4;
+  -webkit-animation: spSlide 1.2s ease-in-out infinite;
+  animation: spSlide 1.2s ease-in-out infinite;
+}
+@-webkit-keyframes spSlide { 0% { left: -45%; } 100% { left: 105%; } }
+@keyframes spSlide { 0% { left: -45%; } 100% { left: 105%; } }
+</style>
 <!-- ES5 e flexbox sem gap: precisa rodar no Safari 9 (iPad mini 1, iOS 9.3.5) -->
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
+<div id="appSplash" aria-hidden="true">
+  <svg class="sp-logo" viewBox="96 150 320 228" aria-hidden="true">
+    <rect x="96" y="150" width="320" height="56" rx="28" fill="#2c2c29"/><rect x="96" y="150" width="230" height="56" rx="28" fill="#e08a66"/>
+    <rect x="96" y="236" width="320" height="56" rx="28" fill="#2c2c29"/><rect x="96" y="236" width="160" height="56" rx="28" fill="#5fb8a4"/>
+    <rect x="96" y="322" width="320" height="56" rx="28" fill="#2c2c29"/><rect x="96" y="322" width="105" height="56" rx="28" fill="#b39ddb"/>
+  </svg>
+  <div class="sp-title">AI HUD</div>
+  <div class="sp-sub">Carregando sessões e cotas…</div>
+  <div class="sp-track"><div class="sp-bar"></div></div>
+</div>
 <div class="app">
   <div class="top row">
     <h1><svg class="logo" viewBox="96 150 320 228" aria-hidden="true">

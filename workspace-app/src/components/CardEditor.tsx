@@ -49,28 +49,45 @@ export const BOARD_STATUSES: { id: CardStatus; label: string }[] = [
   { id: 'done', label: 'Concluído' },
 ];
 
-export const EGM_STAGE_GUIDE: Record<CardStatus, { short: string; actionTip: string }> = {
+export const EGM_STAGE_GUIDE: Record<CardStatus, { short: string; actionTip: string; actionLabel: string; modalActionLabel: string }> = {
   idea: {
     short: '🐘 Elefante (Spec-First): levantar requisitos e gerar spec enxuta antes de codar',
     actionTip: 'EGM Ideia → Spec: investigar e gerar especificação enxuta sem implementar código ainda',
+    actionLabel: 'Gerar Spec',
+    modalActionLabel: 'Gerar Spec com IA',
   },
   spec: {
     short: '🐟 Portão Goldfish + Início: validar lacunas/riscos da spec e iniciar implementação no escopo',
     actionTip: 'EGM Spec → Em andamento: seguir a spec (e parecer Goldfish) iniciando apenas o escopo aprovado',
+    actionLabel: 'Implementar',
+    modalActionLabel: 'Iniciar implementação',
   },
   'in-progress': {
     short: '⚙️ Execução focada: concluir implementação no escopo da spec e validar com testes',
     actionTip: 'EGM Em andamento → Revisão: concluir mudanças no escopo, rodar testes/build e resumir evidências',
+    actionLabel: 'Finalizar',
+    modalActionLabel: 'Finalizar e testar',
   },
   review: {
     short: '🐟 Goldfish (Revisão fria): auditar git diff contra a spec, edge-cases, testes e aceite',
     actionTip: 'EGM Revisão → Concluído: revisão fria Goldfish sobre o git diff + validação final de testes',
+    actionLabel: 'Revisar diff',
+    modalActionLabel: 'Revisar e concluir',
   },
   done: {
     short: '✅ Concluído: tarefa finalizada, pronta para commit e sincronização de checklist',
     actionTip: 'Tarefa concluída',
+    actionLabel: 'Concluído',
+    modalActionLabel: 'Concluído',
   },
 };
+
+function renderStageActionIcon(st: CardStatus, size = 11) {
+  if (st === 'idea') return <FileText size={size} />;
+  if (st === 'in-progress') return <CheckCircle2 size={size} />;
+  if (st === 'review') return <Sparkles size={size} />;
+  return <Play size={size} />;
+}
 
 export function nextWorkflowStatus(current: CardStatus): { status: CardStatus; label: string } | null {
   const idx = BOARD_STATUSES.findIndex((s) => s.id === current);
@@ -1317,10 +1334,10 @@ export function CardEditor({
             <button
               className="btn btn-sm"
               style={{ padding: '3px 7px', fontSize: 11 }}
-              title={EGM_STAGE_GUIDE[st]?.actionTip || 'Executar tarefa com IA (avança para a próxima fase ao concluir)'}
+              title={EGM_STAGE_GUIDE[st]?.actionTip || 'Avançar tarefa com IA'}
               onClick={() => triggerExecute(item)}
             >
-              <Play size={11} /> Executar
+              {renderStageActionIcon(st, 11)} {EGM_STAGE_GUIDE[st]?.actionLabel || 'Avançar'}
             </button>
             {hasProjectCwd && !docClean && st === 'idea' && (
               <button
@@ -1495,13 +1512,14 @@ export function CardEditor({
                 {!detailModal.isNew && modalStage !== 'done' && (
                   <button
                     className="btn btn-sm btn-primary"
+                    title={EGM_STAGE_GUIDE[modalStage]?.actionTip}
                     onClick={() => {
                       const item = detailModal.draft;
                       setDetailModal(null);
                       triggerExecute(item);
                     }}
                   >
-                    <Play size={12} /> Executar
+                    {renderStageActionIcon(modalStage, 12)} {EGM_STAGE_GUIDE[modalStage]?.modalActionLabel || 'Avançar'}
                   </button>
                 )}
                 {!detailModal.isNew && modalStage === 'done' && projectCwd && !offlineFallback && (gitInfo?.modified?.length ?? 1) > 0 && (

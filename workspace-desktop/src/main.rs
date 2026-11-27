@@ -11,6 +11,7 @@ use std::thread;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 #[cfg(target_os = "windows")]
@@ -387,32 +388,58 @@ fn open_in_browser(url: &str) {
     }
 }
 
+fn close_splash_and_show_workspace(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("workspace") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+    if let Some(sp) = app.get_webview_window("splash") {
+        let _ = sp.close();
+    }
+}
+
+fn open_workspace_with_splash(app: &AppHandle, title: &str, url_str: &str) {
+    if app.get_webview_window("workspace").is_some() {
+        close_splash_and_show_workspace(app);
+        return;
+    }
+    if let Ok(url) = Url::parse(url_str) {
+        let app_for_load = app.clone();
+        let _ = WebviewWindowBuilder::new(app, "workspace", WebviewUrl::External(url))
+            .title(title)
+            .inner_size(1360.0, 860.0)
+            .min_inner_size(840.0, 560.0)
+            .center()
+            .visible(false)
+            .on_page_load(move |_window, payload| {
+                if matches!(payload.event(), PageLoadEvent::Finished) {
+                    close_splash_and_show_workspace(&app_for_load);
+                }
+            })
+            .build();
+    }
+}
+
 fn main() {
     let root = find_repo_root();
     let cfg = read_hud_config(root.as_deref());
     let (primary, local, local_port, local_token) = build_endpoints(&cfg);
 
-    // Sempre garante o servidor local de pé (para federação, peer-sync automático e fallback offline)
-    let spawned_child = ensure_local_server(root.as_deref(), local_port);
-
-    // Testa se a VPS principal está online; se não estiver, cai automaticamente para o servidor local
-    let initial_mode = match primary {
-        Some(ref p) if is_endpoint_reachable(&p.probe_url) => ActiveMode::Primary,
-        _ => ActiveMode::Local,
-    };
-
     let managed = ManagedServer {
-        child: Arc::new(Mutex::new(spawned_child)),
+        child: Arc::new(Mutex::new(None)),
     };
+    let managed_child_boot = managed.child.clone();
     let runtime = Arc::new(RuntimeState {
         primary,
         local,
         local_port,
         local_token,
-        mode: Mutex::new(initial_mode),
+        mode: Mutex::new(ActiveMode::Local),
         pinned_local: Mutex::new(false),
     });
     let runtime_setup = runtime.clone();
+    let root_boot = root.clone();
 
     let app = tauri::Builder::default()
         .manage(managed)
@@ -423,7 +450,11 @@ fn main() {
             let title = window_title("AI Workspace", &target.label);
             open_or_focus_window(app, "workspace", &title, &target.workspace, 1360.0, 860.0);
         }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["splash"])
+                .build(),
+        )
         .on_window_event(|window, event| {
             if window.label() == "workspace" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
@@ -433,16 +464,41 @@ fn main() {
             }
         })
         .setup(move |app| {
-            let (_, initial_target) = runtime_setup.active_target();
-            let initial_title = window_title("AI Workspace", &initial_target.label);
-            open_or_focus_window(
-                app.handle(),
-                "workspace",
-                &initial_title,
-                &initial_target.workspace,
-                1360.0,
-                860.0,
-            );
+            // 1. Splash screen nativo instantâneo (sem borda, centralizado, embutido no executável)
+            let _ = WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
+                .title("AI Workspace")
+                .inner_size(420.0, 270.0)
+                .resizable(false)
+                .decorations(false)
+                .always_on_top(true)
+                .center()
+                .build();
+
+            // 2. Boot assíncrono: inicia servidor local, testa VPS principal e carrega janela principal em segundo plano
+            {
+                let app_boot = app.handle().clone();
+                let rt_boot = runtime_setup.clone();
+                let managed_child = managed_child_boot.clone();
+                let root_dir = root_boot.clone();
+                thread::spawn(move || {
+                    let spawned = ensure_local_server(root_dir.as_deref(), rt_boot.local_port);
+                    if let Ok(mut g) = managed_child.lock() {
+                        *g = spawned;
+                    }
+                    let mode = match rt_boot.primary {
+                        Some(ref p) if is_endpoint_reachable(&p.probe_url) => ActiveMode::Primary,
+                        _ => ActiveMode::Local,
+                    };
+                    rt_boot.set_mode(mode, false);
+                    let (_, target) = rt_boot.active_target();
+                    let title = window_title("AI Workspace", &target.label);
+                    open_workspace_with_splash(&app_boot, &title, &target.workspace);
+
+                    // Fallback de segurança: garante que o splash feche mesmo se o WebView demorar
+                    thread::sleep(Duration::from_secs(6));
+                    close_splash_and_show_workspace(&app_boot);
+                });
+            }
 
             // Monitor em segundo plano: se abriu em Fallback Local e a VPS voltar,
             // sincroniza alterações offline e reconecta na VPS Principal automaticamente.

@@ -32,9 +32,22 @@
     try { x.send(body ? JSON.stringify(body) : null); } catch (e) { networkError('não foi possível conectar ao servidor'); }
   }
 
+  var splashHidden = false;
+  function hideAppSplash() {
+    if (splashHidden) return;
+    splashHidden = true;
+    var el = $('appSplash');
+    if (!el) return;
+    el.className = 'hide';
+    setTimeout(function () {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }, 320);
+  }
+
   // O iPad mini 1 é lento para redesenhar: só quando os dados mudaram, e não com a gaveta aberta
   var lastText = '';
   function apply(err, s, text) {
+    hideAppSplash();
     if (!err && (!s || typeof s.now !== 'number' || !Array.isArray(s.active) || !Array.isArray(s.recent) || !s.quotas || !s.today)) err = new Error('resposta inválida do servidor');
     if (err) {
       connection = { kind: err.status === 401 ? 'auth' : err.offline ? 'network' : 'server', message: err.message };

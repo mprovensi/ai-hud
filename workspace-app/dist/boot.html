@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Workspace</title>
+    <style>
+      html, body {
+        margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+        background: #0e0f12; color: #eceef4;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        user-select: none; -webkit-user-select: none;
+      }
+      * { box-sizing: border-box; }
+      .shell {
+        width: 100%; height: 100%; display: flex; flex-direction: column;
+        background: #0e0f12;
+      }
+      .sh {
+        background: linear-gradient(90deg, rgba(255,255,255,.035) 25%, rgba(95,184,164,.11) 50%, rgba(255,255,255,.035) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.4s ease-in-out infinite;
+        border-radius: 7px;
+      }
+      @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      .topbar {
+        height: 48px; flex-shrink: 0;
+        display: flex; align-items: center; gap: 12px; padding: 0 14px;
+        border-bottom: 1px solid rgba(255,255,255,.07);
+        background: #12141a;
+      }
+      .brand {
+        display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;
+        color: #f2f5fa; letter-spacing: -.01em;
+      }
+      .brand img { width: 20px; height: 20px; border-radius: 5px; }
+      .body {
+        flex: 1; min-height: 0; display: flex;
+      }
+      .side {
+        width: 248px; flex-shrink: 0; padding: 12px;
+        border-right: 1px solid rgba(255,255,255,.07);
+        background: #101218;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .main {
+        flex: 1; min-width: 0; padding: 24px 28px;
+        display: flex; flex-direction: column; gap: 18px;
+      }
+      .grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 13px;
+      }
+      .card {
+        height: 116px; padding: 15px; border-radius: 11px;
+        border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02);
+        display: flex; flex-direction: column; gap: 9px;
+      }
+      .right {
+        width: 350px; flex-shrink: 0; padding: 12px 14px;
+        border-left: 1px solid rgba(255,255,255,.07);
+        background: #101218;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .sess {
+        height: 78px; padding: 11px; border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02);
+        display: flex; flex-direction: column; gap: 7px;
+      }
+      @media (max-width: 980px) { .right { display: none; } }
+      @media (max-width: 680px) { .side { display: none; } }
+
+      /* Indicador flutuante de progresso na parte inferior da área real do workspace */
+      .boot-toast {
+        position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+        width: min(440px, calc(100vw - 32px));
+        padding: 13px 16px 14px; border-radius: 13px;
+        background: rgba(18, 21, 28, 0.96);
+        border: 1px solid rgba(95, 184, 164, 0.36);
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.58), 0 0 28px rgba(95, 184, 164, 0.14);
+      }
+      .toast-head {
+        display: flex; align-items: center; gap: 9px; margin-bottom: 9px;
+      }
+      .dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        background: #5fb8a4; box-shadow: 0 0 10px rgba(95,184,164,.9);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: .55; transform: scale(.9); }
+        50% { opacity: 1; transform: scale(1.12); }
+      }
+      #statusText {
+        flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; color: #eceef4;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #pctText {
+        font-size: 11.5px; font-weight: 700; color: #5fb8a4; font-variant-numeric: tabular-nums;
+      }
+      .steps {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;
+      }
+      .step {
+        display: flex; align-items: center; gap: 5px;
+        font-size: 10.5px; color: #6e778b;
+        padding: 3px 7px; border-radius: 6px;
+        background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.05);
+        transition: all .22s ease; white-space: nowrap; overflow: hidden;
+      }
+      .step .sdot {
+        width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: #464e61;
+      }
+      .step.active {
+        color: #f0f4fa; background: rgba(95,184,164,.13); border-color: rgba(95,184,164,.38);
+      }
+      .step.active .sdot { background: #5fb8a4; box-shadow: 0 0 7px rgba(95,184,164,.9); }
+      .step.done { color: #9ed9cb; border-color: rgba(95,184,164,.22); }
+      .step.done .sdot { background: #5fb8a4; }
+      .track {
+        width: 100%; height: 4px; border-radius: 999px;
+        background: rgba(255,255,255,.08); overflow: hidden;
+      }
+      #progressBar {
+        height: 100%; width: 12%; border-radius: 999px;
+        background: linear-gradient(90deg, #5fb8a4, #7ce0c8, #e5c063);
+        transition: width .32s cubic-bezier(.22,1,.36,1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell" aria-busy="true">
+      <div class="topbar">
+        <div class="brand">
+          <img src="favicon.png" alt="" width="20" height="20" />
+          <span>AI Workspace</span>
+        </div>
+        <div class="sh" style="width:200px;height:28px;margin-left:10px"></div>
+        <div style="flex:1"></div>
+        <div class="sh" style="width:86px;height:24px;border-radius:999px"></div>
+        <div class="sh" style="width:86px;height:24px;border-radius:999px"></div>
+        <div class="sh" style="width:86px;height:24px;border-radius:999px"></div>
+      </div>
+      <div class="body">
+        <div class="side">
+          <div class="sh" style="height:30px;width:100%"></div>
+          <div class="sh" style="height:24px;width:82%;margin-top:6px"></div>
+          <div class="sh" style="height:24px;width:74%"></div>
+          <div class="sh" style="height:24px;width:88%"></div>
+          <div class="sh" style="height:24px;width:68%"></div>
+          <div class="sh" style="height:24px;width:79%"></div>
+        </div>
+        <div class="main">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="sh" style="width:38px;height:38px;border-radius:10px"></div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+              <div class="sh" style="height:18px;width:220px"></div>
+              <div class="sh" style="height:12px;width:320px;max-width:75%"></div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <div class="sh" style="height:15px;width:62%"></div>
+              <div class="sh" style="height:11px;width:88%"></div>
+              <div class="sh" style="height:11px;width:45%;margin-top:auto"></div>
+            </div>
+            <div class="card">
+              <div class="sh" style="height:15px;width:54%"></div>
+              <div class="sh" style="height:11px;width:80%"></div>
+              <div class="sh" style="height:11px;width:50%;margin-top:auto"></div>
+            </div>
+            <div class="card">
+              <div class="sh" style="height:15px;width:70%"></div>
+              <div class="sh" style="height:11px;width:76%"></div>
+              <div class="sh" style="height:11px;width:40%;margin-top:auto"></div>
+            </div>
+            <div class="card">
+              <div class="sh" style="height:15px;width:58%"></div>
+              <div class="sh" style="height:11px;width:84%"></div>
+              <div class="sh" style="height:11px;width:48%;margin-top:auto"></div>
+            </div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="sh" style="height:26px;width:55%"></div>
+          <div class="sess">
+            <div class="sh" style="height:13px;width:68%"></div>
+            <div class="sh" style="height:11px;width:90%"></div>
+            <div class="sh" style="height:10px;width:46%"></div>
+          </div>
+          <div class="sess">
+            <div class="sh" style="height:13px;width:58%"></div>
+            <div class="sh" style="height:11px;width:84%"></div>
+            <div class="sh" style="height:10px;width:42%"></div>
+          </div>
+          <div class="sess">
+            <div class="sh" style="height:13px;width:72%"></div>
+            <div class="sh" style="height:11px;width:88%"></div>
+            <div class="sh" style="height:10px;width:52%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="boot-toast">
+        <div class="toast-head">
+          <span class="dot"></span>
+          <span id="statusText">Inicializando AI Workspace…</span>
+          <span id="pctText">12%</span>
+        </div>
+        <div class="steps" id="stepsRow">
+          <div class="step active"><span class="sdot"></span><span>Local</span></div>
+          <div class="step"><span class="sdot"></span><span>Hub VPS</span></div>
+          <div class="step"><span class="sdot"></span><span>Interface</span></div>
+          <div class="step"><span class="sdot"></span><span>Dados</span></div>
+        </div>
+        <div class="track"><div id="progressBar"></div></div>
+      </div>
+    </div>
+
+    <script>
+      window.__setBootProgress = function (pct, text, stepIdx) {
+        var p = Math.max(5, Math.min(100, Number(pct) || 12));
+        var bar = document.getElementById('progressBar');
+        var pt = document.getElementById('pctText');
+        var st = document.getElementById('statusText');
+        if (bar) bar.style.width = p + '%';
+        if (pt) pt.textContent = Math.round(p) + '%';
+        if (st && text) st.textContent = text;
+        var items = document.querySelectorAll('#stepsRow .step');
+        for (var i = 0; i < items.length; i++) {
+          items[i].classList.remove('active', 'done');
+          if (i < stepIdx) items[i].classList.add('done');
+          else if (i === stepIdx) items[i].classList.add('active');
+        }
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Workspace</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0e0f12; color: #eceef4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  .wrap {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 25%, rgba(95, 184, 164, 0.14), rgba(14, 15, 18, 0) 64%),
+                linear-gradient(180deg, #12141a 0%, #0b0c10 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 28px 24px;
+  }
+  .logo {
+    width: 68px; height: 50px; margin-bottom: 16px;
+    filter: drop-shadow(0 8px 22px rgba(95, 184, 164, 0.22));
+  }
+  .bar1 { animation: pulseBar 1.5s ease-in-out infinite; }
+  .bar2 { animation: pulseBar 1.5s ease-in-out 0.2s infinite; }
+  .bar3 { animation: pulseBar 1.5s ease-in-out 0.4s infinite; }
+  @keyframes pulseBar {
+    0%, 100% { opacity: 0.72; }
+    50% { opacity: 1; }
+  }
+  .title {
+    font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: #f2f5fa;
+  }
+  .sub {
+    margin-top: 6px; font-size: 12.5px; color: #8c94a6;
+  }
+  .track {
+    margin-top: 22px; width: 170px; height: 4px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08); overflow: hidden; position: relative;
+  }
+  .fill {
+    position: absolute; top: 0; left: -45%; width: 45%; height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #e08a66, #5fb8a4, #b39ddb);
+    animation: slide 1.25s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0% { left: -45%; }
+    100% { left: 105%; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap" data-tauri-drag-region>
+    <svg class="logo" viewBox="96 150 320 228" aria-hidden="true">
+      <rect x="96" y="150" width="320" height="56" rx="28" fill="#23262f"/>
+      <rect class="bar1" x="96" y="150" width="230" height="56" rx="28" fill="#e08a66"/>
+      <rect x="96" y="236" width="320" height="56" rx="28" fill="#23262f"/>
+      <rect class="bar2" x="96" y="236" width="175" height="56" rx="28" fill="#5fb8a4"/>
+      <rect x="96" y="322" width="320" height="56" rx="28" fill="#23262f"/>
+      <rect class="bar3" x="96" y="322" width="120" height="56" rx="28" fill="#b39ddb"/>
+    </svg>
+    <div class="title">AI Workspace</div>
+    <div class="sub">Conectando ao Hub e sincronizando projetos…</div>
+    <div class="track"><div class="fill"></div></div>
+  </div>
+</body>
+</html>

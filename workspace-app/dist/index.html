@@ -5,9 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Workspace · AI HUD</title>
     <meta name="theme-color" content="#0e0f12" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AI Workspace" />
     <link rel="manifest" href="/workspace/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
+    <link rel="apple-touch-startup-image" href="/icon-512.png" />
     <link rel="icon" type="image/png" href="/icon-192.png" />
-    <script type="module" crossorigin src="/workspace/assets/index-CpPziNQf.js"></script>
+    <style>
+      #wsSplash {
+        position: fixed; inset: 0; z-index: 9999;
+        background: radial-gradient(circle at 50% 28%, rgba(95, 184, 164, .12), transparent 60%), #0e0f12;
+        color: #eceef4; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        transition: opacity .26s ease;
+      }
+      #wsSplash.hide { opacity: 0; pointer-events: none; }
+      #wsSplash .sp-logo { width: 72px; height: 52px; margin-bottom: 14px; }
+      #wsSplash .sp-title { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+      #wsSplash .sp-sub { font-size: 12.5px; color: #8c94a6; margin-top: 6px; }
+      #wsSplash .sp-track {
+        width: 156px; height: 4px; border-radius: 999px; margin-top: 18px;
+        background: rgba(255, 255, 255, .08); overflow: hidden; position: relative;
+      }
+      #wsSplash .sp-bar {
+        position: absolute; top: 0; left: -45%; width: 45%; height: 100%; border-radius: 999px;
+        background: linear-gradient(90deg, #e08a66, #5fb8a4, #b39ddb);
+        animation: wsSpSlide 1.2s ease-in-out infinite;
+      }
+      @keyframes wsSpSlide { 0% { left: -45%; } 100% { left: 105%; } }
+    </style>
+    <script type="module" crossorigin src="/workspace/assets/index-BHQBSqSy.js"></script>
     <link rel="modulepreload" crossorigin href="/workspace/assets/react-vendor-PY8vvcCh.js">
     <link rel="modulepreload" crossorigin href="/workspace/assets/icons-vendor-O6U3uvXX.js">
     <link rel="modulepreload" crossorigin href="/workspace/assets/vendor-DEz4Oh-x.js">
@@ -15,6 +43,16 @@
     <link rel="stylesheet" crossorigin href="/workspace/assets/index-Df408e92.css">
   </head>
   <body>
+    <div id="wsSplash" aria-hidden="true">
+      <svg class="sp-logo" viewBox="96 150 320 228" aria-hidden="true">
+        <rect x="96" y="150" width="320" height="56" rx="28" fill="#23262f"/><rect x="96" y="150" width="230" height="56" rx="28" fill="#e08a66"/>
+        <rect x="96" y="236" width="320" height="56" rx="28" fill="#23262f"/><rect x="96" y="236" width="170" height="56" rx="28" fill="#5fb8a4"/>
+        <rect x="96" y="322" width="320" height="56" rx="28" fill="#23262f"/><rect x="96" y="322" width="115" height="56" rx="28" fill="#b39ddb"/>
+      </svg>
+      <div class="sp-title">AI Workspace</div>
+      <div class="sp-sub">Carregando projetos e sessões…</div>
+      <div class="sp-track"><div class="sp-bar"></div></div>
+    </div>
     <div id="root"></div>
   </body>
 </html>

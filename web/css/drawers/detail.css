@@ -60,8 +60,10 @@
 /* Conversa: bolhas com rolagem ampla, Markdown formatado e resumo de ferramentas */
 .convpanel { padding-bottom: 10px; }
 .chead { margin-bottom: 8px; }
-.chead h2 { margin: 0; }
-.ctime { font-size: .72em; }
+.chead h2 { margin: 0; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.csub { margin-left: 8px; padding: 1px 7px; border-radius: 99px; background: #1a1d24; border: 1px solid #2d3240;
+  color: #aeb6c7; font-size: .7em; font-weight: 600; min-width: 0; }
+.ctime { font-size: .72em; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .speak-ico { width: 34px; height: 34px; padding: 0; margin: 0 6px 0 4px; background: transparent;
   border: 0; border-radius: 0; color: #8c92a2; display: -webkit-inline-flex; display: inline-flex;
   -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;

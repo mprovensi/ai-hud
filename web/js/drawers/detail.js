@@ -449,7 +449,10 @@
     var html = '<div class="panel convpanel' + (hasQ ? ' has-q' : '') + '">';
     if (msgs && msgs.length) {
       var title = d.where === 'ollama-run' && !d.lastReply ? 'Últimos comandos no terminal' : 'Conversa';
-      html += '<div class="row chead"><h2 class="grow">' + title + '</h2>' +
+      var subHtml = d.subagents > 0
+        ? '<span class="csub ell" title="' + esc(d.subagents + (d.subagents === 1 ? ' subagente' : ' subagentes') + (d.subTokens ? ' · ' + k(d.subTokens) + ' tokens' : '')) + '">🤖 ' + d.subagents + (d.subagents === 1 ? ' subagente' : ' subagentes') + (d.subTokens ? ' · ' + k(d.subTokens) + ' tokens' : '') + '</span>'
+        : '';
+      html += '<div class="row chead"><h2>' + title + '</h2>' + subHtml + '<span class="grow"></span>' +
         (d.lastReply ? '<button type="button" class="speak-ico" id="speakLast" aria-pressed="false" aria-label="Ouvir última resposta" title="Ouvir última resposta">' + speakIcon('volume') + '</button>' : '') +
         (d.lastReplyAt ? '<span class="muted ctime">' + when(d.lastReplyAt) + '</span>' : '') + '</div>' +
         '<div class="convo lastreply" id="lastReply" tabindex="-1">';

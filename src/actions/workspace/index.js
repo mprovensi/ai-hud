@@ -1,7 +1,7 @@
 // Ações file-first do Workspace: criar entidade, salvar cards/Markdown com proteção 409 + backup e upload de mídia (camada actions/).
 const fs = require('fs');
 const path = require('path');
-const { isSafeRelativePath, isWithinRoot, isSecretPath, resolveContainedPath } = require('../../core/path-guard');
+const { isSafeRelativePath, isWithinRoot, samePath, detectPathPlatform, isSecretPath, resolveContainedPath } = require('../../core/path-guard');
 const { slugifyEntity, validateCard, validateWorkspaceIndex, defaultCard } = require('../../core/workspace-schema');
 const { resolveWorkspaceRoot, hashContent, writeAtomicWithBackup, resolveSafeContainedTarget } = require('../../infra/workspace-paths');
 const { readWorkspaceJson, findEntity, resolveEntityRoot } = require('../../collect/workspace');
@@ -11,6 +11,15 @@ const { savePortableBoard } = require('./project-storage');
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 const MAX_DOC_BYTES = 1024 * 1024;
+
+// Valida se `candidateCwd` é uma subpasta estrita de `rootCwd`, respeitando a plataforma do caminho
+// (ex.: VPS Linux validando pastas Windows "D:\Projetos TRT18\vulnerabilidades" do peer e vice-versa).
+function checkGroupSubfolder(rootCwd, candidateCwd) {
+  const plat = detectPathPlatform(rootCwd);
+  if (!isWithinRoot(rootCwd, candidateCwd, plat)) return 'outside';
+  if (samePath(rootCwd, candidateCwd, plat)) return 'same';
+  return 'ok';
+}
 
 function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
   const root = () => resolveWorkspaceRoot(dataDir, config);
@@ -44,10 +53,12 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     if (gMeta && gMeta.rootCwd && bindings.length) {
       for (const b of bindings) {
         const bCwd = String(b.cwd || '').trim();
-        if (bCwd && !isWithinRoot(gMeta.rootCwd, bCwd)) {
+        if (!bCwd) continue;
+        const chk = checkGroupSubfolder(gMeta.rootCwd, bCwd);
+        if (chk === 'outside') {
           return { status: 400, body: `A pasta do projeto deve ser uma subpasta de "${gMeta.rootCwd}".` };
         }
-        if (bCwd && path.resolve(bCwd).toLowerCase() === path.resolve(gMeta.rootCwd).toLowerCase()) {
+        if (chk === 'same') {
           return { status: 400, body: `Selecione uma subpasta dentro de "${gMeta.rootCwd}", não a pasta raiz do workspace.` };
         }
       }
@@ -296,10 +307,12 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
     if (gMeta && gMeta.rootCwd && Array.isArray(cur.projectBindings) && cur.projectBindings.length) {
       for (const b of cur.projectBindings) {
         const bCwd = String(b.cwd || '').trim();
-        if (bCwd && !isWithinRoot(gMeta.rootCwd, bCwd)) {
+        if (!bCwd) continue;
+        const chk = checkGroupSubfolder(gMeta.rootCwd, bCwd);
+        if (chk === 'outside') {
           return { status: 400, body: `A pasta do projeto deve ser uma subpasta de "${gMeta.rootCwd}".` };
         }
-        if (bCwd && path.resolve(bCwd).toLowerCase() === path.resolve(gMeta.rootCwd).toLowerCase()) {
+        if (chk === 'same') {
           return { status: 400, body: `Selecione uma subpasta dentro de "${gMeta.rootCwd}", não a pasta raiz do workspace.` };
         }
       }
@@ -446,7 +459,7 @@ function createWorkspaceActions({ dataDir, config, now = () => Date.now() }) {
           if (gMeta && gMeta.rootCwd && Array.isArray(cur.projectBindings) && cur.projectBindings.length) {
             for (const b of cur.projectBindings) {
               const bCwd = String(b.cwd || '').trim();
-              if (bCwd && (!isWithinRoot(gMeta.rootCwd, bCwd) || path.resolve(bCwd).toLowerCase() === path.resolve(gMeta.rootCwd).toLowerCase())) {
+              if (bCwd && checkGroupSubfolder(gMeta.rootCwd, bCwd) !== 'ok') {
                 return { status: 400, body: `O projeto "${cur.title}" está fora da pasta raiz do workspace "${destGroup}".` };
               }
             }

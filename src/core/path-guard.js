@@ -21,6 +21,14 @@ function isWinAbsolute(s) {
   return /^[a-zA-Z]:\\/.test(s) || /^\\\\[^\\]+\\[^\\]+/.test(s);
 }
 
+// Infere a plataforma de um caminho remoto (ex.: hub Linux validando pasta Windows de um peer e vice-versa).
+function detectPathPlatform(raw, fallback = process.platform) {
+  const s = String(raw || '').trim().replace(/^\\\\\?\\/, '');
+  if (/^[a-zA-Z]:([\\/]|$)/.test(s) || /^\\\\[^\\]+\\[^\\]+/.test(s)) return 'win32';
+  if (s.startsWith('/')) return 'linux';
+  return fallback;
+}
+
 function normalizePath(raw, platform = process.platform) {
   let s = String(raw || '').trim();
   if (!s || /[\x00-\x1f]/.test(s)) return '';
@@ -139,6 +147,7 @@ function resolveContainedPath(root, rel) {
 }
 
 module.exports = {
+  detectPathPlatform,
   normalizePath,
   samePath,
   isWithinRoot,

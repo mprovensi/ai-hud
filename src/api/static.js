@@ -2,8 +2,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zlib = require('zlib');
 const { iconFile } = require('../infra/web-bundle');
 const { isWithinRoot, isSafeRelativePath } = require('../core/path-guard');
+
+const GZIP_EXTS = new Set(['.js', '.css', '.svg', '.json']);
 
 const WS_MIME = {
   '.js': 'text/javascript; charset=utf-8',
@@ -72,8 +75,9 @@ function createStatic({ webDir, webAssets, workspaceDistDir = '', send, brands =
     '/brand-gemini.svg': GEMINI_SVG,
   };
   const day = { 'Cache-Control': 'max-age=86400' };
+  const gzCache = new Map();
 
-  return function serveStatic(res, url) {
+  return function serveStatic(res, url, req = null) {
     const p = url.pathname;
     if (p === '/brand-ollama.png') {
       if (ollama) send(res, 200, 'image/png', ollama, day);
@@ -98,9 +102,24 @@ function createStatic({ webDir, webAssets, workspaceDistDir = '', send, brands =
         const file = path.resolve(workspaceDistDir, rel);
         if (isWithinRoot(workspaceDistDir, file) && fs.existsSync(file) && fs.statSync(file).isFile()) {
           const ext = path.extname(file).toLowerCase();
-          const headers = p.startsWith('/workspace/assets/')
+          const isImmutable = p.startsWith('/workspace/assets/');
+          const headers = isImmutable
             ? { 'Cache-Control': 'public, max-age=31536000, immutable' }
-            : ext === '.png' ? day : {};
+            : ext === '.png' ? { ...day } : {};
+          const acceptsGzip = !!(req && req.headers && /\bgzip\b/i.test(String(req.headers['accept-encoding'] || '')));
+          if (acceptsGzip && GZIP_EXTS.has(ext)) {
+            let gz = isImmutable ? gzCache.get(file) : null;
+            if (!gz) {
+              gz = zlib.gzipSync(fs.readFileSync(file));
+              if (isImmutable && gzCache.size < 64) gzCache.set(file, gz);
+            }
+            send(res, 200, WS_MIME[ext] || 'application/octet-stream', gz, {
+              ...headers,
+              'Content-Encoding': 'gzip',
+              Vary: 'Accept-Encoding',
+            });
+            return true;
+          }
           send(res, 200, WS_MIME[ext] || 'application/octet-stream', fs.readFileSync(file), headers);
           return true;
         }

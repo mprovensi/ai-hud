@@ -330,41 +330,26 @@ export function App() {
     return () => window.clearInterval(id);
   }, [loadWorkspace, loadSyncStatus]);
 
-  // Atualiza o skeleton inicial e sinaliza ao shell Desktop (via document.title) quando os dados reais estão prontos
-  const bootSignaledRef = useRef(false);
+  // Atualiza o skeleton inicial com progresso real até workspaces e sessões estarem prontos
   useEffect(() => {
-    const finishBoot = () => {
-      if (bootSignaledRef.current) return;
-      bootSignaledRef.current = true;
-      window.__wsBootDone?.();
-      document.title = 'AI Workspace · Pronto';
-      window.setTimeout(() => {
-        if (document.title === 'AI Workspace · Pronto') {
-          document.title = 'AI Workspace · AI HUD';
-        }
-      }, 250);
-    };
     if (ws && snap) {
-      finishBoot();
+      window.__wsBootDone?.();
       return;
     }
     if (!online) {
-      finishBoot();
+      window.__wsBootDone?.();
       return;
     }
     if (ws && !snap) {
-      window.__wsBootProgress?.(88, 'Conectando sessões e cotas ao vivo…');
-      document.title = 'AI Workspace · Conectando sessões…';
-      const t = window.setTimeout(finishBoot, 950);
+      window.__wsBootProgress?.(92, 'Conectando sessões e cotas ao vivo…', 3);
+      const t = window.setTimeout(() => window.__wsBootDone?.(), 950);
       return () => window.clearTimeout(t);
     }
     if (!ws && snap) {
-      window.__wsBootProgress?.(84, 'Carregando estrutura de workspaces…');
-      document.title = 'AI Workspace · Carregando workspaces…';
+      window.__wsBootProgress?.(88, 'Carregando estrutura de workspaces…', 3);
       return;
     }
-    window.__wsBootProgress?.(68, 'Carregando workspaces e projetos…');
-    document.title = 'AI Workspace · Carregando workspaces…';
+    window.__wsBootProgress?.(84, 'Carregando workspaces e projetos…', 3);
   }, [ws, snap, online]);
 
   // Long-polling do snapshot ao vivo do AI HUD

@@ -116,7 +116,7 @@ function createHandler({ config, send, serveStatic, webAssets, workspaceDistDir 
     if (!/^(::1|127\.|::ffff:127\.)/.test(ip) && !url.pathname.startsWith('/hook/')) {
       log(`${new Date().toLocaleTimeString('pt-BR')} ${String(ip).replace(/^::ffff:/, '')} ${req.method} ${url.pathname}`);
     }
-    if (serveStatic(res, url)) return;
+    if (serveStatic(res, url, req)) return;
     if (url.pathname === '/login' && req.method === 'POST') return login(req, res, ip);
     if (await handlePublicWebAuthn(req, res, url, ip)) return;
 

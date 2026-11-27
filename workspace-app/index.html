@@ -19,14 +19,14 @@
         background: #0e0f12; color: #eceef4;
         display: flex; flex-direction: column;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        transition: opacity .28s ease;
+        transition: opacity .26s ease;
       }
       #wsSplash.hide { opacity: 0; pointer-events: none; }
       #wsSplash * { box-sizing: border-box; }
       .sp-shimmer {
-        background: linear-gradient(90deg, rgba(255,255,255,.035) 25%, rgba(95,184,164,.10) 50%, rgba(255,255,255,.035) 75%);
+        background: linear-gradient(90deg, rgba(255,255,255,.035) 25%, rgba(95,184,164,.11) 50%, rgba(255,255,255,.035) 75%);
         background-size: 200% 100%;
-        animation: spShimmer 1.45s ease-in-out infinite;
+        animation: spShimmer 1.4s ease-in-out infinite;
         border-radius: 7px;
       }
       @keyframes spShimmer {
@@ -44,76 +44,89 @@
         color: #f2f5fa; letter-spacing: -.01em;
       }
       .sp-brand img { width: 20px; height: 20px; border-radius: 5px; }
-      .sp-body {
-        flex: 1; min-height: 0; display: flex;
-      }
+      .sp-body { flex: 1; min-height: 0; display: flex; }
       .sp-side {
-        width: 244px; flex-shrink: 0; padding: 12px;
+        width: 248px; flex-shrink: 0; padding: 12px;
         border-right: 1px solid rgba(255,255,255,.07);
         background: #101218;
         display: flex; flex-direction: column; gap: 10px;
       }
       .sp-main {
-        flex: 1; min-width: 0; padding: 22px 26px;
-        display: flex; flex-direction: column; gap: 16px;
+        flex: 1; min-width: 0; padding: 24px 28px;
+        display: flex; flex-direction: column; gap: 18px;
       }
       .sp-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 13px;
       }
       .sp-card {
-        height: 112px; padding: 14px; border-radius: 11px;
+        height: 116px; padding: 15px; border-radius: 11px;
         border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02);
         display: flex; flex-direction: column; gap: 9px;
       }
       .sp-right {
-        width: 340px; flex-shrink: 0; padding: 12px 14px;
+        width: 350px; flex-shrink: 0; padding: 12px 14px;
         border-left: 1px solid rgba(255,255,255,.07);
         background: #101218;
         display: flex; flex-direction: column; gap: 10px;
       }
       .sp-sess {
-        height: 76px; padding: 11px; border-radius: 10px;
+        height: 78px; padding: 11px; border-radius: 10px;
         border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02);
         display: flex; flex-direction: column; gap: 7px;
       }
-      @media (max-width: 960px) { .sp-right { display: none; } }
+      @media (max-width: 980px) { .sp-right { display: none; } }
       @media (max-width: 680px) { .sp-side { display: none; } }
 
-      /* Cartão flutuante de progresso real */
       #wsBootToast {
         position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
-        width: min(390px, calc(100vw - 32px));
-        padding: 12px 16px 13px; border-radius: 12px;
-        background: rgba(18, 21, 28, 0.94);
-        border: 1px solid rgba(95, 184, 164, 0.34);
-        box-shadow: 0 14px 38px rgba(0, 0, 0, 0.55), 0 0 24px rgba(95, 184, 164, 0.12);
-        backdrop-filter: blur(10px);
+        width: min(440px, calc(100vw - 32px));
+        padding: 13px 16px 14px; border-radius: 13px;
+        background: rgba(18, 21, 28, 0.96);
+        border: 1px solid rgba(95, 184, 164, 0.36);
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.58), 0 0 28px rgba(95, 184, 164, 0.14);
       }
-      .sp-toast-row {
-        display: flex; align-items: center; gap: 9px; margin-bottom: 9px;
-      }
+      .sp-toast-row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
       .sp-toast-dot {
         width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
         background: #5fb8a4; box-shadow: 0 0 10px rgba(95,184,164,.9);
         animation: spPulse 1.2s ease-in-out infinite;
       }
       @keyframes spPulse {
-        0%, 100% { opacity: .55; transform: scale(.92); }
-        50% { opacity: 1; transform: scale(1.1); }
+        0%, 100% { opacity: .55; transform: scale(.9); }
+        50% { opacity: 1; transform: scale(1.12); }
       }
       #wsBootText {
-        flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; color: #e8ecf4;
+        flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; color: #eceef4;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       #wsBootPct {
         font-size: 11.5px; font-weight: 700; color: #5fb8a4; font-variant-numeric: tabular-nums;
       }
+      .sp-steps {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;
+      }
+      .sp-step {
+        display: flex; align-items: center; gap: 5px;
+        font-size: 10.5px; color: #6e778b;
+        padding: 3px 7px; border-radius: 6px;
+        background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.05);
+        transition: all .22s ease; white-space: nowrap; overflow: hidden;
+      }
+      .sp-step .sdot {
+        width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: #464e61;
+      }
+      .sp-step.active {
+        color: #f0f4fa; background: rgba(95,184,164,.13); border-color: rgba(95,184,164,.38);
+      }
+      .sp-step.active .sdot { background: #5fb8a4; box-shadow: 0 0 7px rgba(95,184,164,.9); }
+      .sp-step.done { color: #9ed9cb; border-color: rgba(95,184,164,.22); }
+      .sp-step.done .sdot { background: #5fb8a4; }
       .sp-track {
         width: 100%; height: 4px; border-radius: 999px;
         background: rgba(255,255,255,.08); overflow: hidden;
       }
       #wsBootBar {
-        height: 100%; width: 22%; border-radius: 999px;
+        height: 100%; width: 70%; border-radius: 999px;
         background: linear-gradient(90deg, #5fb8a4, #7ce0c8, #e5c063);
         transition: width .32s cubic-bezier(.22,1,.36,1);
       }
@@ -126,7 +139,7 @@
           <img src="/workspace/favicon.png" alt="" width="20" height="20" />
           <span>AI Workspace</span>
         </div>
-        <div class="sp-shimmer" style="width:190px;height:28px;margin-left:10px"></div>
+        <div class="sp-shimmer" style="width:200px;height:28px;margin-left:10px"></div>
         <div style="flex:1"></div>
         <div class="sp-shimmer" style="width:86px;height:24px;border-radius:999px"></div>
         <div class="sp-shimmer" style="width:86px;height:24px;border-radius:999px"></div>
@@ -143,10 +156,10 @@
         </div>
         <div class="sp-main">
           <div style="display:flex;align-items:center;gap:12px">
-            <div class="sp-shimmer" style="width:36px;height:36px;border-radius:10px"></div>
+            <div class="sp-shimmer" style="width:38px;height:38px;border-radius:10px"></div>
             <div style="flex:1;display:flex;flex-direction:column;gap:7px">
-              <div class="sp-shimmer" style="height:18px;width:210px"></div>
-              <div class="sp-shimmer" style="height:12px;width:310px;max-width:75%"></div>
+              <div class="sp-shimmer" style="height:18px;width:220px"></div>
+              <div class="sp-shimmer" style="height:12px;width:320px;max-width:75%"></div>
             </div>
           </div>
           <div class="sp-grid">
@@ -195,7 +208,13 @@
         <div class="sp-toast-row">
           <span class="sp-toast-dot"></span>
           <span id="wsBootText">Carregando interface do AI Workspace…</span>
-          <span id="wsBootPct">22%</span>
+          <span id="wsBootPct">70%</span>
+        </div>
+        <div class="sp-steps" id="wsBootSteps">
+          <div class="sp-step done"><span class="sdot"></span><span>Local</span></div>
+          <div class="sp-step done"><span class="sdot"></span><span>Hub VPS</span></div>
+          <div class="sp-step active"><span class="sdot"></span><span>Interface</span></div>
+          <div class="sp-step"><span class="sdot"></span><span>Dados</span></div>
         </div>
         <div class="sp-track"><div id="wsBootBar"></div></div>
       </div>
@@ -203,15 +222,24 @@
     <script>
       (function () {
         var done = false;
-        window.__wsBootProgress = function (pct, text) {
+        function setSteps(idx) {
+          var items = document.querySelectorAll('#wsBootSteps .sp-step');
+          for (var i = 0; i < items.length; i++) {
+            items[i].classList.remove('active', 'done');
+            if (i < idx) items[i].classList.add('done');
+            else if (i === idx) items[i].classList.add('active');
+          }
+        }
+        window.__wsBootProgress = function (pct, text, stepIdx) {
           if (done) return;
-          var p = Math.max(5, Math.min(100, Number(pct) || 22));
+          var p = Math.max(5, Math.min(100, Number(pct) || 70));
           var bar = document.getElementById('wsBootBar');
           var pt = document.getElementById('wsBootPct');
           var st = document.getElementById('wsBootText');
           if (bar) bar.style.width = p + '%';
           if (pt) pt.textContent = Math.round(p) + '%';
           if (st && text) st.textContent = text;
+          if (typeof stepIdx === 'number') setSteps(stepIdx);
         };
         window.__wsBootDone = function () {
           if (done) return;
@@ -222,16 +250,16 @@
           if (bar) bar.style.width = '100%';
           if (pt) pt.textContent = '100%';
           if (st) st.textContent = 'Pronto!';
+          setSteps(4);
           var el = document.getElementById('wsSplash');
           if (el) {
             setTimeout(function () {
               el.classList.add('hide');
-              setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
-            }, 90);
+              setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 280);
+            }, 80);
           }
         };
-        // Segurança: nunca fica preso mesmo sem resposta do servidor
-        setTimeout(function () { if (!done && window.__wsBootDone) window.__wsBootDone(); }, 7000);
+        setTimeout(function () { if (!done && window.__wsBootDone) window.__wsBootDone(); }, 12000);
       })();
     </script>
     <div id="root"></div>

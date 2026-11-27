@@ -552,9 +552,6 @@
     }
     html += renderConversation(d);
     html += questionCard(d);
-    if (d.subagents > 0) {
-      html += '<div class="substrip">' + esc('🤖 ' + d.subagents + (d.subagents === 1 ? ' subagente' : ' subagentes') + (d.subTokens ? ' · ' + k(d.subTokens) + ' tokens' : '')) + '</div>';
-    }
     // ollama run no terminal e sessões legadas sem UUID: sem resposta direta pelo HUD
     var canReply = d.tool !== 'Antigravity' && d.where !== 'ollama-run' && (d.tool !== 'Gemini' || /(?:^|:)[0-9a-f-]{36}$/.test(String(d.id || '')));
     if (canReply) html += replyBox(d);
@@ -566,6 +563,12 @@
     // ---- Aba Detalhes (enxuta: essencial visível, métricas técnicas recolhidas) ----
     html += '<div class="dtab-pane' + (!onConvo ? ' active' : '') + '" id="paneDetails">';
     html += '<div class="panel">';
+    if (d.tool === 'Gemini' && d.where === 'antigravity' && !d.listening && d.state !== 'working') {
+      html += '<div class="rnote">Sessão parada na IDE: Enviar entra na fila. Toque em <b>Assumir</b> no topo para responder na hora.</div>';
+    }
+    if (d.tool === 'Ollama' && d.where !== 'ollama-run') {
+      html += '<div class="rnote">A resposta é gerada no Ollama e fica no HUD; não aparece no app do Ollama.</div>';
+    }
     if (d.where === 'ollama-run' && !d.lastReply && d.lastPrompt) {
       html += '<h2>Último comando</h2><div class="quote" style="margin-bottom:12px">' + esc(d.lastPrompt) + '</div>';
     }
